@@ -53,7 +53,7 @@ namespace Game.Combat.Integration
             Lock();
         }
 
-        private void HandleCombatEnded()
+        private void HandleCombatEnded(CombatResult result)
         {
             Unlock();
         }

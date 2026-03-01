@@ -6,6 +6,7 @@ using Game.Combat.Effects; // ✅ Director 사용을 위해 추가
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Game.Combat.Model;
 
 namespace Game.Combat.Core
 {
@@ -25,7 +26,8 @@ namespace Game.Combat.Core
         [SerializeField] private bool destroyDefeatedEnemies = false; // true면 Destroy, false면 SetActive(false)
 
         public event Action<CombatSession> OnCombatStarted;
-        public event Action OnCombatEnded;
+        public event Action<CombatResult> OnCombatEnded;
+
 
         public CombatSession ActiveSession { get; private set; }
         public CombatStateMachine ActiveStateMachine { get; private set; }
@@ -71,7 +73,14 @@ namespace Game.Combat.Core
 
                 ApplyCombatOutcomeToField(ActiveSession);
 
-                OnCombatEnded?.Invoke();
+                var result = new CombatResult
+                {
+                    IsWin = true,      // 임시로 무조건 승리했다고 가정
+                    TotalExp = 150,    // 임시 경험치
+                    TotalGold = 50     // 임시 골드
+                };
+
+                OnCombatEnded?.Invoke(result);
 
                 ActiveSession = null;
                 ActiveStateMachine = null;

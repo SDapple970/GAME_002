@@ -34,7 +34,7 @@ namespace Game.Combat.UI
             }
         }
 
-        private void OnEnded()
+        private void OnEnded(CombatResult result) // <- 매개변수 추가!
         {
             _session = null;
             if (logText != null) logText.text = "";

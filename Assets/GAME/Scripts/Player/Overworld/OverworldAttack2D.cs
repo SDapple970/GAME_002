@@ -9,7 +9,7 @@ public class OverworldAttack2D : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private Transform hitOrigin;
-    [SerializeField] private Vector2 hitBoxSize = new Vector2(1.2f, 0.8f);
+    [SerializeField] private Vector2 hitBoxSize = new(1.2f, 0.8f);
     [SerializeField] private LayerMask targetMask;
     [SerializeField] private float cooldown = 0.25f;
 
@@ -20,7 +20,7 @@ public class OverworldAttack2D : MonoBehaviour
     [SerializeField] private Animator animator;
     [SerializeField] private string attackTrigger = "Attack";
 
-    [SerializeField] private Vector2 hitBoxOffset = new Vector2(1.2f, 0f);
+    [SerializeField] private Vector2 hitBoxOffset = new(1.2f, 0f);
 
     private float _nextTime;
     private readonly Collider2D[] _buffer = new Collider2D[16];

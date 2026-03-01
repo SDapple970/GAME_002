@@ -44,14 +44,20 @@ namespace Game.Integration
             }
         }
 
-        private void HandleCombatEnded()
+        private void HandleCombatEnded(CombatResult result) // <- 괄호 안에 CombatResult result 추가!
         {
-            // 전투가 끝나면 다시 탐험 상태로 복구! (플레이어 이동 가능)
+            // 💡 중요 포인트: 상태(GameState) 제어 충돌 방지
+            // 기존에는 여기서 GameState를 Exploration(탐험)으로 돌려놨을 거야.
+            // 하지만 이제 전투가 끝나면 '보상 UI(RewardUIPanel)'가 먼저 떠야 하니까 상태가 UIOnly가 돼야 해!
+            // 따라서 여기서 상태를 Exploration으로 강제 변경하는 코드가 있다면 지우거나 주석 처리해 줘.
+
+            /* 예시:
             if (GameStateMachine.Instance != null)
             {
-                GameStateMachine.Instance.SetState(GameState.Exploration);
-                Debug.Log("🔓 [CombatStateSyncer] 전투 종료 감지! 플레이어 조작을 허용합니다.");
+                // GameStateMachine.Instance.SetState(GameState.Exploration); // <- 이 부분을 주석 처리!
+                Debug.Log("[CombatStateSyncer] 전투 종료 이벤트 감지! (상태 전환은 보상 UI가 담당합니다)");
             }
+            */
         }
     }
 }

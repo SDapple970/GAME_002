@@ -45,7 +45,7 @@ namespace Game.Combat.UI
         private readonly Dictionary<SkillId, string> _skillNameById = new();
 
 
-        private void HandleCombatEnded()
+        private void HandleCombatEnded(CombatResult result)
         {
             if (panelPlanning != null) panelPlanning.SetActive(false);
 
