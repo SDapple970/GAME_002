@@ -7,18 +7,24 @@ using Game.Combat.Adapters;
 
 namespace Game.Combat.Integration
 {
+    /// <summary>
+    /// 전투 발생 위치(중심점)를 기준으로 아군과 적군의 위치를 동적으로 계산하여 배치합니다.
+    /// </summary>
     public sealed class CombatFormationManager : MonoBehaviour
     {
         [Header("System References")]
         [SerializeField] private CombatEntryPoint entryPoint;
 
-        [Header("Formation Anchors")]
-        [SerializeField] private Transform[] allyPositions;
-        [SerializeField] private Transform[] enemyPositions;
+        [Header("Dynamic Formation Settings")]
+        [Tooltip("전투 중심점에서 아군(1번)이 왼쪽으로 떨어질 거리")]
+        [SerializeField] private float allyStartX = -3f;
+        [Tooltip("전투 중심점에서 적군(1번)이 오른쪽으로 떨어질 거리")]
+        [SerializeField] private float enemyStartX = 3f;
+        [Tooltip("같은 진영 캐릭터 간의 간격 (2번, 3번 캐릭터가 얼마나 뒤로 갈지)")]
+        [SerializeField] private float spacing = 1.5f;
 
         [Header("Animation Settings")]
         [SerializeField] private bool autoFlipCharacters = true;
-        [Tooltip("진형을 잡기 위해 이동하는 데 걸리는 시간")]
         [SerializeField] private float moveDuration = 0.4f;
 
         private void OnEnable()
@@ -33,34 +39,51 @@ namespace Game.Combat.Integration
 
         private void HandleCombatStarted(CombatSession session)
         {
-            // 아군 배치 (코루틴으로 부드럽게 이동)
+            if (session.Allies.Count == 0 || session.Enemies.Count == 0) return;
+
+            // 1. 전투의 중심점 계산 (카메라가 비추는 곳과 동일한 위치)
+            Vector3 centerPos = GetCenterPosition(session);
+
+            // 2. 아군 배치 (중심에서 왼쪽으로, 인덱스가 커질수록 더 왼쪽으로)
             for (int i = 0; i < session.Allies.Count; i++)
             {
-                if (i >= allyPositions.Length) break;
                 if (session.Allies[i] is FieldCombatantAdapter adapter && adapter.FieldObject != null)
                 {
-                    StartCoroutine(Co_MoveToFormation(adapter.FieldObject.transform, allyPositions[i].position, true));
+                    Vector3 dest = centerPos + new Vector3(allyStartX - (i * spacing), 0, 0);
+                    StartCoroutine(Co_MoveToFormation(adapter.FieldObject.transform, dest, true));
                 }
             }
 
-            // 적군 배치
+            // 3. 적군 배치 (중심에서 오른쪽으로, 인덱스가 커질수록 더 오른쪽으로)
             for (int i = 0; i < session.Enemies.Count; i++)
             {
-                if (i >= enemyPositions.Length) break;
                 if (session.Enemies[i] is FieldCombatantAdapter adapter && adapter.FieldObject != null)
                 {
-                    StartCoroutine(Co_MoveToFormation(adapter.FieldObject.transform, enemyPositions[i].position, false));
+                    Vector3 dest = centerPos + new Vector3(enemyStartX + (i * spacing), 0, 0);
+                    StartCoroutine(Co_MoveToFormation(adapter.FieldObject.transform, dest, false));
                 }
             }
         }
 
-        // 🌟 순간이동 대신 부드럽게 위치로 뛰어가는 연출
+        private Vector3 GetCenterPosition(CombatSession session)
+        {
+            // 첫 번째 아군과 첫 번째 적군의 현재 필드 위치를 기준으로 중간 지점을 구함
+            var allyObj = ((FieldCombatantAdapter)session.Allies[0]).FieldObject;
+            var enemyObj = ((FieldCombatantAdapter)session.Enemies[0]).FieldObject;
+
+            if (allyObj != null && enemyObj != null)
+            {
+                return (allyObj.transform.position + enemyObj.transform.position) / 2f;
+            }
+            return Vector3.zero;
+        }
+
         private IEnumerator Co_MoveToFormation(Transform targetTransform, Vector3 destination, bool isAlly)
         {
             Vector3 startPos = targetTransform.position;
             float t = 0f;
 
-            // 1. 방향 전환 (이동 시작 시 바라볼 방향)
+            // 방향 전환 (아군은 오른쪽, 적군은 왼쪽 보기)
             if (autoFlipCharacters)
             {
                 var scale = targetTransform.localScale;
@@ -68,23 +91,16 @@ namespace Game.Combat.Integration
                 targetTransform.localScale = scale;
             }
 
-            // (선택 사항) Animator에 "Run" 같은 걷기/뛰기 파라미터가 있다면 여기서 켤 수 있어!
-            // var anim = targetTransform.GetComponentInChildren<Animator>();
-            // if (anim != null) anim.SetBool("IsRun", true);
-
-            // 2. 부드러운 이동 (Lerp & Ease-out)
+            // 부드러운 이동 연출
             while (t < moveDuration)
             {
                 t += Time.deltaTime;
-                float normalizedTime = Mathf.Sin((t / moveDuration) * Mathf.PI * 0.5f); // 갈수록 살짝 느려지는 효과
+                float normalizedTime = Mathf.Sin((t / moveDuration) * Mathf.PI * 0.5f);
                 targetTransform.position = Vector3.Lerp(startPos, destination, normalizedTime);
                 yield return null;
             }
 
-            targetTransform.position = destination; // 최종 위치 오차 보정
-
-            // (선택 사항) 도착했으니 애니메이션 끄기
-            // if (anim != null) anim.SetBool("IsRun", false);
+            targetTransform.position = destination; // 오차 보정
         }
     }
 }
