@@ -24,37 +24,115 @@ namespace Game.Combat.Effects
             StartCoroutine(Co_PlayTurnAnimation(session, onComplete));
         }
 
-        private IEnumerator Co_PlayTurnAnimation(CombatSession session, System.Action onComplete)
+        // 🎬 1. 일방 공격 연출 수정
+        private IEnumerator PlayUnopposed(Event_Unopposed ev)
         {
-            if (session == null || session.CurrentTurn == null || session.CurrentTurn.Playbook.Count == 0)
+            if (ev.IsCancelled || ev.LackOfInspiration)
             {
-                // 이번 턴에 할 행동(대본)이 없으면 즉시 종료
-                onComplete?.Invoke();
+                Debug.Log($"[Director] 🚫 {ev.Actor?.Id}의 행동 취소됨.");
+                yield return new WaitForSeconds(0.3f);
                 yield break;
             }
 
-            // 💡 대본(Playbook)에 적힌 사건들을 순서대로 꺼내서 읽습니다!
-            foreach (var playbookEvent in session.CurrentTurn.Playbook)
+            GameObject actorObj = GetFieldObject(ev.Actor);
+            GameObject targetObj = GetFieldObject(ev.Target);
+
+            if (actorObj != null && targetObj != null)
             {
-                if (playbookEvent is Event_Unopposed unopposed)
+                Vector3 originalPos = actorObj.transform.position;
+                Vector3 targetPos = targetObj.transform.position;
+                Vector3 dir = (targetPos - originalPos).normalized;
+                Vector3 attackPos = targetPos - (dir * stopDistance);
+
+                // [돌진]
+                yield return StartCoroutine(MoveTransform(actorObj.transform, originalPos, attackPos, approachDuration));
+
+                // [타격]
+                var anim = actorObj.GetComponentInChildren<Animator>();
+                if (anim != null) anim.SetTrigger("Attack");
+                yield return new WaitForSeconds(0.15f);
+
+                // [피격]
+                StartCoroutine(FlashColor(targetObj, Color.red, 0.2f));
+                Debug.Log($"💥 [Director] {actorObj.name}의 일방 공격! -> {targetObj.name} ({ev.DamageDealt} 데미지)");
+
+                yield return new WaitForSeconds(0.3f);
+
+                // 🌟 [추가된 핵심 로직] 막타(사망) 처리: 타겟의 체력이 0 이하라면 제자리로 돌아가지 않고 그 자리에 머무름!
+                if (ev.Target.HP <= 0)
                 {
-                    yield return StartCoroutine(PlayUnopposed(unopposed));
-                }
-                else if (playbookEvent is Event_Clash clash)
-                {
-                    yield return StartCoroutine(PlayClash(clash));
-                }
-                else if (playbookEvent is Event_Utility utility)
-                {
-                    yield return StartCoroutine(PlayUtility(utility));
+                    Debug.Log($"[Director] 💀 {targetObj.name} 처치! {actorObj.name}가 복귀하지 않고 해당 위치에 머뭅니다.");
+                    yield break; // 여기서 코루틴을 강제 종료하여 아래의 '복귀' 로직을 스킵함.
                 }
 
-                // 각 행동이 끝날 때마다 아주 살짝 텀을 줍니다 (자연스러운 턴 진행)
-                yield return new WaitForSeconds(0.2f);
+                // [복귀] (대상이 살아있을 때만 실행됨)
+                yield return StartCoroutine(MoveTransform(actorObj.transform, attackPos, originalPos, returnDuration));
             }
+        }
 
-            // 모든 연출이 끝나면 다음 턴으로 넘기라고 시스템에 알림!
-            onComplete?.Invoke();
+        // 🎬 2. 합(Clash) 격돌 연출 수정
+        private IEnumerator PlayClash(Event_Clash ev)
+        {
+            GameObject objA = GetFieldObject(ev.ActorA);
+            GameObject objB = GetFieldObject(ev.ActorB);
+
+            if (objA != null && objB != null)
+            {
+                Vector3 posA = objA.transform.position;
+                Vector3 posB = objB.transform.position;
+
+                Vector3 center = (posA + posB) / 2f;
+                Vector3 dirA = (center - posA).normalized;
+                Vector3 dirB = (center - posB).normalized;
+
+                Vector3 clashPosA = center - (dirA * (stopDistance * 0.5f));
+                Vector3 clashPosB = center - (dirB * (stopDistance * 0.5f));
+
+                // [동시 돌진]
+                Coroutine moveA = StartCoroutine(MoveTransform(objA.transform, posA, clashPosA, approachDuration));
+                Coroutine moveB = StartCoroutine(MoveTransform(objB.transform, posB, clashPosB, approachDuration));
+                yield return moveA;
+                yield return moveB;
+
+                // [합 격돌!]
+                var animA = objA.GetComponentInChildren<Animator>();
+                var animB = objB.GetComponentInChildren<Animator>();
+                if (animA != null) animA.SetTrigger("Attack");
+                if (animB != null) animB.SetTrigger("Attack");
+
+                yield return new WaitForSeconds(0.15f);
+                Debug.Log($"⚔️ [Director] {objA.name}(위력:{ev.PowerA}) vs {objB.name}(위력:{ev.PowerB}) 합 격돌!");
+
+                // [패자 피격 판정]
+                if (ev.Loser != null)
+                {
+                    GameObject loserObj = GetFieldObject(ev.Loser);
+                    if (loserObj != null)
+                    {
+                        StartCoroutine(FlashColor(loserObj, Color.red, 0.2f));
+                        Debug.Log($"🩸 [Director] 합 패배: {loserObj.name} ({ev.DamageDealtToLoser} 데미지)");
+                    }
+                }
+
+                yield return new WaitForSeconds(0.4f);
+
+                // 🌟 [추가된 핵심 로직] 막타(사망) 처리: 죽은 캐릭터가 있으면 복귀 연출을 생략!
+                bool actorADead = ev.ActorA.HP <= 0;
+                bool actorBDead = ev.ActorB.HP <= 0;
+
+                if (!actorADead && !actorBDead)
+                {
+                    // 둘 다 살았을 때만 동시 복귀
+                    StartCoroutine(MoveTransform(objA.transform, clashPosA, posA, returnDuration));
+                    StartCoroutine(MoveTransform(objB.transform, clashPosB, posB, returnDuration));
+                    yield return new WaitForSeconds(returnDuration);
+                }
+                else
+                {
+                    // 누군가 죽었다면 복귀 생략 (승자는 그 자리에 폼 잡고 서 있게 됨)
+                    Debug.Log($"[Director] 💀 합 결과 누군가 처치됨! 생존자는 제자리로 돌아가지 않습니다.");
+                }
+            }
         }
 
         // 🎬 1. 일방 공격 연출
