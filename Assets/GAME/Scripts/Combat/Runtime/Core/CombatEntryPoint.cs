@@ -6,7 +6,6 @@ using Game.Combat.Effects; // ✅ Director 사용을 위해 추가
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using Game.Combat.Model;
 
 namespace Game.Combat.Core
 {
