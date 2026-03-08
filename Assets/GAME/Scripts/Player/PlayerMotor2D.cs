@@ -15,7 +15,9 @@ public class PlayerMotor2D : MonoBehaviour
     private Rigidbody2D rb;
     private float moveInput;
 
-    public bool IsGrounded { get; private set; }
+    // [field: SerializeField]를 추가해 게임 실행 중 인스펙터에서 실시간으로 true/false를 확인할 수 있게 합니다.
+    [field: Header("Debug")]
+    [field: SerializeField] public bool IsGrounded { get; private set; }
 
     private void Awake()
     {
@@ -65,7 +67,8 @@ public class PlayerMotor2D : MonoBehaviour
     {
         if (groundCheck == null) return;
 
-        Gizmos.color = Color.yellow;
+        // 바닥에 닿아있으면 초록색, 공중에 있으면 빨간색으로 표시하여 디버깅을 돕습니다.
+        Gizmos.color = IsGrounded ? Color.green : Color.red;
         Gizmos.DrawWireSphere(groundCheck.position, groundRadius);
     }
 #endif

@@ -85,6 +85,38 @@ namespace Game.Combat.Core
                 ActiveSession = null;
                 ActiveStateMachine = null;
             }
+
+#if UNITY_EDITOR // 빌드된 실제 게임에서는 작동하지 않고, 유니티 에디터에서만 작동하도록 보호!
+
+            // [디버그] F9: 즉시 전투 승리 (보상 UI 테스트용)
+            if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F9))
+            {
+                UnityEngine.Debug.Log("<color=cyan>[Debug]</color> 강제 전투 승리! 보상 UI를 호출합니다.");
+                var result = new Game.Combat.Model.CombatResult
+                {
+                    IsWin = true,
+                    TotalExp = 999,
+                    TotalGold = 5000
+                };
+                OnCombatEnded?.Invoke(result);
+
+                // 상태 초기화 (에러 방지용)
+                ActiveSession = null;
+                ActiveStateMachine = null;
+            }
+
+            // [디버그] F10: 즉시 전투 패배 (게임 오버 테스트용)
+            if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F10))
+            {
+                UnityEngine.Debug.Log("<color=red>[Debug]</color> 강제 전투 패배!");
+                var result = new Game.Combat.Model.CombatResult { IsWin = false, TotalExp = 0, TotalGold = 0 };
+                OnCombatEnded?.Invoke(result);
+
+                ActiveSession = null;
+                ActiveStateMachine = null;
+            }
+#endif
+
         }
 
         public void StartCombatFromField(
