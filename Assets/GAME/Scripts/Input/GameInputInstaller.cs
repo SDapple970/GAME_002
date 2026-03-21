@@ -1,13 +1,12 @@
+// 위치: Assets/GAME/Scripts/Input/GameInputInstaller.cs
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 public sealed class GameInputInstaller : MonoBehaviour
 {
     public static GameInputInstaller Instance { get; private set; }
-
     public GameInput Actions { get; private set; }
 
-    // “기존 코드 최소 수정”용 이벤트
     public event System.Action<Vector2> Move;
     public event System.Action Jump;
     public event System.Action Attack;
@@ -17,31 +16,48 @@ public sealed class GameInputInstaller : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance != null) { Destroy(gameObject); return; }
+        if (Instance != null)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
         Instance = this;
         DontDestroyOnLoad(gameObject);
-
-        Actions = new GameInput(); // <- Generate C# Class로 생긴 클래스명(예: GameInput)
+        Actions = new GameInput();
     }
 
     private void OnEnable()
     {
         Actions.Enable();
 
-        // Value
-        Actions.Gameplay.Move.performed += ctx => Move?.Invoke(ctx.ReadValue<Vector2>());
-        Actions.Gameplay.Move.canceled += ctx => Move?.Invoke(Vector2.zero);
-
-        // Button
-        Actions.Gameplay.Jump.performed += _ => Jump?.Invoke();
-        Actions.Gameplay.Attack.performed += _ => Attack?.Invoke();
-        Actions.Gameplay.Parry.performed += _ => Parry?.Invoke();
-        Actions.Gameplay.Interact.performed += _ => Interact?.Invoke();
-        Actions.Gameplay.Pause.performed += _ => Pause?.Invoke();
+        Actions.Gameplay.Move.performed += OnMovePerformed;
+        Actions.Gameplay.Move.canceled += OnMoveCanceled;
+        Actions.Gameplay.Jump.performed += OnJumpPerformed;
+        Actions.Gameplay.Attack.performed += OnAttackPerformed;
+        Actions.Gameplay.Parry.performed += OnParryPerformed;
+        Actions.Gameplay.Interact.performed += OnInteractPerformed;
+        Actions.Gameplay.Pause.performed += OnPausePerformed;
     }
 
     private void OnDisable()
     {
+        Actions.Gameplay.Move.performed -= OnMovePerformed;
+        Actions.Gameplay.Move.canceled -= OnMoveCanceled;
+        Actions.Gameplay.Jump.performed -= OnJumpPerformed;
+        Actions.Gameplay.Attack.performed -= OnAttackPerformed;
+        Actions.Gameplay.Parry.performed -= OnParryPerformed;
+        Actions.Gameplay.Interact.performed -= OnInteractPerformed;
+        Actions.Gameplay.Pause.performed -= OnPausePerformed;
+
         Actions.Disable();
     }
+
+    private void OnMovePerformed(InputAction.CallbackContext ctx) => Move?.Invoke(ctx.ReadValue<Vector2>());
+    private void OnMoveCanceled(InputAction.CallbackContext ctx) => Move?.Invoke(Vector2.zero);
+    private void OnJumpPerformed(InputAction.CallbackContext ctx) => Jump?.Invoke();
+    private void OnAttackPerformed(InputAction.CallbackContext ctx) => Attack?.Invoke();
+    private void OnParryPerformed(InputAction.CallbackContext ctx) => Parry?.Invoke();
+    private void OnInteractPerformed(InputAction.CallbackContext ctx) => Interact?.Invoke();
+    private void OnPausePerformed(InputAction.CallbackContext ctx) => Pause?.Invoke();
 }
