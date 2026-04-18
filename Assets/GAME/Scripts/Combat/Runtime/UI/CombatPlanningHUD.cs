@@ -134,7 +134,7 @@ namespace Game.Combat.UI
                 panelPlanning.SetActive(true);
 
             CacheSkillNames();
-            EnsurePlanExists(_actor);
+            EnsureDraftExists(_actor);
             RebuildSkillButtons();
             RebuildTargetButtons();
             RefreshSlotLabels();
