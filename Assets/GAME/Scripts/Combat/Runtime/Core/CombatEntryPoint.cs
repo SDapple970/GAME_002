@@ -1,8 +1,9 @@
-﻿using Game.Combat.Actions;
+﻿// GAME_002/Assets/GAME/Scripts/Combat/Core/CombatEntryPoint.cs
+using Game.Combat.Actions;
 using Game.Combat.Adapters;
 using Game.Combat.Data;
 using Game.Combat.Model;
-using Game.Combat.Effects; // ✅ Director 사용을 위해 추가
+using Game.Combat.Effects;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -12,7 +13,7 @@ namespace Game.Combat.Core
     public sealed class CombatEntryPoint : MonoBehaviour
     {
         [Header("Systems")]
-        [SerializeField] private CombatDirector director; // ✅ 시각화 연출 디렉터 연결
+        [SerializeField] private CombatDirector director;
 
         [Header("Skill Book Sources (MVP)")]
         [SerializeField] private SkillDefinitionSO[] skillDefinitions;
@@ -22,11 +23,12 @@ namespace Game.Combat.Core
         [SerializeField] private int inspirationStart = 3;
 
         [SerializeField] private bool deactivateDefeatedEnemies = true;
-        [SerializeField] private bool destroyDefeatedEnemies = false; // true면 Destroy, false면 SetActive(false)
+        [SerializeField] private bool destroyDefeatedEnemies = false;
+
+        [SerializeField] private CombatFlowOrchestrator flowOrchestrator;
 
         public event Action<CombatSession> OnCombatStarted;
         public event Action<CombatResult> OnCombatEnded;
-
 
         public CombatSession ActiveSession { get; private set; }
         public CombatStateMachine ActiveStateMachine { get; private set; }
@@ -34,7 +36,6 @@ namespace Game.Combat.Core
         private SkillBook _book;
         private bool _endedRaised;
 
-        // ✅ UI에서 이 함수만 호출하면 됨
         public void ConfirmPlanningFromUI()
         {
             ActiveStateMachine?.ConfirmPlanning();
@@ -64,20 +65,16 @@ namespace Game.Combat.Core
             {
                 _endedRaised = true;
 
-                // ✅ 전투 종료 시 Director 이벤트 해제
                 if (director != null)
-                {
                     ActiveStateMachine.OnRequireResolutionPlay -= director.PlayResolution;
-                }
 
                 ApplyCombatOutcomeToField(ActiveSession);
 
-                var result = new CombatResult
-                {
-                    IsWin = true,      // 임시로 무조건 승리했다고 가정
-                    TotalExp = 150,    // 임시 경험치
-                    TotalGold = 50     // 임시 골드
-                };
+                var reason = ActiveStateMachine.EndReason;
+                if (reason == CombatEndReason.None)
+                    reason = CombatEndEvaluator.Evaluate(ActiveSession);
+
+                var result = CombatResultBuilder.Build(ActiveSession, reason);
 
                 OnCombatEnded?.Invoke(result);
 
@@ -85,37 +82,38 @@ namespace Game.Combat.Core
                 ActiveStateMachine = null;
             }
 
-#if UNITY_EDITOR // 빌드된 실제 게임에서는 작동하지 않고, 유니티 에디터에서만 작동하도록 보호!
-
-            // [디버그] F9: 즉시 전투 승리 (보상 UI 테스트용)
+#if UNITY_EDITOR
             if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F9))
             {
-                UnityEngine.Debug.Log("<color=cyan>[Debug]</color> 강제 전투 승리! 보상 UI를 호출합니다.");
-                var result = new Game.Combat.Model.CombatResult
-                {
-                    IsWin = true,
-                    TotalExp = 999,
-                    TotalGold = 5000
-                };
-                OnCombatEnded?.Invoke(result);
-
-                // 상태 초기화 (에러 방지용)
-                ActiveSession = null;
-                ActiveStateMachine = null;
+                Debug.Log("<color=cyan>[Debug]</color> 강제 전투 승리!");
+                ForceFinishCombat(CombatEndReason.Victory);
             }
 
-            // [디버그] F10: 즉시 전투 패배 (게임 오버 테스트용)
             if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F10))
             {
-                UnityEngine.Debug.Log("<color=red>[Debug]</color> 강제 전투 패배!");
-                var result = new Game.Combat.Model.CombatResult { IsWin = false, TotalExp = 0, TotalGold = 0 };
-                OnCombatEnded?.Invoke(result);
-
-                ActiveSession = null;
-                ActiveStateMachine = null;
+                Debug.Log("<color=red>[Debug]</color> 강제 전투 패배!");
+                ForceFinishCombat(CombatEndReason.Defeat);
             }
 #endif
+        }
 
+        private void ForceFinishCombat(CombatEndReason reason)
+        {
+            if (ActiveStateMachine == null)
+                return;
+
+            _endedRaised = true;
+
+            if (director != null)
+                ActiveStateMachine.OnRequireResolutionPlay -= director.PlayResolution;
+
+            ActiveStateMachine.ForceExit(reason);
+
+            var result = CombatResultBuilder.Build(ActiveSession, reason);
+            OnCombatEnded?.Invoke(result);
+
+            ActiveSession = null;
+            ActiveStateMachine = null;
         }
 
         public void StartCombatFromField(
@@ -126,6 +124,7 @@ namespace Game.Combat.Core
             OpeningEffectSO openingEffectOrNull)
         {
             _endedRaised = false;
+
             var req = new CombatStartRequest(
                 reason,
                 initiativeSide,
@@ -138,33 +137,30 @@ namespace Game.Combat.Core
             if (enemyFieldObjects != null) req.EnemyFieldObjects.AddRange(enemyFieldObjects);
 
             var factory = new FieldCombatantFactory(_book);
-
             (ActiveSession, ActiveStateMachine) = CombatBootstrapper.StartCombat(req, _book, factory);
 
-            // ✅ Director에게 StateMachine의 연출 지시 이벤트를 연결
             if (director != null)
-            {
                 ActiveStateMachine.OnRequireResolutionPlay += director.PlayResolution;
-            }
 
             Debug.Log($"[EntryPoint] Combat started. Reason={reason}, Initiative={initiativeSide}, Allies={ActiveSession.Allies.Count}, Enemies={ActiveSession.Enemies.Count}");
-
             OnCombatStarted?.Invoke(ActiveSession);
+
+
+            if (flowOrchestrator != null)
+                flowOrchestrator.BindSession(ActiveSession);
         }
 
         private void ApplyCombatOutcomeToField(CombatSession session)
         {
             if (session == null) return;
 
-            // 적 전투원 중 HP 0인 애들의 필드 오브젝트를 비활성/삭제
             for (int i = 0; i < session.Enemies.Count; i++)
             {
                 var c = session.Enemies[i];
                 if (c == null) continue;
                 if (c.HP > 0) continue;
 
-                // FieldCombatantAdapter일 때만 필드 오브젝트를 알 수 있음
-                if (c is Game.Combat.Adapters.FieldCombatantAdapter fa)
+                if (c is FieldCombatantAdapter fa)
                 {
                     var go = fa.FieldObject;
                     if (go == null) continue;

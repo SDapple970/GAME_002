@@ -35,6 +35,11 @@ namespace Game.Combat.UI
         [Header("MVP")]
         [SerializeField] private int actorAllyIndex = 0;
         [SerializeField] private bool autoFillEnemyPlansOnConfirm = true;
+        
+        [SerializeField] private CombatFlowOrchestrator flowOrchestrator;
+
+        private CombatPlanDraft _draft = new CombatPlanDraft();
+
 
         private CombatSession _session;
         private ICombatant _actor;
@@ -97,6 +102,7 @@ namespace Game.Combat.UI
         {
             _session = session;
             _shownTurnIndex = -1;
+            _draft.Clear();
         }
 
         private void HandleCombatEnded(CombatResult result)
@@ -252,8 +258,7 @@ namespace Game.Combat.UI
 
         private void CommitToSlot(ISkill skill, ICombatant targetOrNull)
         {
-            if (_session == null || _actor == null || skill == null)
-                return;
+            if (_session == null || _actor == null || skill == null) return;
 
             if (RequiresTarget(skill) && targetOrNull == null)
             {
@@ -261,12 +266,7 @@ namespace Game.Combat.UI
                 return;
             }
 
-            if (!_session.CurrentTurn.TryGetPlan(_actor.Id, out ActionPlan currentPlan))
-            {
-                currentPlan = new ActionPlan(PlannedAction.None, PlannedAction.None);
-            }
-
-            PlannedAction plannedAction = new PlannedAction(
+            var pa = new PlannedAction(
                 skillId: skill.Id,
                 tag: skill.Tag,
                 targeting: skill.Targeting,
@@ -275,15 +275,7 @@ namespace Game.Combat.UI
                 consumesTurn: skill.ConsumesTurn
             );
 
-            PlannedAction slot1 = currentPlan.Slot1;
-            PlannedAction slot2 = currentPlan.Slot2;
-
-            if (_selectedSlot == 0)
-                slot1 = plannedAction;
-            else
-                slot2 = plannedAction;
-
-            _session.CurrentTurn.SetPlan(_actor.Id, new ActionPlan(slot1, slot2));
+            _draft.SetSlot(_actor.Id, _selectedSlot, pa);
 
             RefreshSlotLabels();
             SetStatus($"슬롯 {_selectedSlot + 1} 예약 완료: {skill.Name}");
@@ -291,19 +283,13 @@ namespace Game.Combat.UI
 
         private void RefreshSlotLabels()
         {
-            if (_session == null || _actor == null)
-                return;
+            if (_actor == null) return;
 
-            if (!_session.CurrentTurn.TryGetPlan(_actor.Id, out ActionPlan plan))
-            {
+            if (!_draft.TryGetPlan(_actor.Id, out var plan))
                 plan = new ActionPlan(PlannedAction.None, PlannedAction.None);
-            }
 
-            if (slot1Button != null)
-                SetButtonText(slot1Button, SlotLabel(1, plan.Slot1));
-
-            if (slot2Button != null)
-                SetButtonText(slot2Button, SlotLabel(2, plan.Slot2));
+            if (slot1Button != null) SetButtonText(slot1Button, SlotLabel(1, plan.Slot1));
+            if (slot2Button != null) SetButtonText(slot2Button, SlotLabel(2, plan.Slot2));
         }
 
         private string SlotLabel(int slotNo, PlannedAction action)
@@ -324,18 +310,20 @@ namespace Game.Combat.UI
 
         private void Confirm()
         {
-            if (_session == null || entryPoint == null)
+            if (_session == null) return;
+            if (flowOrchestrator == null)
+            {
+                SetStatus("FlowOrchestrator가 연결되지 않았습니다.");
                 return;
+            }
 
-            if (autoFillEnemyPlansOnConfirm)
-                AutoFillEnemiesIfMissing();
+            if (!flowOrchestrator.SubmitPlayerDraftAndAdvance(_draft, _actor, out var error))
+            {
+                SetStatus(error);
+                return;
+            }
 
-            if (panelPlanning != null)
-                panelPlanning.SetActive(false);
-
-            CombatTurnResolver.ResolveTurn(_session);
-            entryPoint.ConfirmPlanningFromUI();
-
+            if (panelPlanning != null) panelPlanning.SetActive(false);
             SetStatus("Confirmed.");
         }
 
@@ -389,18 +377,10 @@ namespace Game.Combat.UI
             }
         }
 
-        private void EnsurePlanExists(ICombatant combatant)
+        private void EnsureDraftExists(ICombatant c)
         {
-            if (_session == null || combatant == null)
-                return;
-
-            if (_session.CurrentTurn.TryGetPlan(combatant.Id, out _))
-                return;
-
-            _session.CurrentTurn.SetPlan(
-                combatant.Id,
-                new ActionPlan(PlannedAction.None, PlannedAction.None)
-            );
+            if (c == null) return;
+            _draft.EnsureActor(c.Id);
         }
 
         private void SetStatus(string message)
