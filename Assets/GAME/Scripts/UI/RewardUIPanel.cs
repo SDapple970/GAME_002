@@ -33,16 +33,30 @@ namespace Game.UI
             if (rewardPanelRoot != null) rewardPanelRoot.SetActive(false);
         }
 
+        // Assets/GAME/Scripts/Combat/Runtime/UI/RewardUIPanel.cs
+
         private void OnEnable()
         {
+            Debug.Log("[RewardUIPanel] OnEnable called.", this);
+
             if (combatEntryPoint != null)
+            {
                 combatEntryPoint.OnCombatEnded += HandleCombatEnded;
+                Debug.Log("[RewardUIPanel] Subscribed to CombatEntryPoint.OnCombatEnded.", this);
+            }
+            else
+            {
+                Debug.LogError("[RewardUIPanel] combatEntryPoint is null.", this);
+            }
         }
 
         private void OnDisable()
         {
             if (combatEntryPoint != null)
+            {
                 combatEntryPoint.OnCombatEnded -= HandleCombatEnded;
+                Debug.Log("[RewardUIPanel] Unsubscribed from CombatEntryPoint.OnCombatEnded.", this);
+            }
         }
 
         private void HandleCombatEnded(CombatResult result)
@@ -59,6 +73,36 @@ namespace Game.UI
             // 3. UI 표시
             if (rewardPanelRoot != null)
                 rewardPanelRoot.SetActive(true);
+
+            Debug.Log($"[RewardUIPanel] HandleCombatEnded called. IsWin={result.IsWin}, Exp={result.TotalExp}, Gold={result.TotalGold}", this);
+
+            if (!result.IsWin)
+            {
+                Debug.LogWarning("[RewardUIPanel] Result is loss. Reward panel will not open.", this);
+                return;
+            }
+
+            if (rewardPanelRoot == null)
+            {
+                Debug.LogError("[RewardUIPanel] rewardPanelRoot is null.", this);
+                return;
+            }
+
+            if (contentContainer == null)
+            {
+                Debug.LogError("[RewardUIPanel] contentContainer is null.", this);
+                return;
+            }
+
+            if (rewardItemPrefab == null)
+            {
+                Debug.LogError("[RewardUIPanel] rewardItemPrefab is null.", this);
+                return;
+            }
+
+            Debug.Log("[RewardUIPanel] Opening reward panel.", this);
+
+            // 기존 보상 생성/패널 오픈 코드 유지
         }
 
         private void GenerateRewardList(CombatResult result)
