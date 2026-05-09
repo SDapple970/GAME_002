@@ -42,8 +42,50 @@ namespace Game.Combat.Core
             ActiveStateMachine?.ConfirmPlanning();
         }
 
+        public bool SubmitCurrentTurn()
+        {
+            if (ActiveSession == null)
+            {
+                Debug.LogWarning("[CombatEntryPoint] SubmitCurrentTurn failed. ActiveSession is null.", this);
+                return false;
+            }
+
+            if (ActiveStateMachine == null)
+            {
+                Debug.LogWarning("[CombatEntryPoint] SubmitCurrentTurn failed. ActiveStateMachine is null.", this);
+                return false;
+            }
+
+            if (ActiveStateMachine.Phase != Phase.Planning)
+            {
+                Debug.LogWarning($"[CombatEntryPoint] SubmitCurrentTurn ignored. Current phase is {ActiveStateMachine.Phase}.", this);
+                return false;
+            }
+
+            if (ActiveSession.CurrentTurn == null)
+            {
+                Debug.LogWarning("[CombatEntryPoint] SubmitCurrentTurn failed. CurrentTurn is null.", this);
+                return false;
+            }
+
+            CombatTurnResolver.ResolveTurn(ActiveSession);
+            ActiveStateMachine.ConfirmPlanning();
+
+            Debug.Log(
+                $"[CombatEntryPoint] Turn submitted. Turn={ActiveSession.TurnIndex}, " +
+                $"Events={ActiveSession.CurrentTurn.Events.Count}, " +
+                $"Playbook={ActiveSession.CurrentTurn.Playbook.Count}",
+                this
+            );
+
+            return true;
+        }
+
         private void Awake()
         {
+            if (flowOrchestrator == null)
+                flowOrchestrator = FindFirstObjectByType<CombatFlowOrchestrator>();
+
             _book = new SkillBook();
             if (skillDefinitions != null)
             {
@@ -124,6 +166,12 @@ namespace Game.Combat.Core
             Side initiativeSide,
             OpeningEffectSO openingEffectOrNull)
         {
+            if (allyFieldObjects == null || allyFieldObjects.Count == 0)
+                Debug.LogWarning("[CombatEntryPoint] StartCombatFromField called with no ally field objects.");
+
+            if (enemyFieldObjects == null || enemyFieldObjects.Count == 0)
+                Debug.LogWarning("[CombatEntryPoint] StartCombatFromField called with no enemy field objects.");
+
             _endedRaised = false;
 
             var req = new CombatStartRequest(
@@ -139,6 +187,18 @@ namespace Game.Combat.Core
 
             var factory = new FieldCombatantFactory(_book);
             (ActiveSession, ActiveStateMachine) = CombatBootstrapper.StartCombat(req, _book, factory);
+
+            if (ActiveSession == null)
+            {
+                Debug.LogError("[CombatEntryPoint] CombatBootstrapper returned a null session.");
+                return;
+            }
+
+            if (ActiveSession.Allies.Count == 0)
+                Debug.LogError("[CombatEntryPoint] Combat start produced no allies. Check player HP component and ally field object binding.");
+
+            if (ActiveSession.Enemies.Count == 0)
+                Debug.LogError("[CombatEntryPoint] Combat start produced no enemies. Check enemy HP component, active state, and encounter group binding.");
 
             if (ActiveStateMachine != null && ActiveStateMachine.Phase == Phase.EnterCombat)
             {

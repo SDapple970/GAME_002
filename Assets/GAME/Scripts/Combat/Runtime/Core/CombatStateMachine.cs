@@ -46,7 +46,16 @@ namespace Game.Combat.Core
         {
             switch (Phase)
             {
-               
+                case Phase.EnterCombat:
+                    CheckCombatEndConditions();
+                    if (Phase == Phase.ExitCombat)
+                        break;
+
+                    _session.BeginNewTurn();
+                    Phase = Phase.Planning;
+                    Debug.Log($"[CombatStateMachine] EnterCombat -> Planning. Turn={_session.TurnIndex}");
+                    break;
+
                 case Phase.Resolution:
                     if (!_isResolving)
                     {
@@ -64,12 +73,46 @@ namespace Game.Combat.Core
                         }
                     }
                     break;
+
+                case Phase.EndTurn:
+                    EndTurn();
+                    break;
             }
         }
 
         private void OnResolutionFinished()
         {
             Phase = Phase.EndTurn;
+        }
+
+        private void EndTurn()
+        {
+            CheckCombatEndConditions();
+            if (Phase == Phase.ExitCombat)
+                return;
+
+            ClearStunsAtTurnEnd();
+            _session.BeginNewTurn();
+            _isResolving = false;
+            Phase = Phase.Planning;
+            Debug.Log($"[CombatStateMachine] EndTurn -> Planning. Turn={_session.TurnIndex}");
+        }
+
+        private void ClearStunsAtTurnEnd()
+        {
+            for (int i = 0; i < _session.Allies.Count; i++)
+            {
+                var combatant = _session.Allies[i];
+                if (combatant != null && combatant.IsStunned)
+                    StaggerSystem.ClearStunAtTurnEnd(combatant);
+            }
+
+            for (int i = 0; i < _session.Enemies.Count; i++)
+            {
+                var combatant = _session.Enemies[i];
+                if (combatant != null && combatant.IsStunned)
+                    StaggerSystem.ClearStunAtTurnEnd(combatant);
+            }
         }
 
         private void CheckCombatEndConditions()

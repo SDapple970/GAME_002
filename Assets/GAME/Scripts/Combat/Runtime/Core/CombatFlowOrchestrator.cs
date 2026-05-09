@@ -10,6 +10,12 @@ namespace Game.Combat.Core
 
         private CombatSession _session;
 
+        private void Awake()
+        {
+            if (entryPoint == null)
+                entryPoint = FindFirstObjectByType<CombatEntryPoint>();
+        }
+
         public void BindSession(CombatSession session)
         {
             _session = session;

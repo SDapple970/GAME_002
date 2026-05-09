@@ -48,10 +48,10 @@ namespace Game.Combat.Adapters
 
                 var combatant = new FieldCombatantAdapter(idCounter++, side, go, hpAcc, staggerMax);
 
-                // 스킬 시스템이 아직 필드에 없으니 MVP는 fallback 스킬 1개만 부여
                 var list = new List<ISkill>(3);
+                AddLoadoutSkills(go, list);
 
-                if (side == Side.Allies)
+                if (list.Count == 0 && side == Side.Allies)
                 {
                     var s1 = _book.Get(new SkillId(1));
                     if (s1 != null) list.Add(s1);
@@ -62,13 +62,15 @@ namespace Game.Combat.Adapters
                     var s3 = _book.Get(new SkillId(10)); // Inspect
                     if (s3 != null) list.Add(s3);
                 }
-                else
+                else if (list.Count == 0)
                 {
                     var fallback = _book.Get(_fallbackSkillId);
                     if (fallback != null) list.Add(fallback);
                 }
 
                 combatant.SetSkills(list);
+                if (list.Count == 0)
+                    Debug.LogWarning($"[FieldCombatantFactory] {go.name} has no combat skills. Add CombatSkillLoadoutComponent or register fallback SkillDefinitionSO assets.");
 
                 if (side == Side.Allies) session.Allies.Add(combatant);
                 else session.Enemies.Add(combatant);
@@ -80,6 +82,25 @@ namespace Game.Combat.Adapters
                     combatant.SetResist(kw.Resist);
                 }
                 Debug.Log($"[KW-INJECT] {go.name} Weak={combatant.Weakness}, Resist={combatant.Resist}");
+            }
+        }
+
+        private void AddLoadoutSkills(GameObject go, List<ISkill> skills)
+        {
+            var loadout = go.GetComponent<CombatSkillLoadoutComponent>();
+            if (loadout == null || loadout.SkillIds == null)
+                return;
+
+            for (int i = 0; i < loadout.SkillIds.Length; i++)
+            {
+                var skill = _book.Get(new SkillId(loadout.SkillIds[i]));
+                if (skill != null)
+                {
+                    skills.Add(skill);
+                    continue;
+                }
+
+                Debug.LogWarning($"[FieldCombatantFactory] SkillId {loadout.SkillIds[i]} on {go.name} is not registered.");
             }
         }
     }

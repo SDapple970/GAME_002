@@ -41,6 +41,7 @@ namespace Game.Combat.UI
         private int _selectedSlot;
         private ISkill _pendingSkill;
         private int _shownTurnIndex = -1;
+        private readonly CombatPlanDraft _draft = new();
 
         private readonly Dictionary<SkillId, string> _skillNameById = new();
 
@@ -131,6 +132,7 @@ namespace Game.Combat.UI
             _pendingSkill = null;
             _selectedSlot = 0;
             _shownTurnIndex = -1;
+            _draft.Clear();
 
             Debug.Log(
                 $"[CombatPlanningHUD] 전투 시작 이벤트 수신. " +
@@ -150,6 +152,7 @@ namespace Game.Combat.UI
             _actor = null;
             _pendingSkill = null;
             _shownTurnIndex = -1;
+            _draft.Clear();
 
             SetStatus("Combat ended.");
         }
@@ -341,7 +344,7 @@ namespace Game.Combat.UI
                 return;
             }
 
-            if (!_session.CurrentTurn.TryGetPlan(_actor.Id, out ActionPlan currentPlan))
+            if (!_draft.TryGetPlan(_actor.Id, out ActionPlan currentPlan))
                 currentPlan = new ActionPlan(PlannedAction.None, PlannedAction.None);
 
             PlannedAction plannedAction = new PlannedAction(
@@ -361,7 +364,9 @@ namespace Game.Combat.UI
             else
                 slot2 = plannedAction;
 
-            _session.CurrentTurn.SetPlan(_actor.Id, new ActionPlan(slot1, slot2));
+            _draft.EnsureActor(_actor.Id);
+            _draft.SetSlot(_actor.Id, 0, slot1);
+            _draft.SetSlot(_actor.Id, 1, slot2);
 
             RefreshSlotLabels();
             SetStatus($"슬롯 {_selectedSlot + 1} 예약 완료: {skill.Name}");
@@ -372,7 +377,7 @@ namespace Game.Combat.UI
             if (_session == null || _actor == null)
                 return;
 
-            if (!_session.CurrentTurn.TryGetPlan(_actor.Id, out ActionPlan plan))
+            if (!_draft.TryGetPlan(_actor.Id, out ActionPlan plan))
                 plan = new ActionPlan(PlannedAction.None, PlannedAction.None);
 
             if (slot1Button != null)
@@ -406,21 +411,17 @@ namespace Game.Combat.UI
                 return;
             }
 
+            foreach (var pair in _draft.Plans)
+                _session.CurrentTurn.SetPlan(pair.Key, pair.Value);
+
             if (autoFillEnemyPlansOnConfirm)
                 AutoFillEnemiesIfMissing();
 
             if (panelPlanning != null)
                 panelPlanning.SetActive(false);
 
-            CombatTurnResolver.ResolveTurn(_session);
-
-            Debug.Log(
-                $"[CombatPlanningHUD] Confirm 완료. " +
-                $"PlaybookCount={(_session.CurrentTurn != null ? _session.CurrentTurn.Playbook.Count : -1)}"
-            );
-
-            entryPoint.ConfirmPlanningFromUI();
-            SetStatus("Confirmed.");
+            bool submitted = entryPoint.SubmitCurrentTurn();
+            SetStatus(submitted ? "Confirmed." : "Submit failed.");
         }
 
         private void AutoFillEnemiesIfMissing()
@@ -478,13 +479,10 @@ namespace Game.Combat.UI
             if (_session == null || combatant == null)
                 return;
 
-            if (_session.CurrentTurn.TryGetPlan(combatant.Id, out _))
+            if (_draft.TryGetPlan(combatant.Id, out _))
                 return;
 
-            _session.CurrentTurn.SetPlan(
-                combatant.Id,
-                new ActionPlan(PlannedAction.None, PlannedAction.None)
-            );
+            _draft.EnsureActor(combatant.Id);
         }
 
         private void SetStatus(string message)
