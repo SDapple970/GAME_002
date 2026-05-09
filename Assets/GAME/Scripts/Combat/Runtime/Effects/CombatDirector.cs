@@ -21,6 +21,8 @@ namespace Game.Combat.Effects
 
         public void PlayResolution(CombatSession session, Action onComplete)
         {
+            Debug.Log($"[Director] Playbook Count = {session.CurrentTurn.Playbook.Count}");
+
             StartCoroutine(Co_PlayTurnAnimation(session, onComplete));
         }
 
@@ -160,10 +162,14 @@ namespace Game.Combat.Effects
 
         private GameObject GetFieldObject(ICombatant combatant)
         {
+            Debug.Log($"[Director] combatant={combatant?.Id}, type={combatant?.GetType().Name}");
+
             if (combatant is FieldCombatantAdapter fieldCombatant)
                 return fieldCombatant.FieldObject;
 
             return null;
+
+
         }
 
         private IEnumerator MoveTransform(Transform tf, Vector3 start, Vector3 end, float duration)

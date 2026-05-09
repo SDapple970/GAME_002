@@ -38,6 +38,7 @@ namespace Game.Combat.Core
 
         public void ConfirmPlanningFromUI()
         {
+            Debug.Log($"[CombatEntryPoint] ConfirmPlanningFromUI | stateMachineNull={ActiveStateMachine == null}");
             ActiveStateMachine?.ConfirmPlanning();
         }
 
@@ -138,6 +139,12 @@ namespace Game.Combat.Core
 
             var factory = new FieldCombatantFactory(_book);
             (ActiveSession, ActiveStateMachine) = CombatBootstrapper.StartCombat(req, _book, factory);
+
+            if (ActiveStateMachine != null && ActiveStateMachine.Phase == Phase.EnterCombat)
+            {
+                ActiveStateMachine.Tick();
+                Debug.Log($"[EntryPoint] Forced first tick. Phase={ActiveStateMachine.Phase}, Turn={ActiveSession.TurnIndex}");
+            }
 
             if (director != null)
                 ActiveStateMachine.OnRequireResolutionPlay += director.PlayResolution;

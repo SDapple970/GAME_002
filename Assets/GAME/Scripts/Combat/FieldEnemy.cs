@@ -1,17 +1,23 @@
 ﻿// GAME/Scripts/Battle/FieldEnemy.cs
-using System;
+using System.Collections.Generic;
 using UnityEngine;
-using Game.Common;
+using Game.Combat.Core;
+using Game.Combat.Model;
+using Game.Combat.Adapters;
 
 namespace Game.Battle
 {
     [RequireComponent(typeof(Collider2D))]
-    public sealed class FieldEnemy : MonoBehaviour, IDamageable
+    public sealed class FieldEnemy : MonoBehaviour, Game.Common.IDamageable
     {
-        public static event Action<BattleTransitionRequest> OnBattleRequested;
+        [Header("Combat Entry")]
+        [SerializeField] private CombatEntryPoint combatEntryPoint;
+        [SerializeField] private string playerTag = "Player";
+        [SerializeField] private OpeningEffectSO openingEffectOrNull;
 
         [Header("Encounter Settings")]
-        [SerializeField] private string battleSceneName = "Battle";
+        [SerializeField] private StartReason touchStartReason = StartReason.PlayerGotHit;
+        [SerializeField] private StartReason hitStartReason = StartReason.PlayerFirstHit;
 
         [Header("AI Settings")]
         [SerializeField] private Transform playerTarget;
@@ -22,9 +28,12 @@ namespace Game.Battle
 
         private void Awake()
         {
+            if (combatEntryPoint == null)
+                combatEntryPoint = FindFirstObjectByType<CombatEntryPoint>();
+
             if (playerTarget == null)
             {
-                GameObject player = GameObject.FindGameObjectWithTag("Player");
+                GameObject player = GameObject.FindGameObjectWithTag(playerTag);
                 if (player != null)
                     playerTarget = player.transform;
             }
@@ -43,7 +52,6 @@ namespace Game.Battle
                 return;
 
             float distance = Vector2.Distance(transform.position, playerTarget.position);
-
             if (distance <= aggroRange)
             {
                 transform.position = Vector2.MoveTowards(
@@ -59,10 +67,10 @@ namespace Game.Battle
             if (_isEncounterTriggered)
                 return;
 
-            if (!other.CompareTag("Player"))
+            if (!other.CompareTag(playerTag))
                 return;
 
-            TriggerBattle(EncounterAdvantage.EnemyFirst);
+            StartCombat(other.gameObject, Side.Enemies, touchStartReason);
         }
 
         public void TakeDamage(int amount)
@@ -70,25 +78,41 @@ namespace Game.Battle
             if (_isEncounterTriggered)
                 return;
 
-            TriggerBattle(EncounterAdvantage.PlayerFirst);
+            GameObject player = GameObject.FindGameObjectWithTag(playerTag);
+            if (player == null)
+                return;
+
+            StartCombat(player, Side.Allies, hitStartReason);
         }
 
-        private void TriggerBattle(EncounterAdvantage advantage)
+        private void StartCombat(GameObject playerObject, Side initiativeSide, StartReason reason)
         {
+            if (_isEncounterTriggered)
+                return;
+
+            if (combatEntryPoint == null || playerObject == null)
+            {
+                Debug.LogError("[FieldEnemy] CombatEntryPoint or Player is missing.");
+                return;
+            }
+
+            if (combatEntryPoint.ActiveStateMachine != null)
+                return;
+
             _isEncounterTriggered = true;
-            Debug.Log($"[FieldEnemy] 전투 발생! 어드밴티지: {advantage}");
 
-            OnBattleRequested?.Invoke(
-                new BattleTransitionRequest(transform.position, battleSceneName, advantage)
+            List<GameObject> allies = new List<GameObject>(1) { playerObject };
+            List<GameObject> enemies = new List<GameObject>(1) { gameObject };
+
+            combatEntryPoint.StartCombatFromField(
+                allyFieldObjects: allies,
+                enemyFieldObjects: enemies,
+                reason: reason,
+                initiativeSide: initiativeSide,
+                openingEffectOrNull: openingEffectOrNull
             );
-        }
 
-#if UNITY_EDITOR
-        private void OnDrawGizmosSelected()
-        {
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawWireSphere(transform.position, aggroRange);
+            Debug.Log($"[FieldEnemy] StartCombatFromField called. reason={reason}, initiative={initiativeSide}");
         }
-#endif
     }
 }

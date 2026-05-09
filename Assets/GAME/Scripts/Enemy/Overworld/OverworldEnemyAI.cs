@@ -1,4 +1,4 @@
-// GAME/Scripts/Enemy/Overworld/OverworldEnemyAI.cs
+// À§Ä¡: GAME/Scripts/Enemy/Overworld/OverworldEnemyAI.cs
 using System.Collections;
 using UnityEngine;
 using Game.Core;
@@ -8,7 +8,11 @@ namespace Game.Enemy.Overworld
     [RequireComponent(typeof(Rigidbody2D))]
     public sealed class OverworldEnemyAI : MonoBehaviour
     {
-        public enum AIState { Patrol, Chase }
+        public enum AIState
+        {
+            Patrol,
+            Chase
+        }
 
         [Header("Movement Settings")]
         [SerializeField] private float patrolSpeed = 2f;
@@ -22,15 +26,18 @@ namespace Game.Enemy.Overworld
         [Header("Optimization")]
         [SerializeField] private float aiTickRate = 0.15f;
 
+        [Header("Debug")]
+        [SerializeField] private bool drawDebugGizmos = true;
+
         private Rigidbody2D _rb;
-        private AIState _currentState = AIState.Patrol;
-        private int _currentWaypointIndex = 0;
+        private int _currentWaypointIndex;
         private Transform _targetPlayer;
         private Coroutine _aiRoutine;
 
-        public AIState CurrentState => _currentState;
-        public bool IsChasing => _currentState == AIState.Chase;
-        public Transform TargetPlayer => _targetPlayer;
+        public AIState CurrentState { get; private set; } = AIState.Patrol;
+        public bool HasTarget => _targetPlayer != null;
+        public float FacingDirection { get; private set; } = 1f;
+        public float CurrentHorizontalSpeed => Mathf.Abs(_rb != null ? _rb.linearVelocity.x : 0f);
 
         private void Awake()
         {
@@ -50,6 +57,8 @@ namespace Game.Enemy.Overworld
                 StopCoroutine(_aiRoutine);
                 _aiRoutine = null;
             }
+
+            StopHorizontalMovement();
         }
 
         private IEnumerator AITickRoutine()
@@ -58,20 +67,23 @@ namespace Game.Enemy.Overworld
 
             while (true)
             {
-                if (GameStateMachine.Instance != null && !GameStateMachine.Instance.Is(GameState.Exploration))
+                if (!CanThinkAndMove())
                 {
-                    _rb.linearVelocity = new Vector2(0f, _rb.linearVelocity.y);
+                    CurrentState = AIState.Patrol;
+                    _targetPlayer = null;
+                    StopHorizontalMovement();
                     yield return wait;
                     continue;
                 }
 
                 DetectPlayer();
 
-                switch (_currentState)
+                switch (CurrentState)
                 {
                     case AIState.Patrol:
                         DoPatrol();
                         break;
+
                     case AIState.Chase:
                         DoChase();
                         break;
@@ -81,6 +93,14 @@ namespace Game.Enemy.Overworld
             }
         }
 
+        private bool CanThinkAndMove()
+        {
+            if (GameStateMachine.Instance == null)
+                return true;
+
+            return GameStateMachine.Instance.Is(GameState.Exploration);
+        }
+
         private void DetectPlayer()
         {
             Collider2D col = Physics2D.OverlapCircle(transform.position, detectionRadius, playerLayer);
@@ -88,47 +108,88 @@ namespace Game.Enemy.Overworld
             if (col != null)
             {
                 _targetPlayer = col.transform;
-                _currentState = AIState.Chase;
+                CurrentState = AIState.Chase;
             }
             else
             {
                 _targetPlayer = null;
-                _currentState = AIState.Patrol;
+                CurrentState = AIState.Patrol;
             }
         }
 
         private void DoPatrol()
         {
-            if (waypoints == null || waypoints.Length == 0) return;
+            if (waypoints == null || waypoints.Length == 0)
+            {
+                StopHorizontalMovement();
+                return;
+            }
 
             Transform targetPoint = waypoints[_currentWaypointIndex];
-            MoveTowards(targetPoint.position.x, patrolSpeed);
-
-            if (Mathf.Abs(transform.position.x - targetPoint.position.x) < 0.5f)
+            if (targetPoint == null)
             {
-                _currentWaypointIndex = (_currentWaypointIndex + 1) % waypoints.Length;
+                AdvanceWaypoint();
+                return;
+            }
+
+            MoveTowardsX(targetPoint.position.x, patrolSpeed);
+
+            if (Mathf.Abs(transform.position.x - targetPoint.position.x) < 0.25f)
+            {
+                AdvanceWaypoint();
             }
         }
 
         private void DoChase()
         {
-            if (_targetPlayer == null) return;
-            MoveTowards(_targetPlayer.position.x, chaseSpeed);
+            if (_targetPlayer == null)
+            {
+                CurrentState = AIState.Patrol;
+                return;
+            }
+
+            MoveTowardsX(_targetPlayer.position.x, chaseSpeed);
         }
 
-        private void MoveTowards(float targetX, float speed)
+        private void MoveTowardsX(float targetX, float speed)
         {
-            float direction = Mathf.Sign(targetX - transform.position.x);
+            if (_rb == null) return;
 
-            if (direction != 0)
+            float deltaX = targetX - transform.position.x;
+
+            if (Mathf.Abs(deltaX) < 0.05f)
             {
-                transform.localScale = new Vector3(
-                    Mathf.Abs(transform.localScale.x) * direction,
-                    transform.localScale.y,
-                    transform.localScale.z);
+                StopHorizontalMovement();
+                return;
             }
+
+            float direction = Mathf.Sign(deltaX);
+            FacingDirection = direction;
 
             _rb.linearVelocity = new Vector2(direction * speed, _rb.linearVelocity.y);
         }
+
+        private void StopHorizontalMovement()
+        {
+            if (_rb == null) return;
+
+            _rb.linearVelocity = new Vector2(0f, _rb.linearVelocity.y);
+        }
+
+        private void AdvanceWaypoint()
+        {
+            if (waypoints == null || waypoints.Length == 0) return;
+            _currentWaypointIndex = (_currentWaypointIndex + 1) % waypoints.Length;
+        }
+
+#if UNITY_EDITOR
+        private void OnDrawGizmosSelected()
+        {
+            if (!drawDebugGizmos) return;
+
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireSphere(transform.position, detectionRadius);
+        }
+#endif
     }
 }

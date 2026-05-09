@@ -1,5 +1,6 @@
 ﻿// GAME_002/Assets/GAME/Scripts/Combat/Core/CombatStateMachine.cs
 using System;
+using UnityEngine;
 using Game.Combat.Model;
 
 namespace Game.Combat.Core
@@ -29,6 +30,7 @@ namespace Game.Combat.Core
         {
             if (Phase == Phase.Planning)
             {
+                Debug.Log("[CombatStateMachine] Planning -> Resolution");
                 Phase = Phase.Resolution;
                 _isResolving = false;
             }
@@ -44,34 +46,23 @@ namespace Game.Combat.Core
         {
             switch (Phase)
             {
-                case Phase.EnterCombat:
-                    EndReason = CombatEndReason.None;
-                    _session.BeginNewTurn();
-                    Phase = Phase.Planning;
-                    break;
-
-                case Phase.Planning:
-                    break;
-
+               
                 case Phase.Resolution:
                     if (!_isResolving)
                     {
                         _isResolving = true;
-                        OnRequireResolutionPlay?.Invoke(_session, OnResolutionFinished);
+
+                        if (OnRequireResolutionPlay != null)
+                        {
+                            Debug.Log("[CombatStateMachine] Requesting resolution play.");
+                            OnRequireResolutionPlay.Invoke(_session, OnResolutionFinished);
+                        }
+                        else
+                        {
+                            Debug.LogWarning("[CombatStateMachine] No CombatDirector bound. Skipping resolution animation.");
+                            OnResolutionFinished();
+                        }
                     }
-                    break;
-
-                case Phase.EndTurn:
-                    CheckCombatEndConditions();
-
-                    if (Phase != Phase.ExitCombat)
-                    {
-                        _session.BeginNewTurn();
-                        Phase = Phase.Planning;
-                    }
-                    break;
-
-                case Phase.ExitCombat:
                     break;
             }
         }
