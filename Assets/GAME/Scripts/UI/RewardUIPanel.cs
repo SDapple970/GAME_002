@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using Game.Core;
 using Game.Combat.Core;
 using Game.Combat.Model;
+using Game.NonCombat.Reward;
 
 namespace Game.UI
 {
@@ -14,6 +15,7 @@ namespace Game.UI
     {
         [Header("System References")]
         [SerializeField] private CombatEntryPoint combatEntryPoint;
+        [SerializeField] private RewardApplier rewardApplier;
 
         [Header("UI References")]
         [Tooltip("MP3 UI 전체 최상위 오브젝트")]
@@ -27,6 +29,7 @@ namespace Game.UI
 
         // 생성된 리스트 항목들을 추적하고 정리하기 위한 리스트
         private readonly List<RewardItemUI> _spawnedItems = new List<RewardItemUI>();
+        private CombatResult _pendingResult;
 
         private void Awake()
         {
@@ -62,6 +65,7 @@ namespace Game.UI
         private void HandleCombatEnded(CombatResult result)
         {
             if (!result.IsWin) return;
+            _pendingResult = result;
 
             // 1. 플레이어 조작 잠금
             if (GameStateMachine.Instance != null)
@@ -140,7 +144,14 @@ namespace Game.UI
         private void OnRewardSelected(string selectedReward)
         {
             Debug.Log($"[Reward] 플레이어가 선택한 보상: {selectedReward}");
-            // TODO: 실제 플레이어에게 selectedReward에 해당하는 보상 지급 로직
+
+            RewardApplier applier = rewardApplier != null ? rewardApplier : RewardApplier.Instance;
+            if (applier != null)
+                applier.ApplyCombatResult(_pendingResult);
+            else
+                Debug.LogWarning("[RewardUIPanel] RewardApplier is missing.", this);
+
+            _pendingResult = null;
 
             // UI 닫기
             if (rewardPanelRoot != null) rewardPanelRoot.SetActive(false);

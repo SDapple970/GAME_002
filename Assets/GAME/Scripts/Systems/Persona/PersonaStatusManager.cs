@@ -17,7 +17,7 @@ namespace Game.Systems.Persona
         public event Action<PersonaStat, int> OnStatXpGained;     // stat, currentXp
 
         [Header("Settings")]
-        [SerializeField] private int maxLevel = 5; // 최고 레벨
+        [SerializeField] private int maxLevel = 10; // 최고 레벨
         [SerializeField] private int baseXpRequired = 10; // 레벨업에 필요한 기본 경험치 배율
 
         // 데이터 저장소 (MVP: 런타임 딕셔너리로 관리, 추후 Save/Load 시스템과 연동)
@@ -50,12 +50,20 @@ namespace Game.Systems.Persona
         /// <summary>
         /// 특정 스탯의 현재 레벨을 반환합니다. 대화 선택지 조건 검사 시 사용합니다.
         /// </summary>
-        public int GetLevel(PersonaStat stat) => _statLevels[stat];
+        public int GetLevel(PersonaStat stat)
+        {
+            EnsureStat(stat);
+            return _statLevels[stat];
+        }
 
         /// <summary>
         /// 특정 스탯의 현재 경험치를 반환합니다.
         /// </summary>
-        public int GetXp(PersonaStat stat) => _statXp[stat];
+        public int GetXp(PersonaStat stat)
+        {
+            EnsureStat(stat);
+            return _statXp[stat];
+        }
 
         /// <summary>
         /// 다음 레벨업에 필요한 경험치를 계산합니다. (예: 1->2는 10, 2->3은 20)
@@ -71,6 +79,9 @@ namespace Game.Systems.Persona
         /// </summary>
         public void AddXp(PersonaStat stat, int amount)
         {
+            EnsureStat(stat);
+            if (amount <= 0) return;
+
             int currentLevel = _statLevels[stat];
             if (currentLevel >= maxLevel) return; // 이미 만렙이면 무시
 
@@ -84,6 +95,7 @@ namespace Game.Systems.Persona
 
         private void CheckLevelUp(PersonaStat stat)
         {
+            EnsureStat(stat);
             int currentLevel = _statLevels[stat];
             int requiredXp = GetRequiredXpForNextLevel(currentLevel);
 
@@ -103,6 +115,21 @@ namespace Game.Systems.Persona
             }
         }
 
+
+        public void SetStat(PersonaStat stat, int level, int xp)
+        {
+            _statLevels[stat] = Mathf.Clamp(level, 1, maxLevel);
+            _statXp[stat] = Mathf.Max(0, xp);
+        }
+
+        private void EnsureStat(PersonaStat stat)
+        {
+            if (!_statLevels.ContainsKey(stat))
+                _statLevels[stat] = 1;
+
+            if (!_statXp.ContainsKey(stat))
+                _statXp[stat] = 0;
+        }
         // --- 디버그용 치트 ---
         [ContextMenu("Debug: Add 10 Courage XP")]
         private void DebugAddCourage() => AddXp(PersonaStat.Courage, 10);
