@@ -7,6 +7,7 @@ public sealed class OverworldAttack2D : MonoBehaviour
 {
     [Header("Input")]
     [SerializeField] private InputActionReference attack;
+    [SerializeField] private bool useDirectInputAction = true;
 
     [Header("References")]
     [SerializeField] private Transform hitOrigin;
@@ -25,6 +26,7 @@ public sealed class OverworldAttack2D : MonoBehaviour
 
     private float _nextTime;
     private bool _attackQueued;
+    private bool _loggedDuplicateInputWarning;
     private readonly Collider2D[] _buffer = new Collider2D[16];
 
     private void Awake()
@@ -35,16 +37,17 @@ public sealed class OverworldAttack2D : MonoBehaviour
 
     private void OnEnable()
     {
-        if (attack == null || attack.action == null)
+        if (!useDirectInputAction || attack == null || attack.action == null)
             return;
 
+        WarnIfDuplicateInputPathIsLikely();
         attack.action.performed += OnAttack;
         attack.action.Enable();
     }
 
     private void OnDisable()
     {
-        if (attack == null || attack.action == null)
+        if (!useDirectInputAction || attack == null || attack.action == null)
             return;
 
         attack.action.performed -= OnAttack;
@@ -67,7 +70,25 @@ public sealed class OverworldAttack2D : MonoBehaviour
 
     public void RequestAttack()
     {
+        // Preferred runtime path: GameInputInstaller -> OverworldPlayerController -> RequestAttack().
         TryAttack();
+    }
+
+    private void WarnIfDuplicateInputPathIsLikely()
+    {
+        if (_loggedDuplicateInputWarning)
+            return;
+
+        if (GameInputInstaller.Instance == null)
+            return;
+
+        _loggedDuplicateInputWarning = true;
+        Debug.LogWarning(
+            "[OverworldAttack2D] Direct InputActionReference is enabled while GameInputInstaller exists. " +
+            "If OverworldPlayerController also calls RequestAttack(), one input can trigger duplicate attack attempts. " +
+            "Leave the attack reference empty or disable direct input after confirming the scene uses GameInputInstaller.",
+            this
+        );
     }
 
     private void TryAttack()

@@ -44,6 +44,7 @@ namespace Game.Combat.UI
         private readonly CombatPlanDraft _draft = new();
 
         private readonly Dictionary<SkillId, string> _skillNameById = new();
+        private bool _subscribedToEntryPoint;
 
         private void Awake()
         {
@@ -56,20 +57,12 @@ namespace Game.Combat.UI
         private void OnEnable()
         {
             AutoBindReferences();
+            SubscribeToEntryPoint();
+            BindButtonListeners();
+        }
 
-            if (entryPoint != null)
-            {
-                entryPoint.OnCombatStarted -= HandleCombatStarted;
-                entryPoint.OnCombatEnded -= HandleCombatEnded;
-
-                entryPoint.OnCombatStarted += HandleCombatStarted;
-                entryPoint.OnCombatEnded += HandleCombatEnded;
-            }
-            else
-            {
-                Debug.LogError("[CombatPlanningHUD] EntryPoint가 연결되지 않았습니다.");
-            }
-
+        private void BindButtonListeners()
+        {
             if (slot1Button != null)
             {
                 slot1Button.onClick.RemoveListener(OnSlot1Clicked);
@@ -91,12 +84,12 @@ namespace Game.Combat.UI
 
         private void OnDisable()
         {
-            if (entryPoint != null)
-            {
-                entryPoint.OnCombatStarted -= HandleCombatStarted;
-                entryPoint.OnCombatEnded -= HandleCombatEnded;
-            }
+            UnsubscribeFromEntryPoint();
+            UnbindButtonListeners();
+        }
 
+        private void UnbindButtonListeners()
+        {
             if (slot1Button != null)
                 slot1Button.onClick.RemoveListener(OnSlot1Clicked);
 
@@ -123,6 +116,37 @@ namespace Game.Combat.UI
         {
             if (entryPoint == null)
                 entryPoint = FindFirstObjectByType<CombatEntryPoint>();
+        }
+
+        private void SubscribeToEntryPoint()
+        {
+            if (_subscribedToEntryPoint)
+                return;
+
+            if (entryPoint == null)
+            {
+                Debug.LogError("[CombatPlanningHUD] EntryPoint가 연결되지 않았습니다.");
+                return;
+            }
+
+            entryPoint.OnCombatStarted -= HandleCombatStarted;
+            entryPoint.OnCombatEnded -= HandleCombatEnded;
+            entryPoint.OnCombatStarted += HandleCombatStarted;
+            entryPoint.OnCombatEnded += HandleCombatEnded;
+            _subscribedToEntryPoint = true;
+        }
+
+        private void UnsubscribeFromEntryPoint()
+        {
+            if (!_subscribedToEntryPoint || entryPoint == null)
+            {
+                _subscribedToEntryPoint = false;
+                return;
+            }
+
+            entryPoint.OnCombatStarted -= HandleCombatStarted;
+            entryPoint.OnCombatEnded -= HandleCombatEnded;
+            _subscribedToEntryPoint = false;
         }
 
         private void HandleCombatStarted(CombatSession session)
@@ -408,6 +432,12 @@ namespace Game.Combat.UI
             if (_session == null || entryPoint == null)
             {
                 Debug.LogWarning("[CombatPlanningHUD] Confirm 실패: Session 또는 EntryPoint가 없습니다.");
+                return;
+            }
+
+            if (_session.CurrentTurn == null)
+            {
+                Debug.LogWarning("[CombatPlanningHUD] Confirm 실패: CurrentTurn이 없습니다.");
                 return;
             }
 

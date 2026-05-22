@@ -140,6 +140,7 @@ namespace Game.Combat.Core
 #endif
         }
 
+#if UNITY_EDITOR
         private void ForceFinishCombat(CombatEndReason reason)
         {
             if (ActiveStateMachine == null)
@@ -158,6 +159,7 @@ namespace Game.Combat.Core
             ActiveSession = null;
             ActiveStateMachine = null;
         }
+#endif
 
         public void StartCombatFromField(
             List<GameObject> allyFieldObjects,
