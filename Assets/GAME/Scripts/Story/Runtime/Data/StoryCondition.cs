@@ -9,7 +9,11 @@ namespace Game.Story.Data
     {
         BoolFlagEquals,
         IntFlagAtLeast,
-        PersonaLevelAtLeast
+        PersonaLevelAtLeast,
+        ChapterAtLeast,
+        MainProgressAtLeast,
+        EventCompleted,
+        EventNotCompleted
     }
 
     [System.Serializable]
@@ -47,9 +51,29 @@ namespace Game.Story.Data
                         return false;
                     }
                     return PersonaStatusManager.Instance.GetLevel(personaStat) >= requiredLevel;
+                case StoryConditionType.ChapterAtLeast:
+                    if (!CanUseProgressCondition()) return false;
+                    return StoryProgressManager.Instance.CurrentChapter >= intValue;
+                case StoryConditionType.MainProgressAtLeast:
+                    if (!CanUseProgressCondition()) return false;
+                    return StoryProgressManager.Instance.MainProgress >= intValue;
+                case StoryConditionType.EventCompleted:
+                    if (!CanUseProgressCondition()) return false;
+                    return StoryProgressManager.Instance.IsEventCompleted(key);
+                case StoryConditionType.EventNotCompleted:
+                    if (!CanUseProgressCondition()) return false;
+                    return !StoryProgressManager.Instance.IsEventCompleted(key);
                 default:
                     return false;
             }
+        }
+
+        private bool CanUseProgressCondition()
+        {
+            if (StoryProgressManager.Instance != null) return true;
+
+            Debug.LogWarning($"[StoryCondition] StoryProgressManager missing for type='{type}' key='{key}'.");
+            return false;
         }
     }
 }

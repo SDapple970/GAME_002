@@ -11,6 +11,7 @@ namespace Game.Story
         [SerializeField] private DialoguePanel dialoguePanel;
         [SerializeField] private GameState stateWhileRunning = GameState.UIOnly;
         [SerializeField] private bool restoreExplorationOnEnd = true;
+        [SerializeField] private bool markCurrentEventCompletedOnEnd = true;
 
         private StoryEventDefinitionSO _currentEvent;
         private StoryNode _currentNode;
@@ -149,6 +150,8 @@ namespace Game.Story
         {
             if (!_running) return;
 
+            MarkCurrentEventCompletedIfNeeded();
+
             dialoguePanel?.Hide();
             _currentEvent = null;
             _currentNode = null;
@@ -163,6 +166,26 @@ namespace Game.Story
                     GameStateMachine.Instance.SetState(GameState.Exploration);
                 }
             }
+        }
+
+        private void MarkCurrentEventCompletedIfNeeded()
+        {
+            if (!markCurrentEventCompletedOnEnd || _currentEvent == null) return;
+
+            string eventId = _currentEvent.EventId;
+            if (string.IsNullOrEmpty(eventId))
+            {
+                Debug.LogWarning($"[StoryEventRunner] Event id is empty. Completion was not marked for event asset='{_currentEvent.name}'.");
+                return;
+            }
+
+            if (StoryProgressManager.Instance == null)
+            {
+                Debug.LogWarning($"[StoryEventRunner] StoryProgressManager missing. Completion was not marked for event='{eventId}'.");
+                return;
+            }
+
+            StoryProgressManager.Instance.MarkEventCompleted(eventId);
         }
 
         private void ShowNode(StoryNode node)

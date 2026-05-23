@@ -24,6 +24,7 @@ namespace Game.Story
         [SerializeField] private bool askConfirmation = false;
         [SerializeField] private string confirmationMessage = "사용할까요?";
         [SerializeField] private bool disableAfterUse = false;
+        [SerializeField] private bool blockIfEventCompleted = false;
         [SerializeField] private bool rememberUsedWithFlag = false;
         [SerializeField] private string usedFlagKey;
         [SerializeField] private int priority = 0;
@@ -57,6 +58,8 @@ namespace Game.Story
                 {
                     return false;
                 }
+
+                if (IsCompletedEventBlocked()) return false;
 
                 if (!rememberUsedWithFlag) return true;
                 if (StoryFlagManager.Instance == null) return false;
@@ -178,6 +181,8 @@ namespace Game.Story
                 return false;
             }
 
+            if (IsCompletedEventBlocked()) return false;
+
             if (!rememberUsedWithFlag) return true;
 
             if (StoryFlagManager.Instance == null)
@@ -187,6 +192,16 @@ namespace Game.Story
             }
 
             return string.IsNullOrEmpty(usedFlagKey) || !StoryFlagManager.Instance.GetBool(usedFlagKey);
+        }
+
+        private bool IsCompletedEventBlocked()
+        {
+            if (!blockIfEventCompleted || eventDefinition == null || StoryProgressManager.Instance == null)
+            {
+                return false;
+            }
+
+            return StoryProgressManager.Instance.IsEventCompleted(eventDefinition.EventId);
         }
 
         private string ResolvePromptText()

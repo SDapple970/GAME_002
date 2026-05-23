@@ -10,7 +10,12 @@ namespace Game.Story.Data
         SetBoolFlag,
         SetIntFlag,
         AddIntFlag,
-        AddPersonaXp
+        AddPersonaXp,
+        SetChapter,
+        SetMainProgress,
+        AdvanceMainProgress,
+        MarkEventCompleted,
+        ClearEventCompleted
     }
 
     [System.Serializable]
@@ -54,6 +59,26 @@ namespace Game.Story.Data
 
                     PersonaStatusManager.Instance.AddXp(personaStat, xpAmount);
                     return;
+                case StoryEffectType.SetChapter:
+                    if (!CanUseProgressEffect()) return;
+                    StoryProgressManager.Instance.SetChapter(intValue);
+                    return;
+                case StoryEffectType.SetMainProgress:
+                    if (!CanUseProgressEffect()) return;
+                    StoryProgressManager.Instance.SetMainProgress(intValue);
+                    return;
+                case StoryEffectType.AdvanceMainProgress:
+                    if (!CanUseProgressEffect()) return;
+                    StoryProgressManager.Instance.AdvanceMainProgress(intValue <= 0 ? 1 : intValue);
+                    return;
+                case StoryEffectType.MarkEventCompleted:
+                    if (!CanUseProgressEffect()) return;
+                    StoryProgressManager.Instance.MarkEventCompleted(key);
+                    return;
+                case StoryEffectType.ClearEventCompleted:
+                    if (!CanUseProgressEffect()) return;
+                    StoryProgressManager.Instance.ClearEventCompleted(key);
+                    return;
                 default:
                     return;
             }
@@ -70,6 +95,14 @@ namespace Game.Story.Data
             if (!string.IsNullOrEmpty(key)) return true;
 
             Debug.LogWarning("[StoryEffect] Empty flag key was ignored.");
+            return false;
+        }
+
+        private bool CanUseProgressEffect()
+        {
+            if (StoryProgressManager.Instance != null) return true;
+
+            Debug.LogWarning($"[StoryEffect] StoryProgressManager missing for type='{type}' key='{key}'.");
             return false;
         }
     }
