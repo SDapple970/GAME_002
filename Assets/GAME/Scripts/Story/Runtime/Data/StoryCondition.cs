@@ -1,5 +1,6 @@
 // Assets/GAME/Scripts/Story/Runtime/Data/StoryCondition.cs
 using Game.Story;
+using Game.Mission;
 using Game.Systems.Persona;
 using UnityEngine;
 
@@ -13,7 +14,10 @@ namespace Game.Story.Data
         ChapterAtLeast,
         MainProgressAtLeast,
         EventCompleted,
-        EventNotCompleted
+        EventNotCompleted,
+        MissionActive,
+        MissionCompleted,
+        MissionObjectiveCompleted
     }
 
     [System.Serializable]
@@ -25,6 +29,8 @@ namespace Game.Story.Data
         [SerializeField] private int intValue;
         [SerializeField] private PersonaStat personaStat;
         [SerializeField] private int requiredLevel = 1;
+        [SerializeField] private string missionId;
+        [SerializeField] private string objectiveId;
 
         public bool IsMet()
         {
@@ -63,6 +69,15 @@ namespace Game.Story.Data
                 case StoryConditionType.EventNotCompleted:
                     if (!CanUseProgressCondition()) return false;
                     return !StoryProgressManager.Instance.IsEventCompleted(key);
+                case StoryConditionType.MissionActive:
+                    if (!CanUseMissionCondition()) return false;
+                    return MissionManager.Instance.IsMissionActive(missionId);
+                case StoryConditionType.MissionCompleted:
+                    if (!CanUseMissionCondition()) return false;
+                    return MissionManager.Instance.IsMissionCompleted(missionId);
+                case StoryConditionType.MissionObjectiveCompleted:
+                    if (!CanUseMissionCondition()) return false;
+                    return MissionManager.Instance.IsObjectiveCompleted(missionId, objectiveId);
                 default:
                     return false;
             }
@@ -73,6 +88,14 @@ namespace Game.Story.Data
             if (StoryProgressManager.Instance != null) return true;
 
             Debug.LogWarning($"[StoryCondition] StoryProgressManager missing for type='{type}' key='{key}'.");
+            return false;
+        }
+
+        private bool CanUseMissionCondition()
+        {
+            if (MissionManager.Instance != null) return true;
+
+            Debug.LogWarning($"[StoryCondition] MissionManager missing for type='{type}' missionId='{missionId}' objectiveId='{objectiveId}'.");
             return false;
         }
     }

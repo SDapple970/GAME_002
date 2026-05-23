@@ -180,9 +180,12 @@ namespace Game.Story
 
         public void StartLinkedEvent()
         {
+            LogDebug($"[StoryInteractable2D] StartLinkedEvent requested. event={eventDefinition?.EventId}, reason={GetCannotInteractReason()}");
+
             if (!CanStartLinkedEvent()) return;
 
             ResolveSpeakerAnchor();
+            LogDebug($"[StoryInteractable2D] Calling runner.StartEvent event={eventDefinition.EventId}");
             runner.StartEvent(eventDefinition, speakerAnchor);
             MarkUsedIfNeeded();
 

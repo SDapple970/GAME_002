@@ -71,7 +71,7 @@ namespace Game.Story.Interaction
             {
                 if (debugLogs)
                 {
-                    Debug.Log($"[StoryInteractionController] E pressed. current={GetCurrentName()}");
+                    Debug.Log($"[StoryInteractionController] Interact key pressed. key={fallbackInteractKey}, current={GetCurrentName()}");
                 }
 
                 TryInteract();
@@ -83,6 +83,14 @@ namespace Game.Story.Interaction
             if (interactable == null) return;
 
             _current = interactable;
+
+            if (debugLogs)
+            {
+                Debug.Log(
+                    $"[StoryInteractionController] Registered current={interactable.name}, " +
+                    $"canShowPrompt={interactable.CanShowPrompt()}, canInteract={interactable.CanInteract}, " +
+                    $"prompt={interactable.CurrentPromptText}");
+            }
 
             if (interactable.CanShowPrompt())
             {
@@ -104,7 +112,7 @@ namespace Game.Story.Interaction
             {
                 if (debugLogs)
                 {
-                    Debug.Log("[StoryInteractionController] TryInteract current null.");
+                    Debug.Log("[StoryInteractionController] TryInteract failed: current is null");
                 }
 
                 return;
@@ -115,9 +123,9 @@ namespace Game.Story.Interaction
             if (debugLogs)
             {
                 Debug.Log(
-                    $"[StoryInteractionController] TryInteract current={GetCurrentName()} " +
-                    $"canShowPrompt={canShowPrompt} canInteract={canInteract} " +
-                    $"prompt='{_current.CurrentPromptText}' reason='{_current.GetCannotInteractReason()}'");
+                    $"[StoryInteractionController] TryInteract current={GetCurrentName()}, " +
+                    $"canShowPrompt={canShowPrompt}, canInteract={canInteract}, " +
+                    $"reason={_current.GetCannotInteractReason()}");
             }
 
             if (!canInteract)
@@ -131,6 +139,11 @@ namespace Game.Story.Interaction
             }
 
             promptUI?.Hide();
+            if (debugLogs)
+            {
+                Debug.Log($"[StoryInteractionController] Calling Interact on {GetCurrentName()}");
+            }
+
             _current.Interact();
         }
 

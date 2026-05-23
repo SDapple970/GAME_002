@@ -1,5 +1,7 @@
 // Assets/GAME/Scripts/Story/Runtime/Data/StoryEffect.cs
 using Game.Story;
+using Game.Mission;
+using Game.Mission.Data;
 using Game.Systems.Persona;
 using UnityEngine;
 
@@ -15,7 +17,10 @@ namespace Game.Story.Data
         SetMainProgress,
         AdvanceMainProgress,
         MarkEventCompleted,
-        ClearEventCompleted
+        ClearEventCompleted,
+        StartMission,
+        CompleteMission,
+        CompleteMissionObjective
     }
 
     [System.Serializable]
@@ -27,6 +32,9 @@ namespace Game.Story.Data
         [SerializeField] private int intValue;
         [SerializeField] private PersonaStat personaStat;
         [SerializeField] private int xpAmount;
+        [SerializeField] private MissionDefinitionSO missionDefinition;
+        [SerializeField] private string missionId;
+        [SerializeField] private string objectiveId;
 
         public void Apply()
         {
@@ -79,6 +87,18 @@ namespace Game.Story.Data
                     if (!CanUseProgressEffect()) return;
                     StoryProgressManager.Instance.ClearEventCompleted(key);
                     return;
+                case StoryEffectType.StartMission:
+                    if (!CanUseMissionEffect()) return;
+                    MissionManager.Instance.StartMission(missionDefinition);
+                    return;
+                case StoryEffectType.CompleteMission:
+                    if (!CanUseMissionEffect()) return;
+                    MissionManager.Instance.CompleteMission(missionId);
+                    return;
+                case StoryEffectType.CompleteMissionObjective:
+                    if (!CanUseMissionEffect()) return;
+                    MissionManager.Instance.CompleteObjective(missionId, objectiveId);
+                    return;
                 default:
                     return;
             }
@@ -103,6 +123,14 @@ namespace Game.Story.Data
             if (StoryProgressManager.Instance != null) return true;
 
             Debug.LogWarning($"[StoryEffect] StoryProgressManager missing for type='{type}' key='{key}'.");
+            return false;
+        }
+
+        private bool CanUseMissionEffect()
+        {
+            if (MissionManager.Instance != null) return true;
+
+            Debug.LogWarning($"[StoryEffect] MissionManager missing for type='{type}' missionId='{missionId}' objectiveId='{objectiveId}'.");
             return false;
         }
     }

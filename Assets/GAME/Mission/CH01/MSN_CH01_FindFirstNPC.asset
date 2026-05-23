@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2ac62b3cbbd446249f2ff356bd80de35, type: 3}
+  m_Name: MSN_CH01_FindFirstNPC
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Mission.Data.MissionDefinitionSO
+  missionId: MSN_CH01_FindFirstNPC
+  title: 낯선 장소
+  description: 이곳이 어디인지 알아보자.
+  objectives:
+  - objectiveId: talk_first_npc
+    description: 주변의 사람에게 말을 걸어보자.
+    optional: 0
+  autoCompleteWhenAllObjectivesComplete: 1

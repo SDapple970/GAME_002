@@ -53,17 +53,32 @@ MonoBehaviour:
     nextNodeId: 
     effects:
     - type: 5
-      key: 
+      key:
       boolValue: 0
       intValue: 1
       personaStat: 0
       xpAmount: 0
+      missionDefinition: {fileID: 0}
+      missionId:
+      objectiveId:
     - type: 3
-      key: 
+      key:
       boolValue: 0
       intValue: 0
       personaStat: 0
       xpAmount: 3
+      missionDefinition: {fileID: 0}
+      missionId:
+      objectiveId:
+    - type: 11
+      key:
+      boolValue: 0
+      intValue: 0
+      personaStat: 0
+      xpAmount: 0
+      missionDefinition: {fileID: 0}
+      missionId: MSN_CH01_FindFirstNPC
+      objectiveId: talk_first_npc
     endEvent: 1
   - nodeId: refuse
     speakerName: NPC
@@ -78,9 +93,21 @@ MonoBehaviour:
     nextNodeId: 
     effects:
     - type: 5
-      key: 
+      key:
       boolValue: 0
       intValue: 1
       personaStat: 0
       xpAmount: 0
+      missionDefinition: {fileID: 0}
+      missionId:
+      objectiveId:
+    - type: 11
+      key:
+      boolValue: 0
+      intValue: 0
+      personaStat: 0
+      xpAmount: 0
+      missionDefinition: {fileID: 0}
+      missionId: MSN_CH01_FindFirstNPC
+      objectiveId: talk_first_npc
     endEvent: 1

@@ -41,9 +41,21 @@ MonoBehaviour:
     nextNodeId: 
     effects:
     - type: 5
-      key: 
+      key:
       boolValue: 0
       intValue: 0
       personaStat: 0
       xpAmount: 0
+      missionDefinition: {fileID: 0}
+      missionId:
+      objectiveId:
+    - type: 9
+      key:
+      boolValue: 0
+      intValue: 0
+      personaStat: 0
+      xpAmount: 0
+      missionDefinition: {fileID: 11400000, guid: e18f49ee172f432cbff7b03417e5bec5, type: 2}
+      missionId:
+      objectiveId:
     endEvent: 1
