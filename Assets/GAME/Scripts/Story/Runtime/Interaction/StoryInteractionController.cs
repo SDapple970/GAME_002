@@ -57,9 +57,9 @@ namespace Game.Story.Interaction
                 return;
             }
 
-            if (_current != null && _current.CanInteract)
+            if (_current != null && _current.CanShowPrompt())
             {
-                promptUI?.Show(_current.PromptText);
+                promptUI?.Show(_current.CurrentPromptText);
             }
             else
             {
@@ -78,9 +78,9 @@ namespace Game.Story.Interaction
 
             _current = interactable;
 
-            if (interactable.CanInteract)
+            if (interactable.CanShowPrompt())
             {
-                promptUI?.Show(interactable.PromptText);
+                promptUI?.Show(interactable.CurrentPromptText);
             }
         }
 
@@ -103,7 +103,7 @@ namespace Game.Story.Interaction
 
         public void RefreshCurrentTarget()
         {
-            if (_current != null && !_current.CanInteract)
+            if (_current != null && !_current.CanShowPrompt())
             {
                 promptUI?.Hide();
                 return;
@@ -111,7 +111,7 @@ namespace Game.Story.Interaction
 
             if (_current != null)
             {
-                promptUI?.Show(_current.PromptText);
+                promptUI?.Show(_current.CurrentPromptText);
             }
         }
 

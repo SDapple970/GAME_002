@@ -45,6 +45,7 @@ namespace Game.Story
         public string ConfirmationMessage => confirmationMessage;
         public int Priority => priority;
         public string PromptText => ResolvePromptText();
+        public string CurrentPromptText => AreInteractionConditionsMet() ? PromptText : ResolveLockedPromptText();
         public bool HidePromptWhenConditionsNotMet => hidePromptWhenConditionsNotMet;
         public string LockedPromptText => lockedPromptText;
         public bool IsPlayerInside => _playerInside;
@@ -68,10 +69,7 @@ namespace Game.Story
                 if (IsCompletedEventBlocked()) return false;
                 if (!AreInteractionConditionsMet()) return false;
 
-                if (!rememberUsedWithFlag) return true;
-                if (StoryFlagManager.Instance == null) return false;
-
-                return string.IsNullOrEmpty(usedFlagKey) || !StoryFlagManager.Instance.GetBool(usedFlagKey);
+                return !IsUsedWithFlagBlocked();
             }
         }
 
@@ -128,6 +126,26 @@ namespace Game.Story
         public string GetPromptText()
         {
             return PromptText;
+        }
+
+        public bool CanShowPrompt()
+        {
+            if (!_playerInside) return false;
+            if (eventDefinition == null) return false;
+
+            ResolveRunner();
+            if (runner == null) return false;
+            if (runner.IsRunning) return false;
+
+            if (requireExplorationState && GameStateMachine.Instance != null && GameStateMachine.Instance.Current != GameState.Exploration)
+            {
+                return false;
+            }
+
+            if (IsCompletedEventBlocked()) return false;
+            if (IsUsedWithFlagBlocked()) return false;
+
+            return AreInteractionConditionsMet() || !hidePromptWhenConditionsNotMet;
         }
 
         public void MarkUsedIfNeeded()
@@ -191,15 +209,7 @@ namespace Game.Story
             if (IsCompletedEventBlocked()) return false;
             if (!AreInteractionConditionsMet()) return false;
 
-            if (!rememberUsedWithFlag) return true;
-
-            if (StoryFlagManager.Instance == null)
-            {
-                Debug.LogWarning($"[StoryInteractable2D] StoryFlagManager missing for used flag key='{usedFlagKey}'.");
-                return false;
-            }
-
-            return string.IsNullOrEmpty(usedFlagKey) || !StoryFlagManager.Instance.GetBool(usedFlagKey);
+            return !IsUsedWithFlagBlocked();
         }
 
         private bool AreInteractionConditionsMet()
@@ -217,6 +227,14 @@ namespace Game.Story
             return true;
         }
 
+        private bool IsUsedWithFlagBlocked()
+        {
+            if (!rememberUsedWithFlag) return false;
+            if (StoryFlagManager.Instance == null) return true;
+
+            return !string.IsNullOrEmpty(usedFlagKey) && StoryFlagManager.Instance.GetBool(usedFlagKey);
+        }
+
         private bool IsCompletedEventBlocked()
         {
             if (!blockIfEventCompleted || eventDefinition == null || StoryProgressManager.Instance == null)
@@ -225,6 +243,11 @@ namespace Game.Story
             }
 
             return StoryProgressManager.Instance.IsEventCompleted(eventDefinition.EventId);
+        }
+
+        private string ResolveLockedPromptText()
+        {
+            return string.IsNullOrEmpty(lockedPromptText) ? "아직 사용할 수 없다." : lockedPromptText;
         }
 
         private string ResolvePromptText()
