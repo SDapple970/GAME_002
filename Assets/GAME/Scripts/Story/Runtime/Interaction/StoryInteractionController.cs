@@ -1,7 +1,7 @@
 // Assets/GAME/Scripts/Story/Runtime/Interaction/StoryInteractionController.cs
-using System.Collections.Generic;
 using Game.Core;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Game.Story.Interaction
 {
@@ -10,15 +10,12 @@ namespace Game.Story.Interaction
         public static StoryInteractionController Instance { get; private set; }
 
         [SerializeField] private StoryInteractionPromptUI promptUI;
-        [SerializeField] private StoryInteractionConfirmUI confirmUI;
         [SerializeField] private StoryEventRunner runner;
         [SerializeField] private KeyCode fallbackInteractKey = KeyCode.E;
-        [SerializeField] private bool useFallbackKeyboardInput = true;
-        [SerializeField] private bool autoCreateUIIfMissing = true;
+        [FormerlySerializedAs("useFallbackKeyboardInput")]
+        [SerializeField] private bool useLegacyFallbackKey = true;
 
-        private readonly List<StoryInteractable2D> _nearby = new();
         private StoryInteractable2D _current;
-        private bool _confirmOpen;
 
         private void Awake()
         {
@@ -30,151 +27,103 @@ namespace Game.Story.Interaction
 
             Instance = this;
             ResolveRunner();
-            ResolveUI();
+            ResolvePromptUI();
+            promptUI?.Hide();
+        }
+
+        private void OnDisable()
+        {
+            if (Instance == this)
+            {
+                Instance = null;
+            }
+
+            promptUI?.Hide();
         }
 
         private void Update()
         {
-            if (GameStateMachine.Instance != null && GameStateMachine.Instance.Current != GameState.Exploration)
+            ResolveRunner();
+
+            if (runner != null && runner.IsRunning)
             {
-                if (!_confirmOpen)
-                {
-                    promptUI?.Hide();
-                }
+                promptUI?.Hide();
                 return;
             }
 
-            if (!_confirmOpen)
+            if (GameStateMachine.Instance != null && GameStateMachine.Instance.Current != GameState.Exploration)
             {
-                RefreshCurrentTarget();
+                promptUI?.Hide();
+                return;
             }
 
-            if (useFallbackKeyboardInput && !_confirmOpen && Input.GetKeyDown(fallbackInteractKey))
+            if (_current != null && _current.CanInteract)
             {
-                TryInteractCurrent();
+                promptUI?.Show(_current.PromptText);
+            }
+            else
+            {
+                promptUI?.Hide();
+            }
+
+            if (useLegacyFallbackKey && Input.GetKeyDown(fallbackInteractKey))
+            {
+                TryInteract();
             }
         }
 
         public void Register(StoryInteractable2D interactable)
         {
-            if (interactable == null || _nearby.Contains(interactable)) return;
+            if (interactable == null) return;
 
-            _nearby.Add(interactable);
-            RefreshCurrentTarget();
+            _current = interactable;
+
+            if (interactable.CanInteract)
+            {
+                promptUI?.Show(interactable.PromptText);
+            }
         }
 
         public void Unregister(StoryInteractable2D interactable)
         {
-            if (interactable == null) return;
+            if (interactable == null || _current != interactable) return;
 
-            _nearby.Remove(interactable);
-            if (_current == interactable)
-            {
-                _current = null;
-            }
-
-            RefreshCurrentTarget();
-        }
-
-        public void RequestInteract(StoryInteractable2D interactable)
-        {
-            if (interactable == null || !interactable.CanInteract()) return;
-
-            _current = interactable;
+            _current = null;
             promptUI?.Hide();
-
-            if (interactable.AskConfirmation)
-            {
-                _confirmOpen = true;
-                if (GameStateMachine.Instance != null)
-                {
-                    GameStateMachine.Instance.SetState(GameState.UIOnly);
-                }
-
-                if (confirmUI != null)
-                {
-                    confirmUI.Show(interactable.ConfirmationMessage, ConfirmCurrent, CancelConfirm);
-                }
-                else
-                {
-                    Debug.LogWarning("[StoryInteractionController] Confirm UI is missing. Starting event without confirmation UI.");
-                    ConfirmCurrent();
-                }
-            }
-            else
-            {
-                interactable.StartLinkedEvent();
-                promptUI?.Hide();
-            }
         }
 
-        public void ConfirmCurrent()
+        public void TryInteract()
         {
-            confirmUI?.Hide();
-            _confirmOpen = false;
-
-            StoryInteractable2D target = _current;
-            if (target != null)
-            {
-                target.StartLinkedEvent();
-            }
+            if (_current == null) return;
+            if (!_current.CanInteract) return;
 
             promptUI?.Hide();
-            RefreshCurrentTarget();
-        }
-
-        public void CancelConfirm()
-        {
-            confirmUI?.Hide();
-            _confirmOpen = false;
-
-            if (GameStateMachine.Instance != null && GameStateMachine.Instance.Current == GameState.UIOnly)
-            {
-                GameStateMachine.Instance.SetState(GameState.Exploration);
-            }
-
-            RefreshCurrentTarget();
+            _current.Interact();
         }
 
         public void RefreshCurrentTarget()
         {
-            StoryInteractable2D best = null;
-            float bestDistance = float.MaxValue;
-
-            for (int i = _nearby.Count - 1; i >= 0; i--)
-            {
-                StoryInteractable2D candidate = _nearby[i];
-                if (candidate == null || !candidate.isActiveAndEnabled || !candidate.IsPlayerInside)
-                {
-                    _nearby.RemoveAt(i);
-                    continue;
-                }
-
-                if (!candidate.CanInteract()) continue;
-
-                float distance = Vector3.SqrMagnitude(candidate.transform.position - transform.position);
-                if (best == null || candidate.Priority > best.Priority || (candidate.Priority == best.Priority && distance < bestDistance))
-                {
-                    best = candidate;
-                    bestDistance = distance;
-                }
-            }
-
-            _current = best;
-            if (_current != null)
-            {
-                promptUI?.Show(_current.GetPromptText());
-            }
-            else
+            if (_current != null && !_current.CanInteract)
             {
                 promptUI?.Hide();
+                return;
+            }
+
+            if (_current != null)
+            {
+                promptUI?.Show(_current.PromptText);
             }
         }
 
         public void TryInteractCurrent()
         {
-            if (_current == null) return;
-            RequestInteract(_current);
+            TryInteract();
+        }
+
+        public void RequestInteract(StoryInteractable2D interactable)
+        {
+            Register(interactable);
+            TryInteract();
         }
 
         private void ResolveRunner()
@@ -188,37 +137,15 @@ namespace Game.Story.Interaction
 #endif
         }
 
-        private void ResolveUI()
+        private void ResolvePromptUI()
         {
-            if (promptUI == null)
-            {
+            if (promptUI != null) return;
+
 #if UNITY_2023_1_OR_NEWER
-                promptUI = FindFirstObjectByType<StoryInteractionPromptUI>();
+            promptUI = FindFirstObjectByType<StoryInteractionPromptUI>();
 #else
-                promptUI = FindObjectOfType<StoryInteractionPromptUI>();
+            promptUI = FindObjectOfType<StoryInteractionPromptUI>();
 #endif
-            }
-
-            if (confirmUI == null)
-            {
-#if UNITY_2023_1_OR_NEWER
-                confirmUI = FindFirstObjectByType<StoryInteractionConfirmUI>();
-#else
-                confirmUI = FindObjectOfType<StoryInteractionConfirmUI>();
-#endif
-            }
-
-            if (!autoCreateUIIfMissing) return;
-
-            if (promptUI == null)
-            {
-                promptUI = StoryInteractionAutoUIBootstrapper.CreatePromptUI();
-            }
-
-            if (confirmUI == null)
-            {
-                confirmUI = StoryInteractionAutoUIBootstrapper.CreateConfirmUI();
-            }
         }
     }
 }
