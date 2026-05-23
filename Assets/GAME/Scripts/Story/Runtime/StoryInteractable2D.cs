@@ -33,6 +33,7 @@ namespace Game.Story
         [SerializeField] private bool rememberUsedWithFlag = false;
         [SerializeField] private string usedFlagKey;
         [SerializeField] private int priority = 0;
+        [SerializeField] private bool debugLogs = false;
 
         private Collider2D _triggerCollider;
         private bool _playerInside;
@@ -54,25 +55,7 @@ namespace Game.Story
 
         public bool CanInteract
         {
-            get
-            {
-                if (!_playerInside) return false;
-                if (eventDefinition == null) return false;
-
-                ResolveRunner();
-                if (runner == null) return false;
-                if (runner.IsRunning) return false;
-
-                if (requireExplorationState && GameStateMachine.Instance != null && GameStateMachine.Instance.Current != GameState.Exploration)
-                {
-                    return false;
-                }
-
-                if (IsCompletedEventBlocked()) return false;
-                if (!AreInteractionConditionsMet()) return false;
-
-                return !IsUsedWithFlagBlocked();
-            }
+            get { return GetCannotInteractReason() == "OK"; }
         }
 
         private void Awake()
@@ -121,7 +104,11 @@ namespace Game.Story
 
         public void Interact()
         {
-            if (!CanInteract) return;
+            if (!CanInteract)
+            {
+                LogDebug($"[StoryInteractable2D] Interact blocked. current={name} reason='{GetCannotInteractReason()}'");
+                return;
+            }
 
             StartLinkedEvent();
         }
@@ -129,6 +116,27 @@ namespace Game.Story
         public string GetPromptText()
         {
             return PromptText;
+        }
+
+        public string GetCannotInteractReason()
+        {
+            if (!_playerInside) return "Player is not inside trigger";
+            if (eventDefinition == null) return "Event definition is missing";
+
+            ResolveRunner();
+            if (runner == null) return "Runner is missing";
+            if (runner.IsRunning) return "Runner is already running";
+
+            if (requireExplorationState && GameStateMachine.Instance != null && GameStateMachine.Instance.Current != GameState.Exploration)
+            {
+                return $"GameState is not Exploration: {GameStateMachine.Instance.Current}";
+            }
+
+            if (IsCompletedEventBlocked()) return $"Event is completed and blocked: {eventDefinition.EventId}";
+            if (!AreInteractionConditionsMet()) return "Interaction conditions are not met";
+            if (IsUsedWithFlagBlocked()) return $"Used flag is already set: {usedFlagKey}";
+
+            return "OK";
         }
 
         public bool CanShowPrompt()
@@ -304,6 +312,14 @@ namespace Game.Story
             if (speakerAnchor != null) return;
 
             speakerAnchor = GetComponentInChildren<StorySpeakerAnchor>();
+        }
+
+        private void LogDebug(string message)
+        {
+            if (debugLogs)
+            {
+                Debug.Log(message, this);
+            }
         }
     }
 }

@@ -1,0 +1,86 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7c7d016d594474e439b14d03874d8405, type: 3}
+  m_Name: EVT_CH01_Intro_Auto
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Story.Data.StoryEventDefinitionSO
+  eventId: EVT_Test_FirstChoice Start Node Id start
+  startNodeId: start
+  nodes:
+  - nodeId: start
+    speakerName: NPC
+    portrait: {fileID: 0}
+    body: "\uC5EC\uAE30 \u3148\u3134 \uC704\uD5D8\uD55C \uACF3\uC784. \uB4E4\uC5B4\uAC08\uAC70\uC784?"
+    choices:
+    - text: "\uB4E4\uC5B4\uAC04\uB2E4"
+      nextNodeId: enter
+      conditions: []
+      effects:
+      - type: 0
+        key: accepted_danger
+        boolValue: 1
+        intValue: 0
+        personaStat: 0
+        xpAmount: 0
+      hideIfConditionNotMet: 1
+      disabledReason: 
+    - text: "\uC544\uC9C1 \uC900\uBE44 \uC548\uD588\uB294\uB370\uC6A9"
+      nextNodeId: leave
+      conditions: []
+      effects: []
+      hideIfConditionNotMet: 0
+      disabledReason: 
+    useTimedChoices: 0
+    choiceTimeLimitSeconds: 5
+    timeoutChoiceIndex: 0
+    timeoutNodeId: 
+    hideBubbleAfterChoice: 0
+    nextNodeId: 
+    effects:
+    - type: 6
+      key: 
+      boolValue: 0
+      intValue: 1
+      personaStat: 0
+      xpAmount: 5
+    endEvent: 0
+  - nodeId: enter
+    speakerName: NPC
+    portrait: {fileID: 0}
+    body: "\u3147\u3147. \uC6A9\uAE30\uB294 \uC778\uC815\uD568"
+    choices: []
+    useTimedChoices: 0
+    choiceTimeLimitSeconds: 5
+    timeoutChoiceIndex: 0
+    timeoutNodeId: 
+    hideBubbleAfterChoice: 0
+    nextNodeId: 
+    effects:
+    - type: 3
+      key: Courage
+      boolValue: 0
+      intValue: 0
+      personaStat: 0
+      xpAmount: 5
+    endEvent: 1
+  - nodeId: leave
+    speakerName: NPC
+    portrait: {fileID: 0}
+    body: "\uD604\uBA85\uD55C \uD310\uB2E8 \uC77C\uC9C0\uB3C4..?"
+    choices: []
+    useTimedChoices: 0
+    choiceTimeLimitSeconds: 5
+    timeoutChoiceIndex: 0
+    timeoutNodeId: 
+    hideBubbleAfterChoice: 0
+    nextNodeId: 
+    effects: []
+    endEvent: 1

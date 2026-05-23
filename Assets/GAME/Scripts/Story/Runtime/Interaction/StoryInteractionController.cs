@@ -14,6 +14,7 @@ namespace Game.Story.Interaction
         [SerializeField] private KeyCode fallbackInteractKey = KeyCode.E;
         [FormerlySerializedAs("useFallbackKeyboardInput")]
         [SerializeField] private bool useLegacyFallbackKey = true;
+        [SerializeField] private bool debugLogs = false;
 
         private StoryInteractable2D _current;
 
@@ -68,6 +69,11 @@ namespace Game.Story.Interaction
 
             if (useLegacyFallbackKey && Input.GetKeyDown(fallbackInteractKey))
             {
+                if (debugLogs)
+                {
+                    Debug.Log($"[StoryInteractionController] E pressed. current={GetCurrentName()}");
+                }
+
                 TryInteract();
             }
         }
@@ -94,8 +100,35 @@ namespace Game.Story.Interaction
 
         public void TryInteract()
         {
-            if (_current == null) return;
-            if (!_current.CanInteract) return;
+            if (_current == null)
+            {
+                if (debugLogs)
+                {
+                    Debug.Log("[StoryInteractionController] TryInteract current null.");
+                }
+
+                return;
+            }
+
+            bool canShowPrompt = _current.CanShowPrompt();
+            bool canInteract = _current.CanInteract;
+            if (debugLogs)
+            {
+                Debug.Log(
+                    $"[StoryInteractionController] TryInteract current={GetCurrentName()} " +
+                    $"canShowPrompt={canShowPrompt} canInteract={canInteract} " +
+                    $"prompt='{_current.CurrentPromptText}' reason='{_current.GetCannotInteractReason()}'");
+            }
+
+            if (!canInteract)
+            {
+                if (debugLogs)
+                {
+                    Debug.Log($"[StoryInteractionController] TryInteract blocked by CanInteract=false. current={GetCurrentName()}");
+                }
+
+                return;
+            }
 
             promptUI?.Hide();
             _current.Interact();
@@ -146,6 +179,11 @@ namespace Game.Story.Interaction
 #else
             promptUI = FindObjectOfType<StoryInteractionPromptUI>();
 #endif
+        }
+
+        private string GetCurrentName()
+        {
+            return _current != null ? _current.name : "null";
         }
     }
 }
