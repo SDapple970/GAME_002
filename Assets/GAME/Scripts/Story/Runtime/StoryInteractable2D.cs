@@ -1,5 +1,6 @@
 // Assets/GAME/Scripts/Story/Runtime/StoryInteractable2D.cs
 using System;
+using System.Collections.Generic;
 using Game.Core;
 using Game.Story.Data;
 using Game.Story.Interaction;
@@ -12,6 +13,9 @@ namespace Game.Story
     {
         [SerializeField] private StoryEventRunner runner;
         [SerializeField] private StoryEventDefinitionSO eventDefinition;
+        [SerializeField] private List<StoryCondition> interactionConditions = new();
+        [SerializeField] private bool hidePromptWhenConditionsNotMet = true;
+        [SerializeField] private string lockedPromptText = "아직 진행할 수 없습니다.";
         [SerializeField] private string playerTag = "Player";
         [SerializeField] private bool requireExplorationState = true;
         [SerializeField] private string promptText = "E: 대화";
@@ -41,6 +45,8 @@ namespace Game.Story
         public string ConfirmationMessage => confirmationMessage;
         public int Priority => priority;
         public string PromptText => ResolvePromptText();
+        public bool HidePromptWhenConditionsNotMet => hidePromptWhenConditionsNotMet;
+        public string LockedPromptText => lockedPromptText;
         public bool IsPlayerInside => _playerInside;
 
         public bool CanInteract
@@ -60,6 +66,7 @@ namespace Game.Story
                 }
 
                 if (IsCompletedEventBlocked()) return false;
+                if (!AreInteractionConditionsMet()) return false;
 
                 if (!rememberUsedWithFlag) return true;
                 if (StoryFlagManager.Instance == null) return false;
@@ -182,6 +189,7 @@ namespace Game.Story
             }
 
             if (IsCompletedEventBlocked()) return false;
+            if (!AreInteractionConditionsMet()) return false;
 
             if (!rememberUsedWithFlag) return true;
 
@@ -192,6 +200,21 @@ namespace Game.Story
             }
 
             return string.IsNullOrEmpty(usedFlagKey) || !StoryFlagManager.Instance.GetBool(usedFlagKey);
+        }
+
+        private bool AreInteractionConditionsMet()
+        {
+            if (interactionConditions == null || interactionConditions.Count == 0) return true;
+
+            foreach (StoryCondition condition in interactionConditions)
+            {
+                if (condition != null && !condition.IsMet())
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private bool IsCompletedEventBlocked()

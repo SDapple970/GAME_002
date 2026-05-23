@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7c7d016d594474e439b14d03874d8405, type: 3}
+  m_Name: EVT_Story_A_Start
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Story.Data.StoryEventDefinitionSO
+  eventId: EVT_Story_A_Start
+  startNodeId: start
+  nodes:
+  - nodeId: enter
+    speakerName: NPC
+    portrait: {fileID: 0}
+    body: "\uC2A4\uD1A0\uB9AC 1"
+    choices: []
+    nextNodeId: 
+    effects:
+    - type: 6
+      key: Courage
+      boolValue: 0
+      intValue: 1
+      personaStat: 0
+      xpAmount: 5
+    endEvent: 1
