@@ -20,6 +20,7 @@ namespace Game.Story
         [SerializeField] private bool requireExplorationState = true;
         [SerializeField] private string promptText = "E: 대화";
         [SerializeField] private StoryInteractionController interactionController;
+        [SerializeField] private StorySpeakerAnchor speakerAnchor;
 
         [Header("Optional Legacy Settings")]
         [SerializeField] private StoryInteractionKind interactionKind = StoryInteractionKind.Use;
@@ -49,6 +50,7 @@ namespace Game.Story
         public bool HidePromptWhenConditionsNotMet => hidePromptWhenConditionsNotMet;
         public string LockedPromptText => lockedPromptText;
         public bool IsPlayerInside => _playerInside;
+        public StorySpeakerAnchor SpeakerAnchor => speakerAnchor;
 
         public bool CanInteract
         {
@@ -83,6 +85,7 @@ namespace Game.Story
 
             ResolveRunner();
             ResolveInteractionController();
+            ResolveSpeakerAnchor();
         }
 
         private void OnDisable()
@@ -171,7 +174,8 @@ namespace Game.Story
         {
             if (!CanStartLinkedEvent()) return;
 
-            runner.StartEvent(eventDefinition);
+            ResolveSpeakerAnchor();
+            runner.StartEvent(eventDefinition, speakerAnchor);
             MarkUsedIfNeeded();
 
             if (!disableAfterUse) return;
@@ -293,6 +297,13 @@ namespace Game.Story
 #else
             runner = FindObjectOfType<StoryEventRunner>();
 #endif
+        }
+
+        private void ResolveSpeakerAnchor()
+        {
+            if (speakerAnchor != null) return;
+
+            speakerAnchor = GetComponentInChildren<StorySpeakerAnchor>();
         }
     }
 }

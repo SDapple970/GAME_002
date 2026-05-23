@@ -16,9 +16,9 @@ MonoBehaviour:
   startNodeId: start
   nodes:
   - nodeId: enter
-    speakerName: NPC
+    speakerName: NPC_A
     portrait: {fileID: 0}
-    body: "\uC2A4\uD1A0\uB9AC 1"
+    body: "\uC2A4\uD1A0\uB9AC A"
     choices: []
     nextNodeId: 
     effects:

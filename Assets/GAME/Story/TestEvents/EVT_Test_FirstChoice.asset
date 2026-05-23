@@ -39,7 +39,13 @@ MonoBehaviour:
       hideIfConditionNotMet: 0
       disabledReason: 
     nextNodeId: 
-    effects: []
+    effects:
+    - type: 6
+      key: 
+      boolValue: 0
+      intValue: 1
+      personaStat: 0
+      xpAmount: 0
     endEvent: 0
   - nodeId: enter
     speakerName: NPC

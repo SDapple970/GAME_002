@@ -2,6 +2,7 @@
 using Game.Core;
 using Game.Story.Data;
 using Game.Story.UI;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Game.Story
@@ -9,12 +10,14 @@ namespace Game.Story
     public sealed class StoryEventRunner : MonoBehaviour
     {
         [SerializeField] private DialoguePanel dialoguePanel;
+        [SerializeField] private StoryDialogueHUD storyDialogueHUD;
         [SerializeField] private GameState stateWhileRunning = GameState.UIOnly;
         [SerializeField] private bool restoreExplorationOnEnd = true;
         [SerializeField] private bool markCurrentEventCompletedOnEnd = true;
 
         private StoryEventDefinitionSO _currentEvent;
         private StoryNode _currentNode;
+        private StorySpeakerAnchor _currentSpeakerAnchor;
         private bool _running;
         private bool _waitingForChoice;
 
@@ -37,7 +40,22 @@ namespace Game.Story
             }
         }
 
+        private void Update()
+        {
+            if (!_running || _waitingForChoice || storyDialogueHUD == null) return;
+
+            if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetMouseButtonDown(0))
+            {
+                Advance();
+            }
+        }
+
         public void StartEvent(StoryEventDefinitionSO eventDefinition)
+        {
+            StartEvent(eventDefinition, null);
+        }
+
+        public void StartEvent(StoryEventDefinitionSO eventDefinition, StorySpeakerAnchor speakerAnchor)
         {
             if (_running)
             {
@@ -52,6 +70,7 @@ namespace Game.Story
             }
 
             _currentEvent = eventDefinition;
+            _currentSpeakerAnchor = speakerAnchor;
             _running = true;
             _waitingForChoice = false;
 
@@ -64,9 +83,16 @@ namespace Game.Story
             {
                 dialoguePanel.OnNextRequested -= Advance;
                 dialoguePanel.OnNextRequested += Advance;
-                dialoguePanel.Show();
+                if (storyDialogueHUD == null)
+                {
+                    dialoguePanel.Show();
+                }
+                else
+                {
+                    dialoguePanel.Hide();
+                }
             }
-            else
+            else if (storyDialogueHUD == null)
             {
                 Debug.LogWarning($"[StoryEventRunner] DialoguePanel missing for event='{eventDefinition.EventId}'.");
             }
@@ -127,6 +153,7 @@ namespace Game.Story
 
             choice.ApplyEffects();
             dialoguePanel?.ClearChoices();
+            storyDialogueHUD?.HideChoices();
             _waitingForChoice = false;
 
             if (string.IsNullOrEmpty(choice.NextNodeId))
@@ -153,8 +180,10 @@ namespace Game.Story
             MarkCurrentEventCompletedIfNeeded();
 
             dialoguePanel?.Hide();
+            storyDialogueHUD?.HideAll();
             _currentEvent = null;
             _currentNode = null;
+            _currentSpeakerAnchor = null;
             _waitingForChoice = false;
             _running = false;
 
@@ -195,34 +224,119 @@ namespace Game.Story
 
             ApplyNodeEffects(node);
 
-            if (dialoguePanel != null)
+            if (dialoguePanel != null && storyDialogueHUD == null)
             {
                 dialoguePanel.SetLine(node.SpeakerName, node.Body, node.Portrait);
                 dialoguePanel.ClearChoices();
             }
-            else
+            else if (storyDialogueHUD == null)
             {
                 Debug.LogWarning($"[StoryEventRunner] DialoguePanel missing while showing event='{_currentEvent?.EventId}' node='{node.NodeId}'.");
+            }
+
+            if (storyDialogueHUD != null)
+            {
+                storyDialogueHUD.ShowLine(_currentSpeakerAnchor, node);
             }
 
             bool hasChoices = node.Choices != null && node.Choices.Count > 0;
             if (hasChoices)
             {
-                _waitingForChoice = true;
-                dialoguePanel?.SetNextVisible(false);
-                dialoguePanel?.BuildChoices(node.Choices, SelectChoice);
-
-                if (dialoguePanel != null && dialoguePanel.InteractableChoiceCount == 0)
+                if (storyDialogueHUD != null)
                 {
-                    Debug.LogWarning($"[StoryEventRunner] No selectable choices. Falling back to Next. event='{_currentEvent?.EventId}' node='{node.NodeId}'.");
-                    _waitingForChoice = false;
-                    dialoguePanel.SetNextVisible(true);
+                    ShowHudChoices(node);
+                }
+                else
+                {
+                    ShowDialoguePanelChoices(node);
                 }
             }
             else
             {
+                storyDialogueHUD?.HideChoices();
                 dialoguePanel?.SetNextVisible(true);
             }
+        }
+
+        private void ShowDialoguePanelChoices(StoryNode node)
+        {
+            _waitingForChoice = true;
+            dialoguePanel?.SetNextVisible(false);
+            dialoguePanel?.BuildChoices(node.Choices, SelectChoice);
+
+            if (dialoguePanel != null && dialoguePanel.InteractableChoiceCount == 0)
+            {
+                Debug.LogWarning($"[StoryEventRunner] No selectable choices. Falling back to Next. event='{_currentEvent?.EventId}' node='{node.NodeId}'.");
+                _waitingForChoice = false;
+                dialoguePanel.SetNextVisible(true);
+            }
+        }
+
+        private void ShowHudChoices(StoryNode node)
+        {
+            List<StoryChoice> availableChoices = GetAvailableChoices(node.Choices, 2);
+            if (availableChoices.Count == 0)
+            {
+                Debug.LogWarning($"[StoryEventRunner] No selectable choices for HUD. Falling back to Next. event='{_currentEvent?.EventId}' node='{node.NodeId}'.");
+                _waitingForChoice = false;
+                storyDialogueHUD?.HideChoices();
+                dialoguePanel?.SetNextVisible(true);
+                return;
+            }
+
+            _waitingForChoice = true;
+            dialoguePanel?.SetNextVisible(false);
+            dialoguePanel?.ClearChoices();
+
+            storyDialogueHUD.ShowTimedChoices(node, availableChoices, SelectChoice, HandleTimedChoiceTimeout);
+        }
+
+        private void HandleTimedChoiceTimeout()
+        {
+            if (!_running || _currentNode == null) return;
+
+            StoryNode timeoutSource = _currentNode;
+            _waitingForChoice = false;
+            storyDialogueHUD?.HideChoices();
+
+            if (!string.IsNullOrEmpty(timeoutSource.TimeoutNodeId))
+            {
+                StoryNode timeoutNode = _currentEvent?.GetNode(timeoutSource.TimeoutNodeId);
+                if (timeoutNode != null)
+                {
+                    ShowNode(timeoutNode);
+                    return;
+                }
+
+                Debug.LogWarning($"[StoryEventRunner] Timeout node not found. event='{_currentEvent?.EventId}' node='{timeoutSource.NodeId}' timeout='{timeoutSource.TimeoutNodeId}'.");
+            }
+
+            List<StoryChoice> availableChoices = GetAvailableChoices(timeoutSource.Choices, 2);
+            int choiceIndex = timeoutSource.TimeoutChoiceIndex;
+            if (choiceIndex >= 0 && choiceIndex < availableChoices.Count)
+            {
+                SelectChoice(availableChoices[choiceIndex]);
+                return;
+            }
+
+            EndEvent();
+        }
+
+        private static List<StoryChoice> GetAvailableChoices(IReadOnlyList<StoryChoice> choices, int maxCount)
+        {
+            List<StoryChoice> availableChoices = new();
+            if (choices == null) return availableChoices;
+
+            for (int i = 0; i < choices.Count && availableChoices.Count < maxCount; i++)
+            {
+                StoryChoice choice = choices[i];
+                if (choice != null && choice.AreConditionsMet())
+                {
+                    availableChoices.Add(choice);
+                }
+            }
+
+            return availableChoices;
         }
 
         private void ApplyNodeEffects(StoryNode node)
