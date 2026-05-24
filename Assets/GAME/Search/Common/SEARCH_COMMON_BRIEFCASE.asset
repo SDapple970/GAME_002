@@ -20,6 +20,11 @@ MonoBehaviour:
   category: 0
   promptText: E: 열어보기
   searchOnce: 1
+  requireConfirmation: 1
+  confirmationMessage: 열어볼까?
+  confirmChoiceText: 열어본다
+  cancelChoiceText: 그만둔다
+  resultMessageSeconds: 2.5
   outcomes:
   - weight: 5
     resultMessage: 중요 서류가 들어있는 가방이었습니다!

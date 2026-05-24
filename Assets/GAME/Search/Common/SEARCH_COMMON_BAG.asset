@@ -20,6 +20,11 @@ MonoBehaviour:
   category: 0
   promptText: E: 조사
   searchOnce: 1
+  requireConfirmation: 1
+  confirmationMessage: 조사해볼까?
+  confirmChoiceText: 조사한다
+  cancelChoiceText: 그만둔다
+  resultMessageSeconds: 2.5
   outcomes:
   - weight: 75
     resultMessage: 무언가가 있었습니다!

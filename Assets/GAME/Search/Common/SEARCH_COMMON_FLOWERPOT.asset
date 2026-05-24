@@ -19,6 +19,11 @@ MonoBehaviour:
   category: 2
   promptText: E: 살펴보기
   searchOnce: 1
+  requireConfirmation: 1
+  confirmationMessage: 조사해볼까?
+  confirmChoiceText: 조사한다
+  cancelChoiceText: 그만둔다
+  resultMessageSeconds: 2.5
   outcomes:
   - weight: 50
     resultMessage: 이 화분은 마음을 안정시킵니다

@@ -1,5 +1,6 @@
 using Game.Core;
 using Game.Search.Data;
+using Game.Search.UI;
 using Game.Story;
 using Game.Story.Interaction;
 using UnityEngine;
@@ -18,10 +19,13 @@ namespace Game.Search
         [SerializeField] private bool searchOnceOverride = false;
         [SerializeField] private bool disableAfterSearch = false;
         [SerializeField] private string usedFlagKey;
+        [SerializeField] private SearchObjectAnchor objectAnchor;
+        [SerializeField] private SearchDecisionHUD decisionHUD;
 
         private Collider2D _triggerCollider;
         private bool _playerInside;
         private bool _searchedInMemory;
+        private bool _decisionOpen;
 
         public SearchableObjectDefinitionSO Definition => definition;
         public bool IsPlayerInside => _playerInside;
@@ -36,11 +40,19 @@ namespace Game.Search
 
             ResolveRunner();
             ResolvePromptUI();
+            ResolveObjectAnchor();
+            ResolveDecisionHUD();
         }
 
         private void OnDisable()
         {
             _playerInside = false;
+            if (_decisionOpen)
+            {
+                decisionHUD?.Hide();
+            }
+
+            _decisionOpen = false;
             promptUI?.Hide();
         }
 
@@ -57,7 +69,7 @@ namespace Game.Search
                 promptUI?.Hide();
             }
 
-            if (Input.GetKeyDown(fallbackInteractKey))
+            if (!_decisionOpen && Input.GetKeyDown(fallbackInteractKey))
             {
                 Search();
             }
@@ -79,7 +91,9 @@ namespace Game.Search
             if (!other.CompareTag(playerTag)) return;
 
             _playerInside = false;
+            _decisionOpen = false;
             promptUI?.Hide();
+            decisionHUD?.Hide();
         }
 
         public void Search()
@@ -91,17 +105,24 @@ namespace Game.Search
             }
 
             ResolveRunner();
-            runner.Execute(definition);
-            MarkSearchedIfNeeded();
+            ResolveObjectAnchor();
+            ResolveDecisionHUD();
 
-            if (!disableAfterSearch) return;
-
-            _playerInside = false;
-            promptUI?.Hide();
-            if (_triggerCollider != null)
+            if (definition.RequireConfirmation && decisionHUD != null)
             {
-                _triggerCollider.enabled = false;
+                _decisionOpen = true;
+                promptUI?.Hide();
+                decisionHUD.Show(
+                    objectAnchor,
+                    definition.ConfirmationMessage,
+                    definition.ConfirmChoiceText,
+                    definition.CancelChoiceText,
+                    ExecuteSearchConfirmed,
+                    CancelSearch);
+                return;
             }
+
+            ExecuteSearchConfirmed();
         }
 
         public bool CanSearch()
@@ -113,6 +134,7 @@ namespace Game.Search
         {
             if (!_playerInside) return "Player is not inside trigger";
             if (definition == null) return "Definition is missing";
+            if (_decisionOpen) return "Decision UI is already open";
 
             ResolveRunner();
             if (runner == null) return "SearchResultRunner is missing";
@@ -130,6 +152,7 @@ namespace Game.Search
         public bool CanShowPrompt()
         {
             if (!_playerInside) return false;
+            if (_decisionOpen) return false;
             if (definition == null) return false;
 
             ResolveRunner();
@@ -141,6 +164,40 @@ namespace Game.Search
             }
 
             return !IsAlreadySearched();
+        }
+
+        private void ExecuteSearchConfirmed()
+        {
+            _decisionOpen = false;
+
+            if (!CanSearch())
+            {
+                Debug.Log($"[SearchableInteractable2D] Confirmed search blocked. object='{definition?.ObjectId}' reason='{GetCannotSearchReason()}'.", this);
+                return;
+            }
+
+            ResolveRunner();
+            ResolveObjectAnchor();
+            runner.Execute(definition, objectAnchor);
+            MarkSearchedIfNeeded();
+
+            if (!disableAfterSearch) return;
+
+            _playerInside = false;
+            promptUI?.Hide();
+            if (_triggerCollider != null)
+            {
+                _triggerCollider.enabled = false;
+            }
+        }
+
+        private void CancelSearch()
+        {
+            _decisionOpen = false;
+            if (_playerInside && CanShowPrompt())
+            {
+                promptUI?.Show(GetPromptText());
+            }
         }
 
         private string GetPromptText()
@@ -218,6 +275,27 @@ namespace Game.Search
             promptUI = FindFirstObjectByType<StoryInteractionPromptUI>();
 #else
             promptUI = FindObjectOfType<StoryInteractionPromptUI>();
+#endif
+        }
+
+        private void ResolveObjectAnchor()
+        {
+            if (objectAnchor != null) return;
+
+            objectAnchor = GetComponentInChildren<SearchObjectAnchor>();
+            if (objectAnchor != null) return;
+
+            objectAnchor = GetComponent<SearchObjectAnchor>();
+        }
+
+        private void ResolveDecisionHUD()
+        {
+            if (decisionHUD != null) return;
+
+#if UNITY_2023_1_OR_NEWER
+            decisionHUD = FindFirstObjectByType<SearchDecisionHUD>();
+#else
+            decisionHUD = FindObjectOfType<SearchDecisionHUD>();
 #endif
         }
     }

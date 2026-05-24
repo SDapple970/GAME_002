@@ -20,6 +20,11 @@ MonoBehaviour:
   category: 4
   promptText: E: 확인하기
   searchOnce: 1
+  requireConfirmation: 1
+  confirmationMessage: 확인해볼까?
+  confirmChoiceText: 확인한다
+  cancelChoiceText: 그만둔다
+  resultMessageSeconds: 2.5
   outcomes:
   - weight: 50
     resultMessage: 그저 끔찍한 요금서였습니다

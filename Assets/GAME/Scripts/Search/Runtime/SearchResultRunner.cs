@@ -65,6 +65,11 @@ namespace Game.Search
 
         public void Execute(SearchableObjectDefinitionSO definition)
         {
+            Execute(definition, null);
+        }
+
+        public void Execute(SearchableObjectDefinitionSO definition, SearchObjectAnchor anchor)
+        {
             if (definition == null) return;
 
             SearchOutcome selected = Roll(definition);
@@ -72,7 +77,7 @@ namespace Game.Search
 
             selected.ApplyEffects();
             ResolveHUD();
-            resultHUD?.ShowMessage(selected.ResultMessage);
+            resultHUD?.ShowMessage(selected.ResultMessage, anchor, definition.ResultMessageSeconds);
         }
 
         private void ResolveHUD()
