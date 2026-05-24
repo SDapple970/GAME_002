@@ -45,6 +45,39 @@ namespace Game.Search.UI
                 screenPosition.z);
         }
 
+        public void ShowQuestionOnly(SearchObjectAnchor anchor, string message)
+        {
+            ResolveFallbackReferences();
+            ClearListeners();
+
+            _currentAnchor = anchor;
+            _onConfirm = null;
+            _onCancel = null;
+            _visible = true;
+
+            if (messageText != null)
+            {
+                messageText.text = string.IsNullOrEmpty(message) ? "조사해볼까?" : message;
+            }
+
+            SetButtonVisible(confirmButton, false);
+            SetButtonVisible(cancelButton, false);
+
+            if (root != null)
+            {
+                root.SetActive(true);
+            }
+
+            if (rootGroup != null)
+            {
+                rootGroup.alpha = 1f;
+                rootGroup.interactable = false;
+                rootGroup.blocksRaycasts = false;
+            }
+
+            LateUpdate();
+        }
+
         public void Show(
             SearchObjectAnchor anchor,
             string message,
@@ -63,7 +96,7 @@ namespace Game.Search.UI
 
             if (messageText != null)
             {
-                messageText.text = string.IsNullOrEmpty(message) ? string.Empty : message;
+                messageText.text = string.IsNullOrEmpty(message) ? "어떻게 할까?" : message;
             }
 
             if (confirmButtonText != null)
@@ -75,6 +108,9 @@ namespace Game.Search.UI
             {
                 cancelButtonText.text = string.IsNullOrEmpty(cancelText) ? "그만둔다" : cancelText;
             }
+
+            SetButtonVisible(confirmButton, true);
+            SetButtonVisible(cancelButton, true);
 
             if (confirmButton != null)
             {
@@ -108,6 +144,8 @@ namespace Game.Search.UI
             _onConfirm = null;
             _onCancel = null;
             _visible = false;
+            SetButtonVisible(confirmButton, false);
+            SetButtonVisible(cancelButton, false);
 
             if (rootGroup != null)
             {
@@ -140,6 +178,14 @@ namespace Game.Search.UI
         {
             confirmButton?.onClick.RemoveAllListeners();
             cancelButton?.onClick.RemoveAllListeners();
+        }
+
+        private static void SetButtonVisible(Button button, bool visible)
+        {
+            if (button != null)
+            {
+                button.gameObject.SetActive(visible);
+            }
         }
 
         private Camera ResolveWorldCamera()

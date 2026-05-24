@@ -20,8 +20,10 @@ MonoBehaviour:
   category: 0
   promptText: E: 뒤져보기
   searchOnce: 1
+  showQuestionOnEnter: 1
+  questionMessage: 조사해볼까?
   requireConfirmation: 1
-  confirmationMessage: 조사해볼까?
+  confirmationMessage: 어떻게 할까?
   confirmChoiceText: 조사한다
   cancelChoiceText: 그만둔다
   resultMessageSeconds: 2.5

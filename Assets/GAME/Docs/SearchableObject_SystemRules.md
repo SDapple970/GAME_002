@@ -3,6 +3,7 @@
 - `StoryInteractable2D` remains for NPC dialogue and authored story events.
 - `SearchableInteractable2D` is only for repeatable investigation props such as boxes, journals, life objects, collections, and apartment fixtures.
 - `SearchDecisionHUD` handles the pre-search confirmation flow. Do not route investigation choices through `StoryDialogueHUD`.
+- With `ShowQuestionOnEnter` enabled, entering range shows only `QuestionMessage`. Confirm/cancel buttons must appear only after the interact key opens the decision step.
 - `SearchObjectAnchor` is the world-space point used by decision/result bubbles. If no explicit anchor transform is assigned, it falls back to an offset above the object.
 - Search result data lives in `SearchableObjectDefinitionSO` assets. Do not create one `StoryEventDefinitionSO` per prop when weighted outcomes are enough.
 - `SearchOutcome.forceWhenConditionsMet` resolves before weighted random selection. Non-forced outcomes are selected from condition-passing entries with `weight > 0`.

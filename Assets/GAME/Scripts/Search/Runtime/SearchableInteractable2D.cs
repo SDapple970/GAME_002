@@ -25,6 +25,7 @@ namespace Game.Search
         private Collider2D _triggerCollider;
         private bool _playerInside;
         private bool _searchedInMemory;
+        private bool _questionVisible;
         private bool _decisionOpen;
 
         public SearchableObjectDefinitionSO Definition => definition;
@@ -47,18 +48,27 @@ namespace Game.Search
         private void OnDisable()
         {
             _playerInside = false;
-            if (_decisionOpen)
-            {
-                decisionHUD?.Hide();
-            }
-
+            _questionVisible = false;
             _decisionOpen = false;
             promptUI?.Hide();
+            decisionHUD?.Hide();
         }
 
         private void Update()
         {
             if (!_playerInside) return;
+            if (_decisionOpen) return;
+
+            if (UsesQuestionFlow())
+            {
+                promptUI?.Hide();
+                if (_questionVisible && Input.GetKeyDown(fallbackInteractKey))
+                {
+                    OpenDecisionChoices();
+                }
+
+                return;
+            }
 
             if (CanShowPrompt())
             {
@@ -69,7 +79,7 @@ namespace Game.Search
                 promptUI?.Hide();
             }
 
-            if (!_decisionOpen && Input.GetKeyDown(fallbackInteractKey))
+            if (Input.GetKeyDown(fallbackInteractKey))
             {
                 Search();
             }
@@ -80,6 +90,20 @@ namespace Game.Search
             if (!other.CompareTag(playerTag)) return;
 
             _playerInside = true;
+            _questionVisible = false;
+            _decisionOpen = false;
+
+            ResolveRunner();
+            ResolveObjectAnchor();
+            ResolveDecisionHUD();
+
+            if (UsesQuestionFlow() && CanSearch())
+            {
+                ShowQuestionOnly();
+                promptUI?.Hide();
+                return;
+            }
+
             if (CanShowPrompt())
             {
                 promptUI?.Show(GetPromptText());
@@ -91,6 +115,7 @@ namespace Game.Search
             if (!other.CompareTag(playerTag)) return;
 
             _playerInside = false;
+            _questionVisible = false;
             _decisionOpen = false;
             promptUI?.Hide();
             decisionHUD?.Hide();
@@ -108,17 +133,15 @@ namespace Game.Search
             ResolveObjectAnchor();
             ResolveDecisionHUD();
 
+            if (UsesQuestionFlow())
+            {
+                OpenDecisionChoices();
+                return;
+            }
+
             if (definition.RequireConfirmation && decisionHUD != null)
             {
-                _decisionOpen = true;
-                promptUI?.Hide();
-                decisionHUD.Show(
-                    objectAnchor,
-                    definition.ConfirmationMessage,
-                    definition.ConfirmChoiceText,
-                    definition.CancelChoiceText,
-                    ExecuteSearchConfirmed,
-                    CancelSearch);
+                OpenDecisionChoices();
                 return;
             }
 
@@ -152,7 +175,8 @@ namespace Game.Search
         public bool CanShowPrompt()
         {
             if (!_playerInside) return false;
-            if (_decisionOpen) return false;
+            if (_questionVisible || _decisionOpen) return false;
+            if (UsesQuestionFlow()) return false;
             if (definition == null) return false;
 
             ResolveRunner();
@@ -166,9 +190,40 @@ namespace Game.Search
             return !IsAlreadySearched();
         }
 
+        private void OpenDecisionChoices()
+        {
+            if (!CanSearch())
+            {
+                Debug.Log($"[SearchableInteractable2D] Decision open blocked. object='{definition?.ObjectId}' reason='{GetCannotSearchReason()}'.", this);
+                return;
+            }
+
+            ResolveObjectAnchor();
+            ResolveDecisionHUD();
+
+            if (decisionHUD == null)
+            {
+                ExecuteSearchConfirmed();
+                return;
+            }
+
+            _questionVisible = false;
+            _decisionOpen = true;
+            promptUI?.Hide();
+
+            decisionHUD.Show(
+                objectAnchor,
+                string.IsNullOrEmpty(definition.ConfirmationMessage) ? "어떻게 할까?" : definition.ConfirmationMessage,
+                definition.ConfirmChoiceText,
+                definition.CancelChoiceText,
+                ExecuteSearchConfirmed,
+                CancelSearch);
+        }
+
         private void ExecuteSearchConfirmed()
         {
             _decisionOpen = false;
+            _questionVisible = false;
 
             if (!CanSearch())
             {
@@ -185,6 +240,7 @@ namespace Game.Search
 
             _playerInside = false;
             promptUI?.Hide();
+            decisionHUD?.Hide();
             if (_triggerCollider != null)
             {
                 _triggerCollider.enabled = false;
@@ -194,10 +250,40 @@ namespace Game.Search
         private void CancelSearch()
         {
             _decisionOpen = false;
-            if (_playerInside && CanShowPrompt())
+
+            if (!_playerInside) return;
+
+            if (UsesQuestionFlow() && CanSearch())
+            {
+                ShowQuestionOnly();
+                promptUI?.Hide();
+                return;
+            }
+
+            if (CanShowPrompt())
             {
                 promptUI?.Show(GetPromptText());
             }
+        }
+
+        private void ShowQuestionOnly()
+        {
+            ResolveObjectAnchor();
+            ResolveDecisionHUD();
+
+            if (decisionHUD == null || definition == null) return;
+
+            _questionVisible = true;
+            _decisionOpen = false;
+            decisionHUD.ShowQuestionOnly(objectAnchor, definition.QuestionMessage);
+        }
+
+        private bool UsesQuestionFlow()
+        {
+            return definition != null
+                && definition.ShowQuestionOnEnter
+                && definition.RequireConfirmation
+                && decisionHUD != null;
         }
 
         private string GetPromptText()

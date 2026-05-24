@@ -107,6 +107,13 @@ namespace Game.Search.UI
             }
         }
 
+        public void HideForAnchor(SearchObjectAnchor anchor)
+        {
+            if (anchor != null && _currentAnchor != null && _currentAnchor != anchor) return;
+
+            Hide();
+        }
+
         private IEnumerator HideAfterDelay(float delay)
         {
             yield return new WaitForSeconds(delay);
