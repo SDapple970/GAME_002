@@ -1,0 +1,78 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1b0b513014c6428fb711e7e497d94e11, type: 3}
+  m_Name: SEARCH_COMMON_MAIL_PILE
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Search.Data.SearchableObjectDefinitionSO
+  objectId: SEARCH_COMMON_MAIL_PILE
+  displayName: 우편물 더미
+  keywords:
+  - '#일지'
+  - '#지역'
+  category: 4
+  promptText: E: 확인하기
+  searchOnce: 1
+  outcomes:
+  - weight: 50
+    resultMessage: 그저 끔찍한 요금서였습니다
+    conditions: []
+    forceWhenConditionsMet: 0
+    effects:
+    - type: 0
+      key: 
+      boolValue: 0
+      intValue: 0
+      floatValue: 0
+      messageOverride: 
+  - weight: 20
+    resultMessage: 건물 도면이었습니다!
+    conditions: []
+    forceWhenConditionsMet: 0
+    effects:
+    - type: 10
+      key: apartment_map
+      boolValue: 0
+      intValue: 0
+      floatValue: 0
+      messageOverride: 
+  - weight: 19
+    resultMessage: 최근 발생한 신성에 대한 상세한 경고입니다!
+    conditions: []
+    forceWhenConditionsMet: 0
+    effects:
+    - type: 11
+      key: boss_warning
+      boolValue: 0
+      intValue: 0
+      floatValue: 0
+      messageOverride: 
+  - weight: 10
+    resultMessage: 누군가가 보낸 편지입니다!
+    conditions: []
+    forceWhenConditionsMet: 0
+    effects:
+    - type: 3
+      key: 
+      boolValue: 0
+      intValue: 0
+      floatValue: 0
+      messageOverride: 
+  - weight: 1
+    resultMessage: 병무청
+    conditions: []
+    forceWhenConditionsMet: 0
+    effects:
+    - type: 15
+      key: found_military_notice
+      boolValue: 1
+      intValue: 0
+      floatValue: 0
+      messageOverride: 

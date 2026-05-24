@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1b0b513014c6428fb711e7e497d94e11, type: 3}
+  m_Name: SEARCH_COMMON_BAG
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Search.Data.SearchableObjectDefinitionSO
+  objectId: SEARCH_COMMON_BAG
+  displayName: 가방
+  keywords:
+  - '#상자'
+  - '#보물'
+  category: 0
+  promptText: E: 조사
+  searchOnce: 1
+  outcomes:
+  - weight: 75
+    resultMessage: 무언가가 있었습니다!
+    conditions: []
+    forceWhenConditionsMet: 0
+    effects:
+    - type: 1
+      key: 
+      boolValue: 0
+      intValue: 0
+      floatValue: 0
+      messageOverride: 
+  - weight: 25
+    resultMessage: 아무것도 없었습니다...
+    conditions: []
+    forceWhenConditionsMet: 0
+    effects:
+    - type: 0
+      key: 
+      boolValue: 0
+      intValue: 0
+      floatValue: 0
+      messageOverride: 
