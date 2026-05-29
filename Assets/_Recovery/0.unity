@@ -2921,6 +2921,7 @@ MonoBehaviour:
   statusText: {fileID: 981897528}
   actorAllyIndex: 0
   autoFillEnemyPlansOnConfirm: 1
+<<<<<<< Updated upstream:Assets/_Recovery/0.unity
 --- !u!1 &864120341
 GameObject:
   m_ObjectHideFlags: 0
@@ -3105,6 +3106,9 @@ Transform:
   m_Children: []
   m_Father: {fileID: 409761088}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+=======
+  flowOrchestrator: {fileID: 1112993904}
+>>>>>>> Stashed changes:Assets/GAME/Scenes/Overworld.unity
 --- !u!1 &889650157
 GameObject:
   m_ObjectHideFlags: 0
@@ -4078,6 +4082,7 @@ GameObject:
   - component: {fileID: 1112993901}
   - component: {fileID: 1112993902}
   - component: {fileID: 1112993903}
+  - component: {fileID: 1112993904}
   m_Layer: 0
   m_Name: CombatEntryPoint
   m_TagString: Untagged
@@ -4185,6 +4190,19 @@ MonoBehaviour:
   spacing: 1.5
   autoFlipCharacters: 1
   moveDuration: 0.4
+--- !u!114 &1112993904
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1112993897}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87771121262fd914cbcbb2d789f2deda, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Core.CombatFlowOrchestrator
+  entryPoint: {fileID: 1112993898}
 --- !u!1 &1146194026
 GameObject:
   m_ObjectHideFlags: 0
