@@ -10,6 +10,7 @@ namespace Game.Search
         [SerializeField] private int largeLootCount;
         [SerializeField] private int journalCount;
         [SerializeField] private int catCount;
+        [SerializeField] private int currency;
         [SerializeField] private int mentality;
         [SerializeField] private int stress;
 
@@ -59,6 +60,43 @@ namespace Game.Search
         {
             stress += amount;
             Debug.Log($"[SearchRewardManager] Stress {FormatSigned(amount)}. total={stress}", this);
+        }
+
+        public void AcceptReward(SearchRewardProposal proposal)
+        {
+            if (proposal == null)
+            {
+                Debug.LogWarning("[SearchRewardManager] Null reward proposal ignored.", this);
+                return;
+            }
+
+            int amount = Mathf.Max(1, proposal.Amount);
+
+            switch (proposal.Kind)
+            {
+                case SearchRewardKind.SmallLoot:
+                    AddSmallLoot(amount);
+                    break;
+                case SearchRewardKind.LargeLoot:
+                    AddLargeLoot(amount);
+                    break;
+                case SearchRewardKind.Journal:
+                    AddJournal(amount);
+                    break;
+                case SearchRewardKind.Cat:
+                    AddCat(amount);
+                    break;
+                case SearchRewardKind.Currency:
+                    currency += amount;
+                    Debug.Log($"[SearchRewardManager] Currency +{amount}. total={currency}", this);
+                    break;
+                case SearchRewardKind.Custom:
+                    Debug.Log($"[SearchRewardManager] Custom reward accepted. id='{proposal.RewardId}' name='{proposal.RewardName}' amount={amount}", this);
+                    break;
+                default:
+                    Debug.LogWarning($"[SearchRewardManager] Unsupported reward kind='{proposal.Kind}'.", this);
+                    break;
+            }
         }
 
         private static string FormatSigned(int amount)

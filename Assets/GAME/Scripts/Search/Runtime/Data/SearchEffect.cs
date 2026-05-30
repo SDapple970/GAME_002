@@ -44,6 +44,34 @@ namespace Game.Search.Data
 
         public void Apply()
         {
+            ApplyImmediate();
+        }
+
+        public bool TryCreateRewardProposal(out SearchRewardProposal proposal)
+        {
+            proposal = null;
+
+            switch (type)
+            {
+                case SearchEffectType.AddSmallLoot:
+                    proposal = CreateProposal(SearchRewardKind.SmallLoot, "소량 아이템", DefaultAmount(), "작은 보상을 획득할 수 있습니다.");
+                    return true;
+                case SearchEffectType.AddLargeLoot:
+                    proposal = CreateProposal(SearchRewardKind.LargeLoot, "대량 아이템", DefaultAmount(), "큰 보상을 획득할 수 있습니다.");
+                    return true;
+                case SearchEffectType.AddJournal:
+                    proposal = CreateProposal(SearchRewardKind.Journal, "일지", 1, "새로운 일지를 획득할 수 있습니다.");
+                    return true;
+                case SearchEffectType.AddCat:
+                    proposal = CreateProposal(SearchRewardKind.Cat, "고양이", 1, "고양이를 발견했습니다.");
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public void ApplyImmediate()
+        {
             switch (type)
             {
                 case SearchEffectType.None:
@@ -62,16 +90,10 @@ namespace Game.Search.Data
                     ModifyStress();
                     return;
                 case SearchEffectType.AddSmallLoot:
-                    AddSmallLoot();
-                    return;
                 case SearchEffectType.AddLargeLoot:
-                    AddLargeLoot();
-                    return;
                 case SearchEffectType.AddJournal:
-                    AddJournal();
-                    return;
                 case SearchEffectType.AddCat:
-                    AddCat();
+                    LogPlaceholder("Reward proposal effect. Apply through ItemAcquisitionHUD.");
                     return;
                 case SearchEffectType.AddBuff:
                 case SearchEffectType.AddDebuff:
@@ -104,50 +126,6 @@ namespace Game.Search.Data
             LogPlaceholder($"Story bool flag set. key='{key}' value={boolValue}.");
         }
 
-        private void AddSmallLoot()
-        {
-            if (SearchRewardManager.Instance == null)
-            {
-                LogRewardManagerMissing();
-                return;
-            }
-
-            SearchRewardManager.Instance.AddSmallLoot(Mathf.Max(1, intValue <= 0 ? 1 : intValue));
-        }
-
-        private void AddLargeLoot()
-        {
-            if (SearchRewardManager.Instance == null)
-            {
-                LogRewardManagerMissing();
-                return;
-            }
-
-            SearchRewardManager.Instance.AddLargeLoot(Mathf.Max(1, intValue <= 0 ? 1 : intValue));
-        }
-
-        private void AddJournal()
-        {
-            if (SearchRewardManager.Instance == null)
-            {
-                LogRewardManagerMissing();
-                return;
-            }
-
-            SearchRewardManager.Instance.AddJournal(1);
-        }
-
-        private void AddCat()
-        {
-            if (SearchRewardManager.Instance == null)
-            {
-                LogRewardManagerMissing();
-                return;
-            }
-
-            SearchRewardManager.Instance.AddCat(1);
-        }
-
         private void ModifyMentality()
         {
             if (SearchRewardManager.Instance == null)
@@ -168,6 +146,17 @@ namespace Game.Search.Data
             }
 
             SearchRewardManager.Instance.ModifyStress(intValue);
+        }
+
+        private SearchRewardProposal CreateProposal(SearchRewardKind kind, string defaultName, int amount, string defaultDescription)
+        {
+            string description = string.IsNullOrEmpty(messageOverride) ? defaultDescription : messageOverride;
+            return new SearchRewardProposal(key, defaultName, description, null, kind, amount);
+        }
+
+        private int DefaultAmount()
+        {
+            return Mathf.Max(1, intValue <= 0 ? 1 : intValue);
         }
 
         private bool CanUseStoryFlag()
