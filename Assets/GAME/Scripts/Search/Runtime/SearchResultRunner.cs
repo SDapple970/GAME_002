@@ -63,21 +63,22 @@ namespace Game.Search
             return candidates[candidates.Count - 1];
         }
 
-        public void Execute(SearchableObjectDefinitionSO definition)
+        public bool Execute(SearchableObjectDefinitionSO definition)
         {
-            Execute(definition, null);
+            return Execute(definition, null);
         }
 
-        public void Execute(SearchableObjectDefinitionSO definition, SearchObjectAnchor anchor)
+        public bool Execute(SearchableObjectDefinitionSO definition, SearchObjectAnchor anchor)
         {
-            if (definition == null) return;
+            if (definition == null) return false;
 
             SearchOutcome selected = Roll(definition);
-            if (selected == null) return;
+            if (selected == null) return false;
 
             selected.ApplyEffects();
             ResolveHUD();
             resultHUD?.ShowMessage(selected.ResultMessage, anchor, definition.ResultMessageSeconds);
+            return true;
         }
 
         private void ResolveHUD()

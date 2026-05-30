@@ -12,6 +12,7 @@ namespace Game.Search.UI
         [SerializeField] private CanvasGroup rootGroup;
         [SerializeField] private RectTransform bubbleRect;
         [SerializeField] private TMP_Text messageText;
+        [SerializeField] private Button questionButton;
         [SerializeField] private Button confirmButton;
         [SerializeField] private TMP_Text confirmButtonText;
         [SerializeField] private Button cancelButton;
@@ -20,6 +21,7 @@ namespace Game.Search.UI
         [SerializeField] private Vector2 screenOffset = new(0f, 32f);
 
         private SearchObjectAnchor _currentAnchor;
+        private Action _onQuestionClicked;
         private Action _onConfirm;
         private Action _onCancel;
         private bool _visible;
@@ -45,12 +47,13 @@ namespace Game.Search.UI
                 screenPosition.z);
         }
 
-        public void ShowQuestionOnly(SearchObjectAnchor anchor, string message)
+        public void ShowQuestionOnly(SearchObjectAnchor anchor, string message, Action onQuestionClicked)
         {
             ResolveFallbackReferences();
             ClearListeners();
 
             _currentAnchor = anchor;
+            _onQuestionClicked = onQuestionClicked;
             _onConfirm = null;
             _onCancel = null;
             _visible = true;
@@ -60,8 +63,14 @@ namespace Game.Search.UI
                 messageText.text = string.IsNullOrEmpty(message) ? "조사해볼까?" : message;
             }
 
+            SetQuestionButtonState(true, true);
             SetButtonVisible(confirmButton, false);
             SetButtonVisible(cancelButton, false);
+
+            if (questionButton != null)
+            {
+                questionButton.onClick.AddListener(HandleQuestionClicked);
+            }
 
             if (root != null)
             {
@@ -71,8 +80,8 @@ namespace Game.Search.UI
             if (rootGroup != null)
             {
                 rootGroup.alpha = 1f;
-                rootGroup.interactable = false;
-                rootGroup.blocksRaycasts = false;
+                rootGroup.interactable = true;
+                rootGroup.blocksRaycasts = true;
             }
 
             LateUpdate();
@@ -90,6 +99,7 @@ namespace Game.Search.UI
             ClearListeners();
 
             _currentAnchor = anchor;
+            _onQuestionClicked = null;
             _onConfirm = onConfirm;
             _onCancel = onCancel;
             _visible = true;
@@ -109,6 +119,7 @@ namespace Game.Search.UI
                 cancelButtonText.text = string.IsNullOrEmpty(cancelText) ? "그만둔다" : cancelText;
             }
 
+            SetQuestionButtonState(true, false);
             SetButtonVisible(confirmButton, true);
             SetButtonVisible(cancelButton, true);
 
@@ -141,9 +152,11 @@ namespace Game.Search.UI
         {
             ClearListeners();
             _currentAnchor = null;
+            _onQuestionClicked = null;
             _onConfirm = null;
             _onCancel = null;
             _visible = false;
+            SetQuestionButtonState(false, false);
             SetButtonVisible(confirmButton, false);
             SetButtonVisible(cancelButton, false);
 
@@ -167,6 +180,12 @@ namespace Game.Search.UI
             callback?.Invoke();
         }
 
+        private void HandleQuestionClicked()
+        {
+            Action callback = _onQuestionClicked;
+            callback?.Invoke();
+        }
+
         private void HandleCancelClicked()
         {
             Action callback = _onCancel;
@@ -176,6 +195,7 @@ namespace Game.Search.UI
 
         private void ClearListeners()
         {
+            questionButton?.onClick.RemoveAllListeners();
             confirmButton?.onClick.RemoveAllListeners();
             cancelButton?.onClick.RemoveAllListeners();
         }
@@ -185,6 +205,17 @@ namespace Game.Search.UI
             if (button != null)
             {
                 button.gameObject.SetActive(visible);
+            }
+        }
+
+        private void SetQuestionButtonState(bool active, bool interactable)
+        {
+            if (questionButton == null) return;
+
+            questionButton.interactable = interactable;
+            if (questionButton.gameObject != root)
+            {
+                questionButton.gameObject.SetActive(active);
             }
         }
 

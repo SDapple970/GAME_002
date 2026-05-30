@@ -1,4 +1,5 @@
 using System;
+using Game.Search;
 using Game.Story;
 using UnityEngine;
 
@@ -55,14 +56,26 @@ namespace Game.Search.Data
                     SetStoryFlagBool();
                     return;
                 case SearchEffectType.ModifyMentality:
+                    ModifyMentality();
+                    return;
                 case SearchEffectType.ModifyStress:
+                    ModifyStress();
+                    return;
+                case SearchEffectType.AddSmallLoot:
+                    AddSmallLoot();
+                    return;
+                case SearchEffectType.AddLargeLoot:
+                    AddLargeLoot();
+                    return;
+                case SearchEffectType.AddJournal:
+                    AddJournal();
+                    return;
+                case SearchEffectType.AddCat:
+                    AddCat();
+                    return;
                 case SearchEffectType.AddBuff:
                 case SearchEffectType.AddDebuff:
                 case SearchEffectType.RemoveDebuff:
-                case SearchEffectType.AddSmallLoot:
-                case SearchEffectType.AddLargeLoot:
-                case SearchEffectType.AddJournal:
-                case SearchEffectType.AddCat:
                 case SearchEffectType.RevealMapArea:
                 case SearchEffectType.RevealBossInfo:
                 case SearchEffectType.StartBattle:
@@ -91,6 +104,72 @@ namespace Game.Search.Data
             LogPlaceholder($"Story bool flag set. key='{key}' value={boolValue}.");
         }
 
+        private void AddSmallLoot()
+        {
+            if (SearchRewardManager.Instance == null)
+            {
+                LogRewardManagerMissing();
+                return;
+            }
+
+            SearchRewardManager.Instance.AddSmallLoot(Mathf.Max(1, intValue <= 0 ? 1 : intValue));
+        }
+
+        private void AddLargeLoot()
+        {
+            if (SearchRewardManager.Instance == null)
+            {
+                LogRewardManagerMissing();
+                return;
+            }
+
+            SearchRewardManager.Instance.AddLargeLoot(Mathf.Max(1, intValue <= 0 ? 1 : intValue));
+        }
+
+        private void AddJournal()
+        {
+            if (SearchRewardManager.Instance == null)
+            {
+                LogRewardManagerMissing();
+                return;
+            }
+
+            SearchRewardManager.Instance.AddJournal(1);
+        }
+
+        private void AddCat()
+        {
+            if (SearchRewardManager.Instance == null)
+            {
+                LogRewardManagerMissing();
+                return;
+            }
+
+            SearchRewardManager.Instance.AddCat(1);
+        }
+
+        private void ModifyMentality()
+        {
+            if (SearchRewardManager.Instance == null)
+            {
+                LogRewardManagerMissing();
+                return;
+            }
+
+            SearchRewardManager.Instance.ModifyMentality(intValue);
+        }
+
+        private void ModifyStress()
+        {
+            if (SearchRewardManager.Instance == null)
+            {
+                LogRewardManagerMissing();
+                return;
+            }
+
+            SearchRewardManager.Instance.ModifyStress(intValue);
+        }
+
         private bool CanUseStoryFlag()
         {
             if (StoryFlagManager.Instance == null)
@@ -109,6 +188,11 @@ namespace Game.Search.Data
         {
             string message = string.IsNullOrEmpty(messageOverride) ? detail : messageOverride;
             Debug.Log($"[SearchEffect] type='{type}' key='{key}' int={intValue} float={floatValue} bool={boolValue}. {message}");
+        }
+
+        private void LogRewardManagerMissing()
+        {
+            Debug.LogWarning($"[SearchEffect] SearchRewardManager missing for type='{type}'. Reward was not recorded.");
         }
     }
 }

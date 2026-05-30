@@ -21,6 +21,7 @@ namespace Game.Search
         [SerializeField] private string usedFlagKey;
         [SerializeField] private SearchObjectAnchor objectAnchor;
         [SerializeField] private SearchDecisionHUD decisionHUD;
+        [SerializeField] private SearchObjectVisualState2D visualState;
 
         private Collider2D _triggerCollider;
         private bool _playerInside;
@@ -43,6 +44,7 @@ namespace Game.Search
             ResolvePromptUI();
             ResolveObjectAnchor();
             ResolveDecisionHUD();
+            ResolveVisualState();
         }
 
         private void OnDisable()
@@ -96,6 +98,7 @@ namespace Game.Search
             ResolveRunner();
             ResolveObjectAnchor();
             ResolveDecisionHUD();
+            ResolveVisualState();
 
             if (UsesQuestionFlow() && CanSearch())
             {
@@ -132,6 +135,7 @@ namespace Game.Search
             ResolveRunner();
             ResolveObjectAnchor();
             ResolveDecisionHUD();
+            ResolveVisualState();
 
             if (UsesQuestionFlow())
             {
@@ -233,8 +237,17 @@ namespace Game.Search
 
             ResolveRunner();
             ResolveObjectAnchor();
-            runner.Execute(definition, objectAnchor);
-            MarkSearchedIfNeeded();
+            ResolveVisualState();
+
+            if (runner.Execute(definition, objectAnchor))
+            {
+                visualState?.SetSearched();
+                MarkSearchedIfNeeded();
+            }
+            else
+            {
+                return;
+            }
 
             if (!disableAfterSearch) return;
 
@@ -275,7 +288,7 @@ namespace Game.Search
 
             _questionVisible = true;
             _decisionOpen = false;
-            decisionHUD.ShowQuestionOnly(objectAnchor, definition.QuestionMessage);
+            decisionHUD.ShowQuestionOnly(objectAnchor, definition.QuestionMessage, OpenDecisionChoices);
         }
 
         private bool UsesQuestionFlow()
@@ -383,6 +396,16 @@ namespace Game.Search
 #else
             decisionHUD = FindObjectOfType<SearchDecisionHUD>();
 #endif
+        }
+
+        private void ResolveVisualState()
+        {
+            if (visualState != null) return;
+
+            visualState = GetComponentInChildren<SearchObjectVisualState2D>();
+            if (visualState != null) return;
+
+            visualState = GetComponent<SearchObjectVisualState2D>();
         }
     }
 }
