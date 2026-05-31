@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 211166ddddc19754981595f5b01da79c
+guid: cd691ff3431fa2d4e9b4047a286883d1
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 7025158157918862210
-    second: Dungeon1_Background_0
+      213: 3691589027781535976
+    second: Dungeon1_Background 1_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -113,7 +113,7 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Dungeon1_Background_0
+      name: Dungeon1_Background 1_0
       rect:
         serializedVersion: 2
         x: 123
@@ -128,8 +128,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 28bf0bdaf106e7160800000000000000
-      internalID: 7025158157918862210
+      spriteID: 8e8e5a179a82b3330800000000000000
+      internalID: 3691589027781535976
       vertices: []
       indices: 
       edges: []
@@ -148,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Dungeon1_Background_0: 7025158157918862210
+      Dungeon1_Background 1_0: 3691589027781535976
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
