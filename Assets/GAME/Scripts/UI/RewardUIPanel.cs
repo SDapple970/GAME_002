@@ -8,9 +8,6 @@ using Game.NonCombat.Reward;
 
 namespace Game.UI
 {
-    /// <summary>
-    /// MP3 «√∑π¿ÃæÓ «¸≈¬¿« ∫∏ªÛ º±≈√ UI∏¶ ∞¸∏Æ«’¥œ¥Ÿ.
-    /// </summary>
     public sealed class RewardUIPanel : MonoBehaviour
     {
         [Header("System References")]
@@ -18,145 +15,209 @@ namespace Game.UI
         [SerializeField] private RewardApplier rewardApplier;
 
         [Header("UI References")]
-        [Tooltip("MP3 UI ¿¸√º √÷ªÛ¿ß ø¿∫Í¡ß∆Æ")]
         [SerializeField] private GameObject rewardPanelRoot;
-
-        [Tooltip("∫∏ªÛ «◊∏ÒµÈ¿Ã ¿⁄Ωƒ¿∏∑Œ ª˝º∫µ… Content ø¿∫Í¡ß∆Æ (Scroll View ≥ª∫Œ)")]
         [SerializeField] private Transform contentContainer;
-
-        [Tooltip("«¡∑Œ¡ß∆Æ √¢ø°º≠ «“¥Á«“ ∫∏ªÛ «◊∏Ò «¡∏Æ∆’ (√ ∑œ ±€ææ «— ¡Ÿ)")]
         [SerializeField] private RewardItemUI rewardItemPrefab;
+        [SerializeField] private Button closeButton;
 
-        // ª˝º∫µ» ∏ÆΩ∫∆Æ «◊∏ÒµÈ¿ª √ﬂ¿˚«œ∞Ì ¡§∏Æ«œ±‚ ¿ß«— ∏ÆΩ∫∆Æ
         private readonly List<RewardItemUI> _spawnedItems = new List<RewardItemUI>();
         private CombatResult _pendingResult;
+        private bool _subscribedToEntryPoint;
+        private bool _closeButtonBound;
 
         private void Awake()
         {
-            if (rewardPanelRoot != null) rewardPanelRoot.SetActive(false);
-        }
+            AutoBindReferences();
 
-        // Assets/GAME/Scripts/Combat/Runtime/UI/RewardUIPanel.cs
+            if (rewardPanelRoot != null)
+                rewardPanelRoot.SetActive(false);
+        }
 
         private void OnEnable()
         {
-            Debug.Log("[RewardUIPanel] OnEnable called.", this);
-
-            if (combatEntryPoint != null)
-            {
-                combatEntryPoint.OnCombatEnded += HandleCombatEnded;
-                Debug.Log("[RewardUIPanel] Subscribed to CombatEntryPoint.OnCombatEnded.", this);
-            }
-            else
-            {
-                Debug.LogError("[RewardUIPanel] combatEntryPoint is null.", this);
-            }
+            AutoBindReferences();
+            SubscribeToEntryPoint();
+            BindCloseButton();
         }
 
         private void OnDisable()
         {
-            if (combatEntryPoint != null)
-            {
-                combatEntryPoint.OnCombatEnded -= HandleCombatEnded;
-                Debug.Log("[RewardUIPanel] Unsubscribed from CombatEntryPoint.OnCombatEnded.", this);
-            }
+            UnsubscribeFromEntryPoint();
+            UnbindCloseButton();
         }
 
         private void HandleCombatEnded(CombatResult result)
         {
-            if (!result.IsWin) return;
-            _pendingResult = result;
-
-            // 1. «√∑π¿ÃæÓ ¡∂¿€ ¿·±›
-            if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(GameState.UIOnly);
-
-            // 2. MP3 »≠∏È ∏ÆΩ∫∆Æ ª˝º∫
-            GenerateRewardList(result);
-
-            // 3. UI «•Ω√
-            if (rewardPanelRoot != null)
-                rewardPanelRoot.SetActive(true);
-
-            Debug.Log($"[RewardUIPanel] HandleCombatEnded called. IsWin={result.IsWin}, Exp={result.TotalExp}, Gold={result.TotalGold}", this);
+            if (result == null)
+                return;
 
             if (!result.IsWin)
             {
-                Debug.LogWarning("[RewardUIPanel] Result is loss. Reward panel will not open.", this);
+                RestoreExploration();
                 return;
             }
 
+            if (!CanOpenRewardPanel())
+            {
+                ApplyReward(result);
+                RestoreExploration();
+                return;
+            }
+
+            _pendingResult = result;
+
+            if (GameStateMachine.Instance != null)
+                GameStateMachine.Instance.SetState(GameState.UIOnly);
+
+            GenerateRewardList(result);
+            rewardPanelRoot.SetActive(true);
+        }
+
+        private void AutoBindReferences()
+        {
+            if (combatEntryPoint == null)
+                combatEntryPoint = FindFirstObjectByType<CombatEntryPoint>();
+
+            if (rewardApplier == null)
+                rewardApplier = RewardApplier.Instance;
+        }
+
+        private void SubscribeToEntryPoint()
+        {
+            if (_subscribedToEntryPoint)
+                return;
+
+            if (combatEntryPoint == null)
+            {
+                Debug.LogWarning("[RewardUIPanel] CombatEntryPoint is not assigned.", this);
+                return;
+            }
+
+            combatEntryPoint.OnCombatEnded += HandleCombatEnded;
+            _subscribedToEntryPoint = true;
+        }
+
+        private void UnsubscribeFromEntryPoint()
+        {
+            if (!_subscribedToEntryPoint || combatEntryPoint == null)
+            {
+                _subscribedToEntryPoint = false;
+                return;
+            }
+
+            combatEntryPoint.OnCombatEnded -= HandleCombatEnded;
+            _subscribedToEntryPoint = false;
+        }
+
+        private void BindCloseButton()
+        {
+            if (_closeButtonBound || closeButton == null)
+                return;
+
+            closeButton.onClick.AddListener(CloseRewardPanel);
+            _closeButtonBound = true;
+        }
+
+        private void UnbindCloseButton()
+        {
+            if (!_closeButtonBound || closeButton == null)
+            {
+                _closeButtonBound = false;
+                return;
+            }
+
+            closeButton.onClick.RemoveListener(CloseRewardPanel);
+            _closeButtonBound = false;
+        }
+
+        private bool CanOpenRewardPanel()
+        {
             if (rewardPanelRoot == null)
             {
                 Debug.LogError("[RewardUIPanel] rewardPanelRoot is null.", this);
-                return;
+                return false;
             }
 
             if (contentContainer == null)
             {
                 Debug.LogError("[RewardUIPanel] contentContainer is null.", this);
-                return;
+                return false;
             }
 
             if (rewardItemPrefab == null)
             {
                 Debug.LogError("[RewardUIPanel] rewardItemPrefab is null.", this);
-                return;
+                return false;
             }
 
-            Debug.Log("[RewardUIPanel] Opening reward panel.", this);
-
-            // ±‚¡∏ ∫∏ªÛ ª˝º∫/∆–≥Œ ø¿«¬ ƒ⁄µÂ ¿Ø¡ˆ
+            return true;
         }
 
         private void GenerateRewardList(CombatResult result)
         {
-            // ±‚¡∏ø° ≥≤æ∆¿÷¥¯ ∫∏ªÛ ∏Ò∑œ √ªº“ (ø¿∫Í¡ß∆Æ «Æ∏µ¿ª æ≤∏È ¥ı ¡¡¡ˆ∏∏ ¿œ¥‹ ∆ƒ±´ πÊΩƒ¿∏∑Œ ¡¯«‡)
-            foreach (var item in _spawnedItems)
-            {
-                if (item != null) Destroy(item.gameObject);
-            }
-            _spawnedItems.Clear();
+            ClearRewardList();
 
-            // ¿”Ω√ ∫∏ªÛ º±≈√¡ˆ ª˝º∫ (≥™¡ﬂø°¥¬ µÂ∂¯ ≈◊¿Ã∫Ì¿Ã≥™ Ω∫≈≥ SO µ•¿Ã≈Õ∏¶ »∞øÎ«œ∏È µÀ¥œ¥Ÿ)
             List<string> options = new List<string>
             {
-                $"∞Ê«Ëƒ° ¡˝¡ﬂ ({result.TotalExp * 2} EXP)",
-                $"¿¸∏Æ«∞ ¡˝¡ﬂ ({result.TotalGold * 2} G)",
-                "ªı∑ŒøÓ Ω∫≈≥ «ÿ±›: ø¨º” ∫£±‚",
-                "√º∑¬ 100% »∏∫π",
-                "Ω≈∫Ò«— ¡∂∞¢ »πµÊ"
+                $"Í≤ΩÌóòÏπò ÏßëÏ§ë ({result.TotalExp * 2} EXP)",
+                $"Ï†ÑÎ¶¨Ìíà ÏßëÏ§ë ({result.TotalGold * 2} G)",
+                "ÏÉàÎ°úÏö¥ Ïä§ÌÇ¨ Ìï¥Í∏à: Ïó∞ÏÜç Î≤†Í∏∞",
+                "Ï≤¥Î†• 100% ÌöåÎ≥µ",
+                "Ïã†ÎπÑÌïú Ï°∞Í∞Å ÌöçÎìù"
             };
 
-            // º±≈√¡ˆ ∞≥ºˆ∏∏≈≠ «¡∏Æ∆’ ∫π¡¶
-            foreach (var opt in options)
+            foreach (string option in options)
             {
-                var newItem = Instantiate(rewardItemPrefab, contentContainer);
-                // «◊∏Ò ¿Ã∏ß∞˙, ≈¨∏Ø Ω√ Ω««‡µ… ∏ﬁº≠µÂ(OnRewardSelected)∏¶ ¿¸¥ﬁ
-                newItem.Setup(opt, OnRewardSelected);
+                RewardItemUI newItem = Instantiate(rewardItemPrefab, contentContainer);
+                newItem.Setup(option, OnRewardSelected);
                 _spawnedItems.Add(newItem);
             }
         }
 
-        /// <summary>
-        /// «√∑π¿ÃæÓ∞° Ω∫≈©∑—ø°º≠ ∆Ø¡§ ∫∏ªÛ¿ª ≈¨∏Ø«ﬂ¿ª ∂ß Ω««‡
-        /// </summary>
         private void OnRewardSelected(string selectedReward)
         {
-            Debug.Log($"[Reward] «√∑π¿ÃæÓ∞° º±≈√«— ∫∏ªÛ: {selectedReward}");
+            Debug.Log($"[RewardUIPanel] ÏÑ†ÌÉùÌïú Î≥¥ÏÉÅ: {selectedReward}", this);
+            CloseRewardPanel();
+        }
+
+        private void CloseRewardPanel()
+        {
+            ApplyReward(_pendingResult);
+            _pendingResult = null;
+
+            ClearRewardList();
+
+            if (rewardPanelRoot != null)
+                rewardPanelRoot.SetActive(false);
+
+            RestoreExploration();
+        }
+
+        private void ApplyReward(CombatResult result)
+        {
+            if (result == null)
+                return;
 
             RewardApplier applier = rewardApplier != null ? rewardApplier : RewardApplier.Instance;
             if (applier != null)
-                applier.ApplyCombatResult(_pendingResult);
+                applier.ApplyCombatResult(result);
             else
                 Debug.LogWarning("[RewardUIPanel] RewardApplier is missing.", this);
+        }
 
-            _pendingResult = null;
+        private void ClearRewardList()
+        {
+            foreach (RewardItemUI item in _spawnedItems)
+            {
+                if (item != null)
+                    Destroy(item.gameObject);
+            }
 
-            // UI ¥›±‚
-            if (rewardPanelRoot != null) rewardPanelRoot.SetActive(false);
+            _spawnedItems.Clear();
+        }
 
-            // ªÛ≈¬ ∫π±∏
+        private static void RestoreExploration()
+        {
             if (GameStateMachine.Instance != null)
                 GameStateMachine.Instance.SetState(GameState.Exploration);
         }

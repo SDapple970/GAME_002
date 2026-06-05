@@ -104,7 +104,7 @@ namespace Game.Battle
             List<GameObject> allies = new List<GameObject>(1) { playerObject };
             List<GameObject> enemies = new List<GameObject>(1) { gameObject };
 
-            combatEntryPoint.StartCombatFromField(
+            bool started = combatEntryPoint.StartCombatFromField(
                 allyFieldObjects: allies,
                 enemyFieldObjects: enemies,
                 reason: reason,
@@ -112,7 +112,8 @@ namespace Game.Battle
                 openingEffectOrNull: openingEffectOrNull
             );
 
-            Debug.Log($"[FieldEnemy] StartCombatFromField called. reason={reason}, initiative={initiativeSide}");
+            if (started)
+                Debug.Log($"[FieldEnemy] Combat started. reason={reason}, initiative={initiativeSide}");
         }
     }
 }

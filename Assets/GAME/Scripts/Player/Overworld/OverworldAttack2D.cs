@@ -1,14 +1,10 @@
 // GAME/Scripts/Player/OverworldAttack2D.cs
 using UnityEngine;
-using UnityEngine.InputSystem;
+using Game.Core;
 using Game.Common;
 
 public sealed class OverworldAttack2D : MonoBehaviour
 {
-    [Header("Input")]
-    [SerializeField] private InputActionReference attack;
-    [SerializeField] private bool useDirectInputAction = true;
-
     [Header("References")]
     [SerializeField] private Transform hitOrigin;
     [SerializeField] private Vector2 hitBoxSize = new(1.2f, 0.8f);
@@ -25,8 +21,6 @@ public sealed class OverworldAttack2D : MonoBehaviour
     [SerializeField] private Vector2 hitBoxOffset = new(1.2f, 0f);
 
     private float _nextTime;
-    private bool _attackQueued;
-    private bool _loggedDuplicateInputWarning;
     private readonly Collider2D[] _buffer = new Collider2D[16];
 
     private void Awake()
@@ -35,64 +29,16 @@ public sealed class OverworldAttack2D : MonoBehaviour
             animator = GetComponentInChildren<Animator>();
     }
 
-    private void OnEnable()
-    {
-        if (!useDirectInputAction || attack == null || attack.action == null)
-            return;
-
-        WarnIfDuplicateInputPathIsLikely();
-        attack.action.performed += OnAttack;
-        attack.action.Enable();
-    }
-
-    private void OnDisable()
-    {
-        if (!useDirectInputAction || attack == null || attack.action == null)
-            return;
-
-        attack.action.performed -= OnAttack;
-        attack.action.Disable();
-    }
-
-    private void Update()
-    {
-        if (!_attackQueued)
-            return;
-
-        _attackQueued = false;
-        TryAttack();
-    }
-
-    private void OnAttack(InputAction.CallbackContext ctx)
-    {
-        _attackQueued = true;
-    }
-
     public void RequestAttack()
     {
-        // Preferred runtime path: GameInputInstaller -> OverworldPlayerController -> RequestAttack().
         TryAttack();
-    }
-
-    private void WarnIfDuplicateInputPathIsLikely()
-    {
-        if (_loggedDuplicateInputWarning)
-            return;
-
-        if (GameInputInstaller.Instance == null)
-            return;
-
-        _loggedDuplicateInputWarning = true;
-        Debug.LogWarning(
-            "[OverworldAttack2D] Direct InputActionReference is enabled while GameInputInstaller exists. " +
-            "If OverworldPlayerController also calls RequestAttack(), one input can trigger duplicate attack attempts. " +
-            "Leave the attack reference empty or disable direct input after confirming the scene uses GameInputInstaller.",
-            this
-        );
     }
 
     private void TryAttack()
     {
+        if (!CanAttack())
+            return;
+
         if (Time.time < _nextTime)
             return;
 
@@ -102,6 +48,12 @@ public sealed class OverworldAttack2D : MonoBehaviour
             animator.SetTrigger(attackTrigger);
 
         DoHitboxDamage();
+    }
+
+    private static bool CanAttack()
+    {
+        return GameStateMachine.Instance == null ||
+               GameStateMachine.Instance.Is(GameState.Exploration);
     }
 
     private void DoHitboxDamage()
