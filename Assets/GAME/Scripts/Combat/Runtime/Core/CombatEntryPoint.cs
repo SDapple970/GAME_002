@@ -4,6 +4,7 @@ using Game.Combat.Adapters;
 using Game.Combat.Data;
 using Game.Combat.Model;
 using Game.Combat.Effects;
+using Game.Core;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -35,6 +36,7 @@ namespace Game.Combat.Core
 
         private SkillBook _book;
         private bool _endedRaised;
+        private bool _startingCombat;
 
         public void ConfirmPlanningFromUI()
         {
@@ -161,13 +163,16 @@ namespace Game.Combat.Core
         }
 #endif
 
-        public void StartCombatFromField(
+        public bool StartCombatFromField(
             List<GameObject> allyFieldObjects,
             List<GameObject> enemyFieldObjects,
             StartReason reason,
             Side initiativeSide,
             OpeningEffectSO openingEffectOrNull)
         {
+            if (!CanStartCombatFromField())
+                return false;
+
             if (allyFieldObjects == null || allyFieldObjects.Count == 0)
                 Debug.LogWarning("[CombatEntryPoint] StartCombatFromField called with no ally field objects.");
 
@@ -175,6 +180,7 @@ namespace Game.Combat.Core
                 Debug.LogWarning("[CombatEntryPoint] StartCombatFromField called with no enemy field objects.");
 
             _endedRaised = false;
+            _startingCombat = true;
 
             var req = new CombatStartRequest(
                 reason,
@@ -193,7 +199,17 @@ namespace Game.Combat.Core
             if (ActiveSession == null)
             {
                 Debug.LogError("[CombatEntryPoint] CombatBootstrapper returned a null session.");
-                return;
+                ActiveStateMachine = null;
+                _startingCombat = false;
+                return false;
+            }
+
+            if (ActiveStateMachine == null)
+            {
+                Debug.LogError("[CombatEntryPoint] CombatBootstrapper returned a null state machine.");
+                ActiveSession = null;
+                _startingCombat = false;
+                return false;
             }
 
             if (ActiveSession.Allies.Count == 0)
@@ -217,6 +233,18 @@ namespace Game.Combat.Core
 
             if (flowOrchestrator != null)
                 flowOrchestrator.BindSession(ActiveSession);
+
+            _startingCombat = false;
+            return true;
+        }
+
+        private bool CanStartCombatFromField()
+        {
+            if (_startingCombat || ActiveSession != null || ActiveStateMachine != null)
+                return false;
+
+            return GameStateMachine.Instance == null ||
+                   GameStateMachine.Instance.Is(GameState.Exploration);
         }
 
         private void ApplyCombatOutcomeToField(CombatSession session)

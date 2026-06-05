@@ -45,6 +45,7 @@ namespace Game.Combat.UI
 
         private readonly Dictionary<SkillId, string> _skillNameById = new();
         private bool _subscribedToEntryPoint;
+        private bool _buttonListenersBound;
 
         private void Awake()
         {
@@ -59,27 +60,30 @@ namespace Game.Combat.UI
             AutoBindReferences();
             SubscribeToEntryPoint();
             BindButtonListeners();
+            RecoverActiveSessionIfNeeded();
         }
 
         private void BindButtonListeners()
         {
+            if (_buttonListenersBound)
+                return;
+
             if (slot1Button != null)
             {
-                slot1Button.onClick.RemoveListener(OnSlot1Clicked);
                 slot1Button.onClick.AddListener(OnSlot1Clicked);
             }
 
             if (slot2Button != null)
             {
-                slot2Button.onClick.RemoveListener(OnSlot2Clicked);
                 slot2Button.onClick.AddListener(OnSlot2Clicked);
             }
 
             if (confirmButton != null)
             {
-                confirmButton.onClick.RemoveListener(Confirm);
                 confirmButton.onClick.AddListener(Confirm);
             }
+
+            _buttonListenersBound = true;
         }
 
         private void OnDisable()
@@ -98,6 +102,8 @@ namespace Game.Combat.UI
 
             if (confirmButton != null)
                 confirmButton.onClick.RemoveListener(Confirm);
+
+            _buttonListenersBound = false;
         }
 
         private void Update()
@@ -149,8 +155,25 @@ namespace Game.Combat.UI
             _subscribedToEntryPoint = false;
         }
 
+        private void RecoverActiveSessionIfNeeded()
+        {
+            if (entryPoint == null || entryPoint.ActiveSession == null)
+                return;
+
+            if (_session == entryPoint.ActiveSession)
+                return;
+
+            HandleCombatStarted(entryPoint.ActiveSession);
+        }
+
         private void HandleCombatStarted(CombatSession session)
         {
+            if (session == null)
+                return;
+
+            if (_session == session && _shownTurnIndex == session.TurnIndex)
+                return;
+
             _session = session;
             _actor = null;
             _pendingSkill = null;

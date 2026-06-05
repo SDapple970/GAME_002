@@ -83,7 +83,7 @@ namespace Game.Combat.Integration
 
             _armed = false;
 
-            entryPoint.StartCombatFromField(
+            bool started = entryPoint.StartCombatFromField(
                 allies,
                 enemies,
                 startReason,
@@ -91,10 +91,13 @@ namespace Game.Combat.Integration
                 openingEffectOrNull
             );
 
-            Debug.Log(
-                $"[CombatEncounterTrigger2D] StartCombatFromField called. " +
-                $"Allies={allies.Count}, Enemies={enemies.Count}, Reason={startReason}, Initiative={initiativeSide}"
-            );
+            if (started)
+            {
+                Debug.Log(
+                    $"[CombatEncounterTrigger2D] Combat started. " +
+                    $"Allies={allies.Count}, Enemies={enemies.Count}, Reason={startReason}, Initiative={initiativeSide}"
+                );
+            }
         }
 
         private void OnTriggerExit2D(Collider2D other)
