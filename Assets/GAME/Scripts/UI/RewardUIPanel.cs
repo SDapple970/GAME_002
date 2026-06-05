@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -19,11 +20,14 @@ namespace Game.UI
         [SerializeField] private Transform contentContainer;
         [SerializeField] private RewardItemUI rewardItemPrefab;
         [SerializeField] private Button closeButton;
+        [SerializeField] private Text simpleMessageText;
+        [SerializeField] private float fieldRewardAutoHideSeconds = 1.5f;
 
         private readonly List<RewardItemUI> _spawnedItems = new List<RewardItemUI>();
         private CombatResult _pendingResult;
         private bool _subscribedToEntryPoint;
         private bool _closeButtonBound;
+        private Coroutine _fieldRewardRoutine;
 
         private void Awake()
         {
@@ -71,6 +75,18 @@ namespace Game.UI
 
             GenerateRewardList(result);
             rewardPanelRoot.SetActive(true);
+        }
+
+        public bool TryShowFieldRewardMessage(string message)
+        {
+            if (string.IsNullOrEmpty(message) || simpleMessageText == null)
+                return false;
+
+            if (_fieldRewardRoutine != null)
+                StopCoroutine(_fieldRewardRoutine);
+
+            _fieldRewardRoutine = StartCoroutine(Co_ShowFieldRewardMessage(message));
+            return true;
         }
 
         private void AutoBindReferences()
@@ -220,6 +236,23 @@ namespace Game.UI
         {
             if (GameStateMachine.Instance != null)
                 GameStateMachine.Instance.SetState(GameState.Exploration);
+        }
+
+        private IEnumerator Co_ShowFieldRewardMessage(string message)
+        {
+            simpleMessageText.text = message;
+
+            if (rewardPanelRoot != null)
+                rewardPanelRoot.SetActive(true);
+
+            yield return new WaitForSeconds(Mathf.Max(0.1f, fieldRewardAutoHideSeconds));
+
+            simpleMessageText.text = string.Empty;
+
+            if (_pendingResult == null && rewardPanelRoot != null)
+                rewardPanelRoot.SetActive(false);
+
+            _fieldRewardRoutine = null;
         }
     }
 }
