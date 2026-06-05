@@ -1,4 +1,5 @@
 using Game.Interaction;
+using Game.Quest;
 using UnityEngine;
 
 namespace Game.Story
@@ -26,18 +27,27 @@ namespace Game.Story
                 return;
             }
 
-            ChapterProgressManager manager = ChapterProgressManager.Instance;
-            if (manager == null)
-                manager = Object.FindFirstObjectByType<ChapterProgressManager>();
+            ChapterProgressManager chapterManager = ChapterProgressManager.Instance;
+            if (chapterManager == null)
+                chapterManager = Object.FindFirstObjectByType<ChapterProgressManager>();
 
-            if (manager != null)
+            if (chapterManager != null)
             {
-                manager.StartChapter(selectedCase.ChapterId);
-                manager.SetStep(startStep);
+                chapterManager.StartChapter(selectedCase.ChapterId);
+                chapterManager.SetStep(startStep);
             }
             else
             {
                 Debug.LogWarning("[ChapterStartInteractionEventSO] ChapterProgressManager is missing.");
+            }
+
+            if (selectedCase.StartQuest != null)
+            {
+                QuestManager questManager = QuestManager.Instance != null ? QuestManager.Instance : Object.FindFirstObjectByType<QuestManager>();
+                if (questManager != null)
+                    questManager.StartQuest(selectedCase.StartQuest);
+                else
+                    Debug.LogWarning("[ChapterStartInteractionEventSO] QuestManager is missing.");
             }
 
             string title = string.IsNullOrEmpty(selectedCase.CaseTitle) ? selectedCase.ChapterId.ToString() : selectedCase.CaseTitle;

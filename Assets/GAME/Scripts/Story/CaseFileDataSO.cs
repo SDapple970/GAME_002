@@ -1,3 +1,4 @@
+using Game.Quest;
 using UnityEngine;
 
 namespace Game.Story
@@ -12,6 +13,7 @@ namespace Game.Story
         [SerializeField] private string targetSceneName;
         [SerializeField] private string targetSpawnPointId;
         [SerializeField] private bool unlocked = true;
+        [SerializeField] private QuestDataSO startQuest;
 
         public ChapterId ChapterId => chapterId;
         public string CaseTitle => caseTitle;
@@ -19,5 +21,6 @@ namespace Game.Story
         public string TargetSceneName => targetSceneName;
         public string TargetSpawnPointId => targetSpawnPointId;
         public bool Unlocked => unlocked;
+        public QuestDataSO StartQuest => startQuest;
     }
 }
