@@ -19,6 +19,12 @@ namespace Game.Quest
                 return;
             }
 
+            if (!manager.IsActiveQuest(questId))
+            {
+                Debug.LogWarning($"[QuestAdvanceInteractionEventSO] Active quest mismatch or missing. questId={questId}", context.Target);
+                return;
+            }
+
             if (advanceByOne)
                 manager.AdvanceStep(questId);
             else

@@ -118,6 +118,12 @@ namespace Game.Quest
             return activeQuest != null && !activeQuest.completed ? activeQuest : null;
         }
 
+        public bool IsActiveQuest(QuestId id)
+        {
+            QuestProgress active = GetActiveQuest();
+            return active != null && active.QuestId == id;
+        }
+
         public QuestProgress GetProgress(QuestId id)
         {
             if (id == QuestId.None)

@@ -17,6 +17,12 @@ namespace Game.Quest
                 return;
             }
 
+            if (!manager.IsActiveQuest(questId))
+            {
+                Debug.LogWarning($"[QuestCompleteInteractionEventSO] Active quest mismatch or missing. questId={questId}", context.Target);
+                return;
+            }
+
             manager.CompleteQuest(questId);
         }
     }
