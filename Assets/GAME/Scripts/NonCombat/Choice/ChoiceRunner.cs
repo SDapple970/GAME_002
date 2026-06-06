@@ -13,7 +13,7 @@ namespace Game.NonCombat.Choice
         [SerializeField] private StoryFlagDatabase storyFlags;
         [SerializeField] private CurrencyWallet currencyWallet;
         [SerializeField] private InventoryService inventoryService;
-        [SerializeField] private ChapterProgressManager chapterProgressManager;
+        [SerializeField] private NonCombatChapterProgressManager chapterProgressManager;
         [SerializeField] private PersonaStatusManager personaStatusManager;
 
         private void Awake()
@@ -27,7 +27,7 @@ namespace Game.NonCombat.Choice
             Instance = this;
         }
 
-        public bool AreConditionsMet(ChoiceCondition[] conditions)
+        public bool AreConditionsMet(NonCombatChoiceCondition[] conditions)
         {
             if (conditions == null || conditions.Length == 0) return true;
 
@@ -40,14 +40,14 @@ namespace Game.NonCombat.Choice
             return true;
         }
 
-        public bool IsConditionMet(ChoiceCondition condition)
+        public bool IsConditionMet(NonCombatChoiceCondition condition)
         {
             if (condition == null) return true;
 
             StoryFlagDatabase flags = storyFlags != null ? storyFlags : StoryFlagDatabase.Instance;
             CurrencyWallet wallet = currencyWallet != null ? currencyWallet : CurrencyWallet.Instance;
             InventoryService inventory = inventoryService != null ? inventoryService : InventoryService.Instance;
-            ChapterProgressManager chapter = chapterProgressManager != null ? chapterProgressManager : ChapterProgressManager.Instance;
+            NonCombatChapterProgressManager chapter = chapterProgressManager != null ? chapterProgressManager : NonCombatChapterProgressManager.Instance;
             PersonaStatusManager persona = personaStatusManager != null ? personaStatusManager : PersonaStatusManager.Instance;
 
             switch (condition.Type)
@@ -86,7 +86,7 @@ namespace Game.NonCombat.Choice
             StoryFlagDatabase flags = storyFlags != null ? storyFlags : StoryFlagDatabase.Instance;
             CurrencyWallet wallet = currencyWallet != null ? currencyWallet : CurrencyWallet.Instance;
             InventoryService inventory = inventoryService != null ? inventoryService : InventoryService.Instance;
-            ChapterProgressManager chapter = chapterProgressManager != null ? chapterProgressManager : ChapterProgressManager.Instance;
+            NonCombatChapterProgressManager chapter = chapterProgressManager != null ? chapterProgressManager : NonCombatChapterProgressManager.Instance;
             PersonaStatusManager persona = personaStatusManager != null ? personaStatusManager : PersonaStatusManager.Instance;
 
             switch (outcome.Type)

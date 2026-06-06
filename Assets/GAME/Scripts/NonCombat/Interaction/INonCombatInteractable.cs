@@ -1,6 +1,6 @@
 namespace Game.NonCombat.Interaction
 {
-    public interface IInteractable
+    public interface INonCombatInteractable
     {
         bool CanInteract { get; }
         void Interact();

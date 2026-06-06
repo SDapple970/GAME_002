@@ -1,4 +1,4 @@
-// Assets/GAME/Scripts/Story/Runtime/World/StoryEventTrigger2D.cs
+// Assets/GAME/Scripts/Story/Runtime/World/StoryDialogueTrigger2D.cs
 using Game.Core;
 using Game.Story.Core;
 using Game.Story.Data;
@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace Game.Story.World
 {
-    public sealed class StoryEventTrigger2D : MonoBehaviour
+    public sealed class StoryDialogueTrigger2D : MonoBehaviour
     {
         [SerializeField] private DialogueDefinitionSO dialogue;
         [SerializeField] private DialogueRunner runner;
@@ -54,7 +54,7 @@ namespace Game.Story.World
 
             if (dialogue == null)
             {
-                Debug.LogWarning("[StoryEventTrigger2D] Dialogue is not assigned.");
+                Debug.LogWarning("[StoryDialogueTrigger2D] Dialogue is not assigned.");
                 return;
             }
 
@@ -67,7 +67,7 @@ namespace Game.Story.World
             {
                 if (StoryFlagManager.Instance == null)
                 {
-                    Debug.LogWarning("[StoryEventTrigger2D] StoryFlagManager is missing.");
+                    Debug.LogWarning("[StoryDialogueTrigger2D] StoryFlagManager is missing.");
                     return;
                 }
 
@@ -88,7 +88,7 @@ namespace Game.Story.World
 
             if (runner == null)
             {
-                Debug.LogWarning("[StoryEventTrigger2D] DialogueRunner could not be found.");
+                Debug.LogWarning("[StoryDialogueTrigger2D] DialogueRunner could not be found.");
                 return;
             }
 
@@ -100,7 +100,7 @@ namespace Game.Story.World
                 }
                 else
                 {
-                    Debug.LogWarning("[StoryEventTrigger2D] StoryFlagManager is missing. Result flag was not set.");
+                    Debug.LogWarning("[StoryDialogueTrigger2D] StoryFlagManager is missing. Result flag was not set.");
                 }
             }
 

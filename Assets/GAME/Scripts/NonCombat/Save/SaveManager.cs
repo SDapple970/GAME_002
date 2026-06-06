@@ -14,7 +14,7 @@ namespace Game.NonCombat.Save
         [SerializeField] private StoryFlagDatabase storyFlags;
         [SerializeField] private CurrencyWallet currencyWallet;
         [SerializeField] private InventoryService inventoryService;
-        [SerializeField] private ChapterProgressManager chapterProgressManager;
+        [SerializeField] private NonCombatChapterProgressManager chapterProgressManager;
         [SerializeField] private PersonaStatusManager personaStatusManager;
         [SerializeField] private Transform player;
 
@@ -57,7 +57,7 @@ namespace Game.NonCombat.Save
             StoryFlagDatabase flags = storyFlags != null ? storyFlags : StoryFlagDatabase.Instance;
             CurrencyWallet wallet = currencyWallet != null ? currencyWallet : CurrencyWallet.Instance;
             InventoryService inventory = inventoryService != null ? inventoryService : InventoryService.Instance;
-            ChapterProgressManager chapter = chapterProgressManager != null ? chapterProgressManager : ChapterProgressManager.Instance;
+            NonCombatChapterProgressManager chapter = chapterProgressManager != null ? chapterProgressManager : NonCombatChapterProgressManager.Instance;
             PersonaStatusManager persona = personaStatusManager != null ? personaStatusManager : PersonaStatusManager.Instance;
 
             data.currentChapterId = chapter != null ? chapter.CurrentChapterId : string.Empty;
@@ -100,7 +100,7 @@ namespace Game.NonCombat.Save
             StoryFlagDatabase flags = storyFlags != null ? storyFlags : StoryFlagDatabase.Instance;
             CurrencyWallet wallet = currencyWallet != null ? currencyWallet : CurrencyWallet.Instance;
             InventoryService inventory = inventoryService != null ? inventoryService : InventoryService.Instance;
-            ChapterProgressManager chapter = chapterProgressManager != null ? chapterProgressManager : ChapterProgressManager.Instance;
+            NonCombatChapterProgressManager chapter = chapterProgressManager != null ? chapterProgressManager : NonCombatChapterProgressManager.Instance;
             PersonaStatusManager persona = personaStatusManager != null ? personaStatusManager : PersonaStatusManager.Instance;
 
             if (flags != null)

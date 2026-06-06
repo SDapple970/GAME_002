@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 namespace Game.NonCombat.Dialogue
 {
-    public sealed class DialogueUIPanel : MonoBehaviour
+    public sealed class NonCombatDialogueUIPanel : MonoBehaviour
     {
         [SerializeField] private GameObject panelRoot;
         [SerializeField] private Text speakerText;

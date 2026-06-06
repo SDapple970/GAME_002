@@ -4,9 +4,9 @@ using UnityEngine;
 
 namespace Game.NonCombat.Chapter
 {
-    public sealed class ChapterProgressManager : MonoBehaviour
+    public sealed class NonCombatChapterProgressManager : MonoBehaviour
     {
-        public static ChapterProgressManager Instance { get; private set; }
+        public static NonCombatChapterProgressManager Instance { get; private set; }
 
         [SerializeField] private string currentChapterId;
         [SerializeField] private GameProgressState progressState;

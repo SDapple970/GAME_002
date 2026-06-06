@@ -1,5 +1,6 @@
 // Assets/GAME/Scripts/Story/Runtime/Data/StoryCondition.cs
 using Game.Story;
+using Game.Story.Core;
 using Game.Mission;
 using Game.Systems.Persona;
 using UnityEngine;

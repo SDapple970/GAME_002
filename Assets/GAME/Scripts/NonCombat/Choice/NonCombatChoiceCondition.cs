@@ -16,7 +16,7 @@ namespace Game.NonCombat.Choice
     }
 
     [Serializable]
-    public sealed class ChoiceCondition
+    public sealed class NonCombatChoiceCondition
     {
         [SerializeField] private ChoiceConditionType type;
         [SerializeField] private string id;

@@ -2,6 +2,7 @@ using Game.Core;
 using Game.Search.Data;
 using Game.Search.UI;
 using Game.Story;
+using Game.Story.Core;
 using Game.Story.Interaction;
 using UnityEngine;
 

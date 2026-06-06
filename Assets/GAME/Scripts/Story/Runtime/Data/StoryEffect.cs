@@ -1,5 +1,6 @@
 // Assets/GAME/Scripts/Story/Runtime/Data/StoryEffect.cs
 using Game.Story;
+using Game.Story.Core;
 using Game.Mission;
 using Game.Mission.Data;
 using Game.Systems.Persona;

@@ -1,12 +1,12 @@
-// Assets/GAME/Scripts/Story/Runtime/StoryFlagManager.cs
+// Deprecated compatibility copy. Runtime systems should use Game.Story.Core.StoryFlagManager.
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace Game.Story
 {
-    public sealed class StoryFlagManager : MonoBehaviour
+    public sealed class StoryFlagManagerDeprecated : MonoBehaviour
     {
-        public static StoryFlagManager Instance { get; private set; }
+        public static StoryFlagManagerDeprecated Instance { get; private set; }
 
         private readonly Dictionary<string, bool> _boolFlags = new();
         private readonly Dictionary<string, int> _intFlags = new();

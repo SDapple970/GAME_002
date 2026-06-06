@@ -1,6 +1,7 @@
 using System;
 using Game.Search;
 using Game.Story;
+using Game.Story.Core;
 using UnityEngine;
 
 namespace Game.Search.Data

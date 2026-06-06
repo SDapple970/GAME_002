@@ -8,7 +8,7 @@ namespace Game.NonCombat.Dialogue
     {
         public static DialogueController Instance { get; private set; }
 
-        [SerializeField] private DialogueUIPanel uiPanel;
+        [SerializeField] private NonCombatDialogueUIPanel uiPanel;
         [SerializeField] private ChoiceRunner choiceRunner;
 
         private DialogueNodeSO _currentNode;
@@ -76,7 +76,7 @@ namespace Game.NonCombat.Dialogue
 
             if (uiPanel == null)
             {
-                Debug.LogWarning("[DialogueController] DialogueUIPanel is missing.", this);
+                Debug.LogWarning("[DialogueController] NonCombatDialogueUIPanel is missing.", this);
                 EndDialogue();
                 return;
             }

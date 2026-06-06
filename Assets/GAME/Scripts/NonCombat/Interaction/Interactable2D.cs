@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace Game.NonCombat.Interaction
 {
-    public sealed class Interactable2D : MonoBehaviour, IInteractable
+    public sealed class Interactable2D : MonoBehaviour, INonCombatInteractable
     {
         [SerializeField] private DialogueNodeSO dialogueNode;
         [SerializeField] private DialogueController dialogueController;

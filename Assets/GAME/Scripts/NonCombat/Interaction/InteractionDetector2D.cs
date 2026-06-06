@@ -7,7 +7,7 @@ namespace Game.NonCombat.Interaction
     [RequireComponent(typeof(Collider2D))]
     public sealed class InteractionDetector2D : MonoBehaviour
     {
-        private readonly List<IInteractable> _candidates = new();
+        private readonly List<INonCombatInteractable> _candidates = new();
         private bool _inputSubscribed;
 
         private void Awake()
@@ -46,13 +46,13 @@ namespace Game.NonCombat.Interaction
 
         private void OnTriggerEnter2D(Collider2D other)
         {
-            if (TryGetInteractable(other, out IInteractable interactable) && !_candidates.Contains(interactable))
+            if (TryGetInteractable(other, out INonCombatInteractable interactable) && !_candidates.Contains(interactable))
                 _candidates.Add(interactable);
         }
 
         private void OnTriggerExit2D(Collider2D other)
         {
-            if (TryGetInteractable(other, out IInteractable interactable))
+            if (TryGetInteractable(other, out INonCombatInteractable interactable))
                 _candidates.Remove(interactable);
         }
 
@@ -61,19 +61,19 @@ namespace Game.NonCombat.Interaction
             if (GameStateMachine.Instance != null && !GameStateMachine.Instance.Is(GameState.Exploration))
                 return;
 
-            IInteractable nearest = FindNearest();
+            INonCombatInteractable nearest = FindNearest();
             if (nearest != null && nearest.CanInteract)
                 nearest.Interact();
         }
 
-        private IInteractable FindNearest()
+        private INonCombatInteractable FindNearest()
         {
-            IInteractable nearest = null;
+            INonCombatInteractable nearest = null;
             float nearestDistance = float.MaxValue;
 
             for (int i = _candidates.Count - 1; i >= 0; i--)
             {
-                IInteractable candidate = _candidates[i];
+                INonCombatInteractable candidate = _candidates[i];
                 if (candidate == null)
                 {
                     _candidates.RemoveAt(i);
@@ -98,13 +98,13 @@ namespace Game.NonCombat.Interaction
             return nearest;
         }
 
-        private static bool TryGetInteractable(Collider2D collider, out IInteractable interactable)
+        private static bool TryGetInteractable(Collider2D collider, out INonCombatInteractable interactable)
         {
             interactable = null;
             MonoBehaviour[] behaviours = collider.GetComponentsInParent<MonoBehaviour>();
             for (int i = 0; i < behaviours.Length; i++)
             {
-                if (behaviours[i] is IInteractable candidate)
+                if (behaviours[i] is INonCombatInteractable candidate)
                 {
                     interactable = candidate;
                     return true;
