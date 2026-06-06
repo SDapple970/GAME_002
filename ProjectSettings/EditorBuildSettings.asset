@@ -12,6 +12,9 @@ EditorBuildSettings:
     path: Assets/GAME/Scenes/OfficeScene.unity
     guid: 067337ffc1a743149a5e67d29e1c6b65
   - enabled: 1
+    path: Assets/GAME/Scenes/Demo.unity
+    guid: 0139c7b1341ff8c43b10cca07e782480
+  - enabled: 0
     path: Assets/GAME/Scenes/Dungeon 1.unity
     guid: 85b60387df727dc4a90e75cac782c152
   - enabled: 0
