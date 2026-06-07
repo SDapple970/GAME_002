@@ -15,6 +15,7 @@ namespace Game.Mission
         private readonly Dictionary<string, HashSet<string>> completedObjectivesByMission = new();
 
         public event Action OnMissionStateChanged;
+        public event Action<MissionDefinitionSO> OnMissionCompleted;
 
         public IReadOnlyList<MissionDefinitionSO> ActiveMissions => activeMissions;
 
@@ -81,6 +82,7 @@ namespace Game.Mission
         {
             if (string.IsNullOrEmpty(missionId)) return;
 
+            MissionDefinitionSO completedMission = GetActiveMission(missionId);
             for (int i = activeMissions.Count - 1; i >= 0; i--)
             {
                 MissionDefinitionSO mission = activeMissions[i];
@@ -90,7 +92,10 @@ namespace Game.Mission
                 }
             }
 
-            completedMissionIds.Add(missionId);
+            bool newlyCompleted = completedMissionIds.Add(missionId);
+            if (newlyCompleted && completedMission != null)
+                OnMissionCompleted?.Invoke(completedMission);
+
             NotifyChanged();
         }
 
