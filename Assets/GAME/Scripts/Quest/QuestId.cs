@@ -5,6 +5,7 @@ namespace Game.Quest
         None = 0,
         TutorialPermit = 10,
         GoToOffice = 20,
-        FirstFieldInvestigation = 30
+        FirstFieldInvestigation = 30,
+        BIC_Zone01 = 100
     }
 }
