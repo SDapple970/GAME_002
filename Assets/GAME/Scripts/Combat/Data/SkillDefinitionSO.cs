@@ -19,6 +19,12 @@ namespace Game.Combat.Data
         [Header("Keywords")]
         public KeywordMask keywords = KeywordMask.None;
 
+        [Header("Movement Presentation")]
+        public SkillMovementMode movementMode = SkillMovementMode.None;
+        public float desiredTargetDistance = 1.0f;
+        public float moveSpeed = 6.0f;
+        public float actionDelayAfterMove = 0.15f;
+
         [Header("MVP Numbers")]
         public int baseDamage = 1;
         public int baseStagger = 1;

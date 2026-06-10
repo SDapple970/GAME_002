@@ -1,4 +1,4 @@
-﻿// 위치: GAME/Scripts/Combat/Integration/CombatFormationManager.cs
+// 위치: GAME/Scripts/Combat/Integration/CombatFormationManager.cs
 using System.Collections;
 using UnityEngine;
 using Game.Combat.Core;
@@ -14,6 +14,7 @@ namespace Game.Combat.Integration
     {
         [Header("System References")]
         [SerializeField] private CombatEntryPoint entryPoint;
+        [SerializeField] private bool enableFormationPlacement = false;
 
         [Header("Dynamic Formation Settings")]
         [Tooltip("전투 중심점에서 아군(1번)이 왼쪽으로 떨어질 거리")]
@@ -39,6 +40,7 @@ namespace Game.Combat.Integration
 
         private void HandleCombatStarted(CombatSession session)
         {
+            if (!enableFormationPlacement) return;
             if (session.Allies.Count == 0 || session.Enemies.Count == 0) return;
 
             // 1. 전투의 중심점 계산 (카메라가 비추는 곳과 동일한 위치)

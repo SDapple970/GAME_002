@@ -30,13 +30,13 @@ namespace Game.Combat.Core
 
             if (_session == null)
             {
-                errorMessage = "ÀüÅõ ¼¼¼ÇÀÌ ¿¬°áµÇÁö ¾Ê¾Ò½À´Ï´Ù.";
+                errorMessage = "ì „íˆ¬ ì„¸ì…˜ì´ ì—°ê²°ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.";
                 return false;
             }
 
             if (entryPoint == null)
             {
-                errorMessage = "CombatEntryPoint ÂüÁ¶°¡ ¾ø½À´Ï´Ù.";
+                errorMessage = "CombatEntryPoint ì°¸ì¡°ê°€ ì—†ìŠµë‹ˆë‹¤.";
                 return false;
             }
 
@@ -64,20 +64,29 @@ namespace Game.Combat.Core
             if (_session == null || _session.Allies.Count == 0)
                 return;
 
-            var firstAlly = _session.Allies[0];
+            ICombatant player = _session.Allies[0];
+            if (player == null || player.HP <= 0)
+            {
+                FillEnemiesWithNone();
+                return;
+            }
 
             foreach (var enemy in _session.Enemies)
             {
                 if (enemy == null) continue;
                 if (_session.CurrentTurn.TryGetPlan(enemy.Id, out _)) continue;
 
-                if (enemy.IsStunned)
+                if (enemy.HP <= 0 || enemy.IsStunned)
                 {
                     _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(PlannedAction.None, PlannedAction.None));
                     continue;
                 }
 
-                ISkill skill = enemy.Skills.Count > 0 ? enemy.Skills[0] : null;
+                int skillCount = Mathf.Min(enemy.Skills.Count, 3);
+                ISkill skill = skillCount > 0
+                    ? enemy.Skills[Mathf.Max(0, _session.TurnIndex - 1) % skillCount]
+                    : null;
+
                 if (skill == null)
                 {
                     _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(PlannedAction.None, PlannedAction.None));
@@ -88,12 +97,27 @@ namespace Game.Combat.Core
                     skillId: skill.Id,
                     tag: skill.Tag,
                     targeting: skill.Targeting,
-                    targetCombatantId: firstAlly.Id,
+                    targetCombatantId: player.Id,
                     plannedSpeed: skill.Speed,
                     consumesTurn: skill.ConsumesTurn
                 );
 
                 _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(pa, PlannedAction.None));
+            }
+        }
+
+        private void FillEnemiesWithNone()
+        {
+            if (_session == null || _session.CurrentTurn == null)
+                return;
+
+            foreach (ICombatant enemy in _session.Enemies)
+            {
+                if (enemy == null)
+                    continue;
+
+                if (!_session.CurrentTurn.TryGetPlan(enemy.Id, out _))
+                    _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(PlannedAction.None, PlannedAction.None));
             }
         }
     }

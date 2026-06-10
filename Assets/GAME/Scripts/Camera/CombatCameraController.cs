@@ -1,95 +1,208 @@
-﻿// 위치: GAME/Scripts/Combat/Integration/CombatCameraController.cs
+using System.Collections;
 using UnityEngine;
-using Game.Combat.Core;
 using Game.CameraSys;
 using Game.Combat.Adapters;
-using Game.Combat.Model; // 🌟 [수정 포인트] 이 줄이 추가되었어!
+using Game.Combat.Model;
 
 namespace Game.Combat.Integration
 {
-    /// <summary>
-    /// 전투 시작 시 카메라를 전투 대형의 중앙으로 이동시키고 줌 아웃합니다.
-    /// </summary>
     public sealed class CombatCameraController : MonoBehaviour
     {
-        [Header("System References")]
-        [SerializeField] private CombatEntryPoint entryPoint;
-        [Tooltip("씬에 있는 Main Camera (CameraFollow2D 컴포넌트)")]
-        [SerializeField] private CameraFollow2D mainCamera;
+        [Header("References")]
+        [SerializeField] private Camera targetCamera;
+        [SerializeField] private MonoBehaviour explorationCameraFollow;
+        [SerializeField, HideInInspector] private CameraFollow2D mainCamera;
 
-        [Header("Combat Camera Settings")]
-        [Tooltip("전투 중 카메라가 비출 중심점 (빈 오브젝트 할당, 없으면 자동 생성)")]
-        [SerializeField] private Transform combatCenterPoint;
-        [Tooltip("전투 시 카메라 줌 아웃 크기 (기본값보다 숫자가 크면 넓게 보임)")]
-        [SerializeField] private float combatZoomSize = 6.5f;
+        [Header("Framing")]
+        [SerializeField] private float transitionDuration = 0.35f;
+        [SerializeField] private float combatPadding = 2f;
+        [SerializeField] private float minOrthoSize = 4f;
+        [SerializeField] private float maxOrthoSize = 8f;
+        [SerializeField] private Vector3 combatOffset = new Vector3(0f, 0.8f, 0f);
 
-        private Transform _originalTarget;
+        private CombatSession _session;
+        private Coroutine _moveRoutine;
 
-        private void Awake()
+        public void EnterCombat(CombatSession session)
         {
-            if (combatCenterPoint == null)
-            {
-                combatCenterPoint = new GameObject("CombatCenterPoint").transform;
-            }
+            EnsureReferences();
+
+            _session = session;
+
+            if (explorationCameraFollow != null)
+                explorationCameraFollow.enabled = false;
+
+            FocusPlanning();
         }
 
-        private void OnEnable()
+        public void FocusPlanning()
         {
-            if (entryPoint != null)
-            {
-                entryPoint.OnCombatStarted += HandleCombatStarted;
-                entryPoint.OnCombatEnded += HandleCombatEnded;
-            }
+            EnsureReferences();
+
+            if (targetCamera == null || _session == null)
+                return;
+
+            if (!TryGetPrimaryPositions(_session, out Vector3 playerPosition, out Vector3 enemyPosition))
+                return;
+
+            FramePositions(playerPosition, enemyPosition);
         }
 
-        private void OnDisable()
+        public void FocusAction(ICombatant actor, ICombatant target)
         {
-            if (entryPoint != null)
-            {
-                entryPoint.OnCombatStarted -= HandleCombatStarted;
-                entryPoint.OnCombatEnded -= HandleCombatEnded;
-            }
+            EnsureReferences();
+
+            if (targetCamera == null)
+                return;
+
+            if (!TryGetPosition(actor, out Vector3 actorPosition))
+                return;
+
+            if (!TryGetPosition(target, out Vector3 targetPosition))
+                targetPosition = actorPosition;
+
+            FramePositions(actorPosition, targetPosition);
         }
 
-        private void HandleCombatStarted(CombatSession session)
+        public void HoldResultFrame()
         {
-            if (mainCamera == null) return;
-
-            // 1. 기존 필드 타겟(플레이어) 기억해두기
-            _originalTarget = mainCamera.GetTarget();
-
-            // 2. 아군과 적군의 위치를 읽어와서 완벽한 중앙값(Center) 계산
-            if (session.Allies.Count > 0 && session.Enemies.Count > 0)
-            {
-                var allyObj = ((FieldCombatantAdapter)session.Allies[0]).FieldObject;
-                var enemyObj = ((FieldCombatantAdapter)session.Enemies[0]).FieldObject;
-
-                if (allyObj != null && enemyObj != null)
-                {
-                    Vector3 centerPos = (allyObj.transform.position + enemyObj.transform.position) / 2f;
-                    combatCenterPoint.position = centerPos;
-                }
-            }
-
-            // 3. 카메라에게 새로운 타겟과 줌아웃 명령 내리기!
-            mainCamera.SetTarget(combatCenterPoint);
-            mainCamera.SetZoom(combatZoomSize);
-
-            Debug.Log("[CombatCamera] 전투 카메라 뷰 전환 완료!");
+            if (explorationCameraFollow != null)
+                explorationCameraFollow.enabled = false;
         }
 
-        private void HandleCombatEnded(CombatResult result)
+        public void ExitToExplorationFollow()
         {
-            if (mainCamera == null) return;
+            StopActiveRoutine();
 
-            // 전투가 끝나면 카메라를 다시 원래 플레이어에게 돌려주고 줌 복구
-            if (_originalTarget != null)
+            if (explorationCameraFollow != null)
+                explorationCameraFollow.enabled = true;
+
+            _session = null;
+        }
+
+        private void EnsureReferences()
+        {
+            if (targetCamera == null)
             {
-                mainCamera.SetTarget(_originalTarget);
-            }
-            mainCamera.ResetZoom();
+                if (mainCamera != null)
+                    targetCamera = mainCamera.GetComponent<Camera>();
 
-            Debug.Log("[CombatCamera] 탐험 카메라 뷰 복구 완료!");
+                if (targetCamera == null)
+                    targetCamera = GetComponent<Camera>();
+
+                if (targetCamera == null)
+                    targetCamera = Camera.main;
+            }
+
+            if (explorationCameraFollow == null && mainCamera != null)
+                explorationCameraFollow = mainCamera;
+        }
+
+        private void FramePositions(Vector3 a, Vector3 b)
+        {
+            Vector3 center = (a + b) * 0.5f;
+            Vector3 cameraPosition = center + combatOffset;
+            cameraPosition.z = targetCamera.transform.position.z;
+
+            float size = CalculateOrthoSize(a, b);
+            StartCameraMove(cameraPosition, size);
+        }
+
+        private float CalculateOrthoSize(Vector3 a, Vector3 b)
+        {
+            float aspect = targetCamera != null && targetCamera.aspect > 0f ? targetCamera.aspect : 1.777f;
+
+            Bounds bounds = new Bounds(a, Vector3.zero);
+            bounds.Encapsulate(b);
+
+            float verticalSize = bounds.extents.y + combatPadding;
+            float horizontalSize = (bounds.extents.x + combatPadding) / aspect;
+            float targetSize = Mathf.Max(verticalSize, horizontalSize, minOrthoSize);
+
+            return Mathf.Clamp(targetSize, minOrthoSize, maxOrthoSize);
+        }
+
+        private void StartCameraMove(Vector3 position, float orthoSize)
+        {
+            StopActiveRoutine();
+
+            if (transitionDuration <= 0.001f)
+            {
+                targetCamera.transform.position = position;
+                targetCamera.orthographicSize = orthoSize;
+                return;
+            }
+
+            _moveRoutine = StartCoroutine(Co_MoveCamera(position, orthoSize));
+        }
+
+        private IEnumerator Co_MoveCamera(Vector3 endPosition, float endSize)
+        {
+            Vector3 startPosition = targetCamera.transform.position;
+            float startSize = targetCamera.orthographicSize;
+            float elapsed = 0f;
+
+            while (elapsed < transitionDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / transitionDuration);
+                float eased = Mathf.SmoothStep(0f, 1f, t);
+
+                targetCamera.transform.position = Vector3.Lerp(startPosition, endPosition, eased);
+                targetCamera.orthographicSize = Mathf.Lerp(startSize, endSize, eased);
+                yield return null;
+            }
+
+            targetCamera.transform.position = endPosition;
+            targetCamera.orthographicSize = endSize;
+            _moveRoutine = null;
+        }
+
+        private void StopActiveRoutine()
+        {
+            if (_moveRoutine == null)
+                return;
+
+            StopCoroutine(_moveRoutine);
+            _moveRoutine = null;
+        }
+
+        private static bool TryGetPrimaryPositions(CombatSession session, out Vector3 playerPosition, out Vector3 enemyPosition)
+        {
+            playerPosition = Vector3.zero;
+            enemyPosition = Vector3.zero;
+
+            if (session == null || session.Allies.Count == 0)
+                return false;
+
+            ICombatant player = session.Allies[0];
+            if (!TryGetPosition(player, out playerPosition))
+                return false;
+
+            for (int i = 0; i < session.Enemies.Count; i++)
+            {
+                ICombatant enemy = session.Enemies[i];
+                if (enemy == null || enemy.HP <= 0)
+                    continue;
+
+                if (TryGetPosition(enemy, out enemyPosition))
+                    return true;
+            }
+
+            enemyPosition = playerPosition;
+            return true;
+        }
+
+        private static bool TryGetPosition(ICombatant combatant, out Vector3 position)
+        {
+            position = Vector3.zero;
+
+            FieldCombatantAdapter adapter = combatant as FieldCombatantAdapter;
+            if (adapter == null || adapter.FieldObject == null)
+                return false;
+
+            position = adapter.FieldObject.transform.position;
+            return true;
         }
     }
 }

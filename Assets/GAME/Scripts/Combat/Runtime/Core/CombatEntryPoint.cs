@@ -1,4 +1,4 @@
-﻿// GAME_002/Assets/GAME/Scripts/Combat/Core/CombatEntryPoint.cs
+// GAME_002/Assets/GAME/Scripts/Combat/Core/CombatEntryPoint.cs
 using Game.Combat.Actions;
 using Game.Combat.Adapters;
 using Game.Combat.Data;
@@ -155,6 +155,8 @@ namespace Game.Combat.Core
 
             ActiveStateMachine.ForceExit(reason);
 
+            ApplyCombatOutcomeToField(ActiveSession);
+
             var result = CombatResultBuilder.Build(ActiveSession, reason);
             OnCombatEnded?.Invoke(result);
 
@@ -190,8 +192,8 @@ namespace Game.Combat.Core
                 openingEffectOrNull
             );
 
-            if (allyFieldObjects != null) req.AllyFieldObjects.AddRange(allyFieldObjects);
-            if (enemyFieldObjects != null) req.EnemyFieldObjects.AddRange(enemyFieldObjects);
+            AddFirstFieldObject(req.AllyFieldObjects, allyFieldObjects);
+            AddFirstFieldObject(req.EnemyFieldObjects, enemyFieldObjects);
 
             var factory = new FieldCombatantFactory(_book);
             (ActiveSession, ActiveStateMachine) = CombatBootstrapper.StartCombat(req, _book, factory);
@@ -218,6 +220,9 @@ namespace Game.Combat.Core
             if (ActiveSession.Enemies.Count == 0)
                 Debug.LogError("[CombatEntryPoint] Combat start produced no enemies. Check enemy HP component, active state, and encounter group binding.");
 
+            if (flowOrchestrator != null)
+                flowOrchestrator.BindSession(ActiveSession);
+
             if (ActiveStateMachine != null && ActiveStateMachine.Phase == Phase.EnterCombat)
             {
                 ActiveStateMachine.Tick();
@@ -230,12 +235,24 @@ namespace Game.Combat.Core
             Debug.Log($"[EntryPoint] Combat started. Reason={reason}, Initiative={initiativeSide}, Allies={ActiveSession.Allies.Count}, Enemies={ActiveSession.Enemies.Count}");
             OnCombatStarted?.Invoke(ActiveSession);
 
-
-            if (flowOrchestrator != null)
-                flowOrchestrator.BindSession(ActiveSession);
-
             _startingCombat = false;
             return true;
+        }
+
+        private static void AddFirstFieldObject(List<GameObject> destination, List<GameObject> source)
+        {
+            if (destination == null || source == null)
+                return;
+
+            for (int i = 0; i < source.Count; i++)
+            {
+                GameObject fieldObject = source[i];
+                if (fieldObject == null)
+                    continue;
+
+                destination.Add(fieldObject);
+                return;
+            }
         }
 
         private bool CanStartCombatFromField()

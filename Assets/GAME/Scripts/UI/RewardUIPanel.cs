@@ -1,9 +1,10 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
-using Game.Core;
-using Game.Combat.Core;
 using Game.Combat.Model;
 using Game.NonCombat.Reward;
 
@@ -11,70 +12,72 @@ namespace Game.UI
 {
     public sealed class RewardUIPanel : MonoBehaviour
     {
-        [Header("System References")]
-        [SerializeField] private CombatEntryPoint combatEntryPoint;
-        [SerializeField] private RewardApplier rewardApplier;
-
         [Header("UI References")]
-        [SerializeField] private GameObject rewardPanelRoot;
-        [SerializeField] private Transform contentContainer;
-        [SerializeField] private RewardItemUI rewardItemPrefab;
+        [FormerlySerializedAs("rewardPanelRoot")]
+        [SerializeField] private GameObject root;
+        [SerializeField] private TMP_Text titleText;
+        [SerializeField] private TMP_Text resultText;
+        [FormerlySerializedAs("contentContainer")]
+        [SerializeField] private Transform rewardRowRoot;
         [SerializeField] private Button closeButton;
+
+        [Header("Legacy / Optional")]
+        [SerializeField] private Text titleLegacyText;
+        [SerializeField] private Text resultLegacyText;
         [SerializeField] private Text simpleMessageText;
         [SerializeField] private float fieldRewardAutoHideSeconds = 1.5f;
+        [SerializeField] private RewardApplier rewardApplier;
 
-        private readonly List<RewardItemUI> _spawnedItems = new List<RewardItemUI>();
+        public event Action OnClosed;
+
+        private readonly List<GameObject> _spawnedRows = new();
         private CombatResult _pendingResult;
-        private bool _subscribedToEntryPoint;
         private bool _closeButtonBound;
         private Coroutine _fieldRewardRoutine;
 
         private void Awake()
         {
-            AutoBindReferences();
+            if (rewardApplier == null)
+                rewardApplier = RewardApplier.Instance;
 
-            if (rewardPanelRoot != null)
-                rewardPanelRoot.SetActive(false);
+            Hide();
         }
 
         private void OnEnable()
         {
-            AutoBindReferences();
-            SubscribeToEntryPoint();
             BindCloseButton();
         }
 
         private void OnDisable()
         {
-            UnsubscribeFromEntryPoint();
             UnbindCloseButton();
         }
 
-        private void HandleCombatEnded(CombatResult result)
+        public void Show(CombatResult result)
         {
-            if (result == null)
-                return;
-
-            if (!result.IsWin)
-            {
-                RestoreExploration();
-                return;
-            }
-
-            if (!CanOpenRewardPanel())
-            {
-                ApplyReward(result);
-                RestoreExploration();
-                return;
-            }
-
             _pendingResult = result;
+            ClearRewardRows();
 
-            if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(GameState.UIOnly);
+            bool isWin = result != null && result.IsWin;
+            SetText(titleText, titleLegacyText, isWin ? "임무 완료" : "임무 실패");
+            SetText(resultText, resultLegacyText, BuildResultText(result));
 
-            GenerateRewardList(result);
-            rewardPanelRoot.SetActive(true);
+            if (isWin)
+            {
+                AddRewardRow("Gold 100");
+                AddRewardRow("Potion 1");
+            }
+
+            if (root != null)
+                root.SetActive(true);
+        }
+
+        public void Hide()
+        {
+            ClearRewardRows();
+
+            if (root != null)
+                root.SetActive(false);
         }
 
         public bool TryShowFieldRewardMessage(string message)
@@ -87,42 +90,6 @@ namespace Game.UI
 
             _fieldRewardRoutine = StartCoroutine(Co_ShowFieldRewardMessage(message));
             return true;
-        }
-
-        private void AutoBindReferences()
-        {
-            if (combatEntryPoint == null)
-                combatEntryPoint = FindFirstObjectByType<CombatEntryPoint>();
-
-            if (rewardApplier == null)
-                rewardApplier = RewardApplier.Instance;
-        }
-
-        private void SubscribeToEntryPoint()
-        {
-            if (_subscribedToEntryPoint)
-                return;
-
-            if (combatEntryPoint == null)
-            {
-                Debug.LogWarning("[RewardUIPanel] CombatEntryPoint is not assigned.", this);
-                return;
-            }
-
-            combatEntryPoint.OnCombatEnded += HandleCombatEnded;
-            _subscribedToEntryPoint = true;
-        }
-
-        private void UnsubscribeFromEntryPoint()
-        {
-            if (!_subscribedToEntryPoint || combatEntryPoint == null)
-            {
-                _subscribedToEntryPoint = false;
-                return;
-            }
-
-            combatEntryPoint.OnCombatEnded -= HandleCombatEnded;
-            _subscribedToEntryPoint = false;
         }
 
         private void BindCloseButton()
@@ -146,67 +113,41 @@ namespace Game.UI
             _closeButtonBound = false;
         }
 
-        private bool CanOpenRewardPanel()
-        {
-            if (rewardPanelRoot == null)
-            {
-                Debug.LogError("[RewardUIPanel] rewardPanelRoot is null.", this);
-                return false;
-            }
-
-            if (contentContainer == null)
-            {
-                Debug.LogError("[RewardUIPanel] contentContainer is null.", this);
-                return false;
-            }
-
-            if (rewardItemPrefab == null)
-            {
-                Debug.LogError("[RewardUIPanel] rewardItemPrefab is null.", this);
-                return false;
-            }
-
-            return true;
-        }
-
-        private void GenerateRewardList(CombatResult result)
-        {
-            ClearRewardList();
-
-            List<string> options = new List<string>
-            {
-                $"경험치 집중 ({result.TotalExp * 2} EXP)",
-                $"전리품 집중 ({result.TotalGold * 2} G)",
-                "새로운 스킬 해금: 연속 베기",
-                "체력 100% 회복",
-                "신비한 조각 획득"
-            };
-
-            foreach (string option in options)
-            {
-                RewardItemUI newItem = Instantiate(rewardItemPrefab, contentContainer);
-                newItem.Setup(option, OnRewardSelected);
-                _spawnedItems.Add(newItem);
-            }
-        }
-
-        private void OnRewardSelected(string selectedReward)
-        {
-            Debug.Log($"[RewardUIPanel] 선택한 보상: {selectedReward}", this);
-            CloseRewardPanel();
-        }
-
         private void CloseRewardPanel()
         {
             ApplyReward(_pendingResult);
             _pendingResult = null;
 
-            ClearRewardList();
+            Hide();
+            OnClosed?.Invoke();
+        }
 
-            if (rewardPanelRoot != null)
-                rewardPanelRoot.SetActive(false);
+        private void AddRewardRow(string text)
+        {
+            if (rewardRowRoot == null)
+                return;
 
-            RestoreExploration();
+            GameObject row = new GameObject(text, typeof(RectTransform));
+            row.transform.SetParent(rewardRowRoot, false);
+
+            TMP_Text rowText = row.AddComponent<TextMeshProUGUI>();
+            rowText.text = text;
+            rowText.fontSize = 22f;
+            rowText.color = Color.white;
+            rowText.raycastTarget = false;
+
+            _spawnedRows.Add(row);
+        }
+
+        private void ClearRewardRows()
+        {
+            for (int i = 0; i < _spawnedRows.Count; i++)
+            {
+                if (_spawnedRows[i] != null)
+                    Destroy(_spawnedRows[i]);
+            }
+
+            _spawnedRows.Clear();
         }
 
         private void ApplyReward(CombatResult result)
@@ -217,40 +158,41 @@ namespace Game.UI
             RewardApplier applier = rewardApplier != null ? rewardApplier : RewardApplier.Instance;
             if (applier != null)
                 applier.ApplyCombatResult(result);
-            else
-                Debug.LogWarning("[RewardUIPanel] RewardApplier is missing.", this);
         }
 
-        private void ClearRewardList()
+        private static string BuildResultText(CombatResult result)
         {
-            foreach (RewardItemUI item in _spawnedItems)
-            {
-                if (item != null)
-                    Destroy(item.gameObject);
-            }
+            if (result == null)
+                return string.Empty;
 
-            _spawnedItems.Clear();
+            if (result.IsWin)
+                return "Gold 100\nPotion 1";
+
+            return $"전투 종료 사유: {result.EndReason}";
         }
 
-        private static void RestoreExploration()
+        private static void SetText(TMP_Text tmpText, Text legacyText, string value)
         {
-            if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(GameState.Exploration);
+            if (tmpText != null)
+                tmpText.text = value;
+
+            if (legacyText != null)
+                legacyText.text = value;
         }
 
         private IEnumerator Co_ShowFieldRewardMessage(string message)
         {
             simpleMessageText.text = message;
 
-            if (rewardPanelRoot != null)
-                rewardPanelRoot.SetActive(true);
+            if (root != null)
+                root.SetActive(true);
 
             yield return new WaitForSeconds(Mathf.Max(0.1f, fieldRewardAutoHideSeconds));
 
             simpleMessageText.text = string.Empty;
 
-            if (_pendingResult == null && rewardPanelRoot != null)
-                rewardPanelRoot.SetActive(false);
+            if (_pendingResult == null && root != null)
+                root.SetActive(false);
 
             _fieldRewardRoutine = null;
         }

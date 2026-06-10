@@ -16,6 +16,10 @@ namespace Game.Combat.Actions
         public KeywordMask Keywords => _so.keywords;
         public SkillTag Tag => _so.tag;
         public TargetingRule Targeting => _so.targeting;
+        public SkillMovementMode MovementMode => _so.movementMode;
+        public float DesiredTargetDistance => _so.desiredTargetDistance;
+        public float MoveSpeed => _so.moveSpeed;
+        public float ActionDelayAfterMove => _so.actionDelayAfterMove;
 
         public int BaseDamage => _so.baseDamage;
         public int BaseStagger => _so.baseStagger;
