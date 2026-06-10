@@ -4,6 +4,7 @@ using UnityEngine;
 using Game.Combat.Core;
 using Game.Combat.Model;
 using Game.Combat.Adapters;
+using Game.DemoMission.Runtime;
 
 namespace Game.Battle
 {
@@ -24,7 +25,12 @@ namespace Game.Battle
         [SerializeField] private float aggroRange = 5f;
         [SerializeField] private float moveSpeed = 2.5f;
 
+        [Header("Demo Mission Optional")]
+        [SerializeField] private bool countAsDemoMissionEnemy;
+        [SerializeField] private DemoMissionRuntime demoMissionRuntime;
+
         private bool _isEncounterTriggered;
+        private bool _demoMissionDefeatRegistered;
 
         private void Awake()
         {
@@ -37,6 +43,23 @@ namespace Game.Battle
                 if (player != null)
                     playerTarget = player.transform;
             }
+        }
+
+        private void OnEnable()
+        {
+            if (combatEntryPoint == null)
+                combatEntryPoint = FindFirstObjectByType<CombatEntryPoint>();
+
+            if (combatEntryPoint != null)
+                combatEntryPoint.OnCombatEnded += HandleCombatEnded;
+        }
+
+        private void OnDisable()
+        {
+            TryRegisterDemoMissionDefeatFromDisable();
+
+            if (combatEntryPoint != null)
+                combatEntryPoint.OnCombatEnded -= HandleCombatEnded;
         }
 
         private void Reset()
@@ -114,6 +137,41 @@ namespace Game.Battle
 
             if (started)
                 Debug.Log($"[FieldEnemy] Combat started. reason={reason}, initiative={initiativeSide}");
+        }
+
+        public void RegisterDemoMissionDefeat()
+        {
+            if (_demoMissionDefeatRegistered)
+                return;
+
+            if (demoMissionRuntime == null)
+                demoMissionRuntime = DemoMissionRuntime.GetOrCreate();
+
+            _demoMissionDefeatRegistered = true;
+            demoMissionRuntime.RegisterEnemyDefeated();
+        }
+
+        private void HandleCombatEnded(CombatResult result)
+        {
+            if (!countAsDemoMissionEnemy || _demoMissionDefeatRegistered)
+                return;
+
+            if (!_isEncounterTriggered || result == null || !result.IsWin)
+                return;
+
+            RegisterDemoMissionDefeat();
+        }
+
+        private void TryRegisterDemoMissionDefeatFromDisable()
+        {
+            if (!countAsDemoMissionEnemy || _demoMissionDefeatRegistered || !_isEncounterTriggered)
+                return;
+
+            HpAccessor hpAccessor = HpAccessor.TryCreate(gameObject);
+            if (hpAccessor == null || !hpAccessor.IsValid || hpAccessor.GetHp() > 0)
+                return;
+
+            RegisterDemoMissionDefeat();
         }
     }
 }
