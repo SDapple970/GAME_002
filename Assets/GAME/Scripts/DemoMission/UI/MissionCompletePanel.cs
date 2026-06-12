@@ -1,16 +1,23 @@
 using System.Collections;
+using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 using Game.Core;
+using Game.DemoMission.Runtime;
 
 namespace Game.DemoMission.UI
 {
     public sealed class MissionCompletePanel : MonoBehaviour
     {
-        [SerializeField] private string titleSceneName = "TitleScene";
-        [SerializeField] private Button returnButton;
         [SerializeField] private CanvasGroup canvasGroup;
+        [SerializeField] private TMP_Text titleText;
+        [SerializeField] private TMP_Text descriptionText;
+        [FormerlySerializedAs("returnButton")]
+        [SerializeField] private Button returnToTitleButton;
+        [SerializeField] private string titleSceneName = "TitleScene";
+        [SerializeField] private bool pauseWhenShown;
         [SerializeField] private bool autoReturnToTitle;
         [SerializeField] private float autoReturnDelay = 2f;
 
@@ -45,6 +52,13 @@ namespace Game.DemoMission.UI
         public void Show()
         {
             gameObject.SetActive(true);
+            BindButton();
+
+            if (titleText != null)
+                titleText.text = "임무 완료";
+
+            if (descriptionText != null)
+                descriptionText.text = "구출 대상 확보가 완료되었습니다.";
 
             if (canvasGroup != null)
             {
@@ -52,6 +66,9 @@ namespace Game.DemoMission.UI
                 canvasGroup.interactable = true;
                 canvasGroup.blocksRaycasts = true;
             }
+
+            if (pauseWhenShown)
+                Time.timeScale = 0f;
 
             if (autoReturnToTitle && _autoReturnRoutine == null)
                 _autoReturnRoutine = StartCoroutine(Co_AutoReturn());
@@ -66,6 +83,9 @@ namespace Game.DemoMission.UI
                 canvasGroup.blocksRaycasts = false;
             }
 
+            if (pauseWhenShown)
+                Time.timeScale = 1f;
+
             gameObject.SetActive(false);
         }
 
@@ -74,7 +94,8 @@ namespace Game.DemoMission.UI
             if (_returning)
                 return;
 
-            if (string.IsNullOrWhiteSpace(titleSceneName))
+            string sceneName = ResolveTitleSceneName();
+            if (string.IsNullOrWhiteSpace(sceneName))
             {
                 Debug.LogError("[MissionCompletePanel] Title scene name is empty.", this);
                 return;
@@ -85,7 +106,7 @@ namespace Game.DemoMission.UI
 
         private IEnumerator Co_AutoReturn()
         {
-            yield return new WaitForSeconds(Mathf.Max(0.1f, autoReturnDelay));
+            yield return new WaitForSecondsRealtime(Mathf.Max(0.1f, autoReturnDelay));
             _autoReturnRoutine = null;
             ReturnToTitle();
         }
@@ -93,14 +114,16 @@ namespace Game.DemoMission.UI
         private IEnumerator Co_ReturnToTitle()
         {
             _returning = true;
+            Time.timeScale = 1f;
 
             if (GameStateMachine.Instance != null)
                 GameStateMachine.Instance.SetState(GameState.Cutscene);
 
-            AsyncOperation operation = SceneManager.LoadSceneAsync(titleSceneName, LoadSceneMode.Single);
+            string sceneName = ResolveTitleSceneName();
+            AsyncOperation operation = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
             if (operation == null)
             {
-                Debug.LogError($"[MissionCompletePanel] Failed to load title scene: {titleSceneName}", this);
+                Debug.LogError($"[MissionCompletePanel] Failed to load title scene: {sceneName}", this);
                 _returning = false;
                 yield break;
             }
@@ -117,8 +140,8 @@ namespace Game.DemoMission.UI
             if (_buttonBound)
                 return;
 
-            if (returnButton != null)
-                returnButton.onClick.AddListener(ReturnToTitle);
+            if (returnToTitleButton != null)
+                returnToTitleButton.onClick.AddListener(ReturnToTitle);
             else
                 Debug.LogWarning("[MissionCompletePanel] Return button is not assigned.", this);
 
@@ -130,10 +153,22 @@ namespace Game.DemoMission.UI
             if (!_buttonBound)
                 return;
 
-            if (returnButton != null)
-                returnButton.onClick.RemoveListener(ReturnToTitle);
+            if (returnToTitleButton != null)
+                returnToTitleButton.onClick.RemoveListener(ReturnToTitle);
 
             _buttonBound = false;
+        }
+
+        private string ResolveTitleSceneName()
+        {
+            if (!string.IsNullOrWhiteSpace(titleSceneName))
+                return titleSceneName;
+
+            DemoMissionRuntime runtime = DemoMissionRuntime.Instance;
+            if (runtime != null && runtime.CurrentMission != null)
+                return runtime.CurrentMission.titleSceneName;
+
+            return string.Empty;
         }
     }
 }

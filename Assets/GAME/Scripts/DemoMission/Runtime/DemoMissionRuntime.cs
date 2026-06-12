@@ -12,6 +12,7 @@ namespace Game.DemoMission.Runtime
         [SerializeField] private DemoMissionDefinitionSO currentMission;
 
         public DemoMissionDefinitionSO CurrentMission => currentMission;
+        public int CurrentEnemyKills => EnemyDefeatCount;
         public int EnemyDefeatCount { get; private set; }
         public bool IsNpcRescued { get; private set; }
 
@@ -49,8 +50,13 @@ namespace Game.DemoMission.Runtime
 
         public void SetCurrentMission(DemoMissionDefinitionSO mission)
         {
-            currentMission = mission;
+            SetMission(mission);
             ResetMissionProgress();
+        }
+
+        public void SetMission(DemoMissionDefinitionSO mission)
+        {
+            currentMission = mission;
         }
 
         public void ResetMissionProgress()
@@ -69,7 +75,12 @@ namespace Game.DemoMission.Runtime
                 return;
             }
 
-            EnemyDefeatCount++;
+            int requiredKills = Mathf.Max(0, currentMission.requiredEnemyKills);
+            if (requiredKills > 0)
+                EnemyDefeatCount = Mathf.Min(EnemyDefeatCount + 1, requiredKills);
+            else
+                EnemyDefeatCount++;
+
             RaiseProgressChanged();
             TryRaiseCompleted();
         }

@@ -1,6 +1,7 @@
 ﻿// GAME/Scripts/Battle/FieldEnemy.cs
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 using Game.Combat.Core;
 using Game.Combat.Model;
 using Game.Combat.Adapters;
@@ -26,7 +27,8 @@ namespace Game.Battle
         [SerializeField] private float moveSpeed = 2.5f;
 
         [Header("Demo Mission Optional")]
-        [SerializeField] private bool countAsDemoMissionEnemy;
+        [FormerlySerializedAs("countAsDemoMissionEnemy")]
+        [SerializeField] private bool countForDemoMission;
         [SerializeField] private DemoMissionRuntime demoMissionRuntime;
 
         private bool _isEncounterTriggered;
@@ -153,7 +155,7 @@ namespace Game.Battle
 
         private void HandleCombatEnded(CombatResult result)
         {
-            if (!countAsDemoMissionEnemy || _demoMissionDefeatRegistered)
+            if (!countForDemoMission || _demoMissionDefeatRegistered)
                 return;
 
             if (!_isEncounterTriggered || result == null || !result.IsWin)
@@ -164,7 +166,7 @@ namespace Game.Battle
 
         private void TryRegisterDemoMissionDefeatFromDisable()
         {
-            if (!countAsDemoMissionEnemy || _demoMissionDefeatRegistered || !_isEncounterTriggered)
+            if (!countForDemoMission || _demoMissionDefeatRegistered || !_isEncounterTriggered)
                 return;
 
             HpAccessor hpAccessor = HpAccessor.TryCreate(gameObject);

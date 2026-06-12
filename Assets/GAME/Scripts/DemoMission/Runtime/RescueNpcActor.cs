@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 using Game.DemoMission.Data;
 
 namespace Game.DemoMission.Runtime
@@ -13,11 +14,15 @@ namespace Game.DemoMission.Runtime
         [SerializeField] private GameObject interactPromptRoot;
         [SerializeField] private string playerTag = "Player";
         [SerializeField] private KeyCode interactKey = KeyCode.F;
-        [SerializeField] private bool rescueOnlyAfterRequiredKills = true;
+        [FormerlySerializedAs("rescueOnlyAfterRequiredKills")]
+        [SerializeField] private bool requireEnemyKillsBeforeRescue = true;
+        [SerializeField] private bool markCompleteOnInteract = true;
+        [SerializeField] private float interactionCooldown = 0.25f;
 
         private bool _playerInRange;
         private bool _rescueRegistered;
         private bool _dialogueRunning;
+        private float _lastInteractionTime = -999f;
 
         private void Awake()
         {
@@ -79,7 +84,12 @@ namespace Game.DemoMission.Runtime
                 return;
             }
 
-            if (rescueOnlyAfterRequiredKills && !missionRuntime.HasRequiredEnemyKills())
+            if (Time.unscaledTime - _lastInteractionTime < Mathf.Max(0f, interactionCooldown))
+                return;
+
+            _lastInteractionTime = Time.unscaledTime;
+
+            if (requireEnemyKillsBeforeRescue && !missionRuntime.HasRequiredEnemyKills())
             {
                 Debug.Log("[RescueNpcActor] Required enemy kills are not complete yet.", this);
                 LogDialogue(GetDialogueLines(false));
@@ -102,7 +112,9 @@ namespace Game.DemoMission.Runtime
             yield return null;
 
             _rescueRegistered = true;
-            missionRuntime.RegisterNpcRescued();
+            if (markCompleteOnInteract)
+                missionRuntime.RegisterNpcRescued();
+
             LogDialogue(GetDialogueLines(true));
 
             _dialogueRunning = false;

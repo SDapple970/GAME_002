@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 using Game.DemoMission.Data;
 
@@ -13,10 +14,12 @@ namespace Game.DemoMission.UI
         [SerializeField] private Image rescueNpcPortrait;
         [SerializeField] private TMP_Text rescueNpcNameText;
         [SerializeField] private TMP_Text rescueNpcDescriptionText;
-        [SerializeField] private TMP_Text rescueNpcLocationText;
+        [FormerlySerializedAs("rescueNpcLocationText")]
+        [SerializeField] private TMP_Text lastKnownLocationText;
         [SerializeField] private TMP_Text objectiveText;
         [SerializeField] private Transform monsterListRoot;
-        [SerializeField] private GameObject monsterRowPrefab;
+        [FormerlySerializedAs("monsterRowPrefab")]
+        [SerializeField] private GameObject monsterListItemPrefab;
 
         private DemoMissionDefinitionSO _activeMission;
 
@@ -77,8 +80,8 @@ namespace Game.DemoMission.UI
             if (rescueNpcDescriptionText != null)
                 rescueNpcDescriptionText.text = npc != null ? npc.briefDescription : string.Empty;
 
-            if (rescueNpcLocationText != null)
-                rescueNpcLocationText.text = npc != null ? npc.lastKnownLocation : string.Empty;
+            if (lastKnownLocationText != null)
+                lastKnownLocationText.text = npc != null ? npc.lastKnownLocation : string.Empty;
 
             if (rescueNpcPortrait != null)
             {
@@ -124,8 +127,8 @@ namespace Game.DemoMission.UI
                 if (monster == null)
                     continue;
 
-                if (monsterRowPrefab != null)
-                    PopulateMonsterRow(Instantiate(monsterRowPrefab, monsterListRoot), monster);
+                if (monsterListItemPrefab != null)
+                    PopulateMonsterRow(Instantiate(monsterListItemPrefab, monsterListRoot), monster);
                 else
                     CreateFallbackMonsterRow(monster.displayName, monster.description, monster.portrait);
             }

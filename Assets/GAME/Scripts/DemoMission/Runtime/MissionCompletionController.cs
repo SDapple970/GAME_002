@@ -11,6 +11,7 @@ namespace Game.DemoMission.Runtime
         [SerializeField] private DemoMissionRuntime missionRuntime;
         [SerializeField] private MissionObjectiveTracker objectiveTracker;
         [SerializeField] private MissionCompletePanel completePanel;
+        [SerializeField] private bool lockPlayerInputOnComplete = true;
         [SerializeField] private bool setGameStateToUIOnly = true;
         [SerializeField] private List<Behaviour> behavioursToDisableOnComplete = new();
 
@@ -86,7 +87,8 @@ namespace Game.DemoMission.Runtime
                 return;
 
             _handled = true;
-            LockConfiguredBehaviours();
+            if (lockPlayerInputOnComplete)
+                LockConfiguredBehaviours();
 
             if (setGameStateToUIOnly && GameStateMachine.Instance != null)
                 GameStateMachine.Instance.SetState(GameState.UIOnly);

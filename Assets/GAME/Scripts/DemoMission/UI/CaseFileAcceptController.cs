@@ -66,7 +66,8 @@ namespace Game.DemoMission.UI
             if (missionRuntime == null)
                 missionRuntime = DemoMissionRuntime.GetOrCreate();
 
-            missionRuntime.SetCurrentMission(mission);
+            missionRuntime.SetMission(mission);
+            missionRuntime.ResetMissionProgress();
 
             if (stampAnimator != null && !string.IsNullOrWhiteSpace(stampTriggerName))
             {

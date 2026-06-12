@@ -9,6 +9,7 @@ namespace Game.DemoMission.Data
         public string missionId;
         public string missionTitle;
         public string dungeonSceneName;
+        public string titleSceneName;
         public RescueNpcDefinitionSO rescueTarget;
         public List<MonsterBriefingEntry> monsters = new();
         public int requiredEnemyKills = 1;

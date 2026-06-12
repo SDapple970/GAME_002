@@ -1,4 +1,5 @@
 using System;
+using TMPro;
 using UnityEngine;
 
 namespace Game.DemoMission.Runtime
@@ -7,6 +8,7 @@ namespace Game.DemoMission.Runtime
     {
         [SerializeField] private DemoMissionRuntime missionRuntime;
         [SerializeField] private MissionCompletionController completionController;
+        [SerializeField] private TMP_Text objectiveText;
 
         public event Action OnObjectivesCompleted;
 
@@ -58,10 +60,13 @@ namespace Game.DemoMission.Runtime
                 return;
 
             Debug.Log(
-                $"[MissionObjectiveTracker] Progress enemies={missionRuntime.EnemyDefeatCount}, " +
+                $"[MissionObjectiveTracker] Progress enemies={missionRuntime.CurrentEnemyKills}, " +
                 $"npcRescued={missionRuntime.IsNpcRescued}, complete={missionRuntime.IsMissionComplete()}",
                 this
             );
+
+            if (objectiveText != null)
+                objectiveText.text = BuildObjectiveText();
         }
 
         private void HandleMissionCompleted()
@@ -76,6 +81,16 @@ namespace Game.DemoMission.Runtime
                 completionController.HandleMissionCompleted();
             else
                 Debug.LogWarning("[MissionObjectiveTracker] MissionCompletionController is not assigned.", this);
+        }
+
+        private string BuildObjectiveText()
+        {
+            if (missionRuntime == null || missionRuntime.CurrentMission == null)
+                return "임무 정보 없음";
+
+            int requiredKills = Mathf.Max(0, missionRuntime.CurrentMission.requiredEnemyKills);
+            string rescued = missionRuntime.IsNpcRescued ? "구출 완료" : "구출 대상 미확보";
+            return $"처치 {missionRuntime.CurrentEnemyKills}/{requiredKills}, {rescued}";
         }
     }
 }
