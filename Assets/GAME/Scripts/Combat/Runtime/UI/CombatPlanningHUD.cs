@@ -193,7 +193,7 @@ namespace Game.Combat.UI
                 return;
             }
 
-            if (_player.Skills.Count == 0)
+            if (_player.Skills == null || _player.Skills.Count == 0)
             {
                 Debug.LogWarning("[CombatPlanningHUD] Player has no combat skills.", this);
                 SetMessage("사용 가능한 스킬이 없습니다.");
@@ -367,9 +367,6 @@ namespace Game.Combat.UI
 
             if (currentTarget != null && currentTarget.HP > 0)
                 return currentTarget;
-
-            if (_session == null)
-                return null;
 
             return null;
         }

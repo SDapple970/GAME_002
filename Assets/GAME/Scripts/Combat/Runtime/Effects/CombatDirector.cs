@@ -17,7 +17,6 @@ namespace Game.Combat.Effects
 
         [Header("Fallback Animation Settings")]
         [SerializeField] private float fallbackApproachDuration = 0.2f;
-        [SerializeField] private float fallbackReturnDuration = 0.25f;
         [SerializeField] private float fallbackActionDelay = 0.15f;
 
         public void PlayResolution(CombatSession session, Action onComplete)
@@ -76,12 +75,12 @@ namespace Game.Combat.Effects
             if (actorObj == null)
                 yield break;
 
-            Vector3 originalPosition = actorObj.transform.position;
+            Debug.Log($"[CombatDirector] Actor={ev.Actor?.Id.Value} Skill={ev.Skill?.Name} Target={ev.Target?.Id.Value}", this);
 
             if (targetObj != null)
             {
                 cameraController?.FocusAction(ev.Actor, ev.Target);
-                yield return MoveActorForSkill(actorObj.transform, targetObj.transform, ev.Skill, originalPosition);
+                yield return MoveActorForSkill(actorObj.transform, targetObj.transform, ev.Skill);
             }
 
             PlayAttackTrigger(actorObj);
@@ -92,8 +91,6 @@ namespace Game.Combat.Effects
 
             yield return new WaitForSeconds(0.3f);
 
-            if (ShouldReturnAfterAction(ev.Skill) && actorObj != null)
-                yield return MoveTransform(actorObj.transform, actorObj.transform.position, originalPosition, GetMoveDuration(actorObj.transform.position, originalPosition, ev.Skill));
         }
 
         private IEnumerator PlayClash(Event_Clash ev)
@@ -107,13 +104,15 @@ namespace Game.Combat.Effects
             if (objA == null || objB == null)
                 yield break;
 
-            Vector3 originalA = objA.transform.position;
-            Vector3 originalB = objB.transform.position;
+            Debug.Log(
+                $"[CombatDirector] Clash A={ev.ActorA?.Id.Value}:{ev.SkillA?.Name} B={ev.ActorB?.Id.Value}:{ev.SkillB?.Name}",
+                this
+            );
 
             cameraController?.FocusAction(ev.ActorA, ev.ActorB);
 
-            yield return MoveActorForSkill(objA.transform, objB.transform, ev.SkillA, originalA);
-            yield return MoveActorForSkill(objB.transform, objA.transform, ev.SkillB, originalB);
+            yield return MoveActorForSkill(objA.transform, objB.transform, ev.SkillA);
+            yield return MoveActorForSkill(objB.transform, objA.transform, ev.SkillB);
 
             PlayAttackTrigger(objA);
             PlayAttackTrigger(objB);
@@ -130,11 +129,6 @@ namespace Game.Combat.Effects
 
             yield return new WaitForSeconds(0.4f);
 
-            if (ShouldReturnAfterAction(ev.SkillA) && objA != null)
-                yield return MoveTransform(objA.transform, objA.transform.position, originalA, GetMoveDuration(objA.transform.position, originalA, ev.SkillA));
-
-            if (ShouldReturnAfterAction(ev.SkillB) && objB != null)
-                yield return MoveTransform(objB.transform, objB.transform.position, originalB, GetMoveDuration(objB.transform.position, originalB, ev.SkillB));
         }
 
         private IEnumerator PlayUtility(Event_Utility ev)
@@ -146,19 +140,21 @@ namespace Game.Combat.Effects
             if (actorObj == null)
                 yield break;
 
+            Debug.Log($"[CombatDirector] Utility Actor={ev.Actor?.Id.Value} Skill={ev.Skill?.Name}", this);
+
             cameraController?.FocusAction(ev.Actor, ev.Actor);
             PlayAttackTrigger(actorObj);
             StartCoroutine(FlashColor(actorObj, Color.yellow, 0.3f));
             yield return WaitAfterMove(ev.Skill);
         }
 
-        private IEnumerator MoveActorForSkill(Transform actor, Transform target, ISkill skill, Vector3 originalPosition)
+        private IEnumerator MoveActorForSkill(Transform actor, Transform target, ISkill skill)
         {
             if (actor == null || target == null || !ShouldApproach(skill))
                 yield break;
 
             Vector3 attackPoint = CalculateAttackPoint(actor.position, target.position, skill);
-            attackPoint.z = originalPosition.z;
+            attackPoint.z = actor.position.z;
 
             cameraController?.FocusAction(GetCombatant(actor.gameObject), GetCombatant(target.gameObject));
             yield return MoveTransform(actor, actor.position, attackPoint, GetMoveDuration(actor.position, attackPoint, skill));
@@ -170,13 +166,7 @@ namespace Game.Combat.Effects
             if (skill == null)
                 return false;
 
-            return skill.MovementMode == SkillMovementMode.ApproachAndStay ||
-                   skill.MovementMode == SkillMovementMode.ApproachAndReturn;
-        }
-
-        private static bool ShouldReturnAfterAction(ISkill skill)
-        {
-            return skill != null && skill.MovementMode == SkillMovementMode.ApproachAndReturn;
+            return skill.MovementMode == SkillMovementMode.ApproachAndStay;
         }
 
         private static Vector3 CalculateAttackPoint(Vector3 actorPosition, Vector3 targetPosition, ISkill skill)

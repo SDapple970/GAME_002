@@ -55,6 +55,7 @@ namespace Game.UI
 
         public void Show(CombatResult result)
         {
+            BindCloseButton();
             _pendingResult = result;
             ClearRewardRows();
 

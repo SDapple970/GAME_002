@@ -1,4 +1,3 @@
-// GAME_002/Assets/GAME/Scripts/Combat/Core/CombatFlowOrchestrator.cs
 using Game.Combat.Model;
 using UnityEngine;
 
@@ -53,15 +52,16 @@ namespace Game.Combat.Core
 
         private void CommitDraftToSession(CombatPlanDraft draft)
         {
+            if (draft == null || _session == null || _session.CurrentTurn == null)
+                return;
+
             foreach (var pair in draft.Plans)
-            {
                 _session.CurrentTurn.SetPlan(pair.Key, pair.Value);
-            }
         }
 
         private void FillEnemyPlansFallbackIfMissing()
         {
-            if (_session == null || _session.Allies.Count == 0)
+            if (_session == null || _session.CurrentTurn == null || _session.Allies.Count == 0)
                 return;
 
             ICombatant player = _session.Allies[0];
@@ -71,38 +71,40 @@ namespace Game.Combat.Core
                 return;
             }
 
-            foreach (var enemy in _session.Enemies)
+            for (int i = 0; i < _session.Enemies.Count; i++)
             {
-                if (enemy == null) continue;
-                if (_session.CurrentTurn.TryGetPlan(enemy.Id, out _)) continue;
+                ICombatant enemy = _session.Enemies[i];
+                if (enemy == null)
+                    continue;
 
-                if (enemy.HP <= 0 || enemy.IsStunned)
+                if (_session.CurrentTurn.TryGetPlan(enemy.Id, out _))
+                    continue;
+
+                if (enemy.HP <= 0 || enemy.IsStunned || enemy.Skills == null || enemy.Skills.Count == 0)
                 {
                     _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(PlannedAction.None, PlannedAction.None));
                     continue;
                 }
 
-                int skillCount = Mathf.Min(enemy.Skills.Count, 3);
-                ISkill skill = skillCount > 0
-                    ? enemy.Skills[Mathf.Max(0, _session.TurnIndex - 1) % skillCount]
-                    : null;
+                int skillIndex = _session.TurnIndex % enemy.Skills.Count;
+                ISkill selectedSkill = enemy.Skills[skillIndex];
 
-                if (skill == null)
+                if (selectedSkill == null)
                 {
                     _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(PlannedAction.None, PlannedAction.None));
                     continue;
                 }
 
-                var pa = new PlannedAction(
-                    skillId: skill.Id,
-                    tag: skill.Tag,
-                    targeting: skill.Targeting,
+                PlannedAction enemyAction = new PlannedAction(
+                    skillId: selectedSkill.Id,
+                    tag: selectedSkill.Tag,
+                    targeting: selectedSkill.Targeting,
                     targetCombatantId: player.Id,
-                    plannedSpeed: skill.Speed,
-                    consumesTurn: skill.ConsumesTurn
+                    plannedSpeed: selectedSkill.Speed,
+                    consumesTurn: selectedSkill.ConsumesTurn
                 );
 
-                _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(pa, PlannedAction.None));
+                _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(enemyAction, PlannedAction.None));
             }
         }
 
@@ -111,8 +113,9 @@ namespace Game.Combat.Core
             if (_session == null || _session.CurrentTurn == null)
                 return;
 
-            foreach (ICombatant enemy in _session.Enemies)
+            for (int i = 0; i < _session.Enemies.Count; i++)
             {
+                ICombatant enemy = _session.Enemies[i];
                 if (enemy == null)
                     continue;
 

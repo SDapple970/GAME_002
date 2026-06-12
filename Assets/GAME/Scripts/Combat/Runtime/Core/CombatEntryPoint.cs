@@ -1,13 +1,12 @@
-// GAME_002/Assets/GAME/Scripts/Combat/Core/CombatEntryPoint.cs
-using Game.Combat.Actions;
-using Game.Combat.Adapters;
-using Game.Combat.Data;
-using Game.Combat.Model;
-using Game.Combat.Effects;
-using Game.Core;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Game.Combat.Actions;
+using Game.Combat.Adapters;
+using Game.Combat.Data;
+using Game.Combat.Effects;
+using Game.Combat.Model;
+using Game.Core;
 
 namespace Game.Combat.Core
 {
@@ -15,6 +14,7 @@ namespace Game.Combat.Core
     {
         [Header("Systems")]
         [SerializeField] private CombatDirector director;
+        [SerializeField] private CombatFlowOrchestrator flowOrchestrator;
 
         [Header("Skill Book Sources (MVP)")]
         [SerializeField] private SkillDefinitionSO[] skillDefinitions;
@@ -23,10 +23,9 @@ namespace Game.Combat.Core
         [SerializeField] private int inspirationMax = 10;
         [SerializeField] private int inspirationStart = 3;
 
+        [Header("Field Outcome")]
         [SerializeField] private bool deactivateDefeatedEnemies = true;
         [SerializeField] private bool destroyDefeatedEnemies = false;
-
-        [SerializeField] private CombatFlowOrchestrator flowOrchestrator;
 
         public event Action<CombatSession> OnCombatStarted;
         public event Action<CombatResult> OnCombatEnded;
@@ -37,6 +36,48 @@ namespace Game.Combat.Core
         private SkillBook _book;
         private bool _endedRaised;
         private bool _startingCombat;
+
+        private void Awake()
+        {
+            if (flowOrchestrator == null)
+                flowOrchestrator = FindFirstObjectByType<CombatFlowOrchestrator>();
+
+            _book = new SkillBook();
+            if (skillDefinitions == null)
+                return;
+
+            for (int i = 0; i < skillDefinitions.Length; i++)
+            {
+                SkillDefinitionSO skillDefinition = skillDefinitions[i];
+                if (skillDefinition != null)
+                    _book.Register(new SoSkill(skillDefinition));
+            }
+        }
+
+        private void Update()
+        {
+            if (ActiveStateMachine == null)
+                return;
+
+            ActiveStateMachine.Tick();
+
+            if (!_endedRaised && ActiveStateMachine.Phase == Phase.ExitCombat)
+                FinishCombat(ActiveStateMachine.EndReason);
+
+#if UNITY_EDITOR
+            if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F9))
+            {
+                Debug.Log("<color=cyan>[Debug]</color> 강제 전투 승리!");
+                ForceFinishCombat(CombatEndReason.Victory);
+            }
+
+            if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F10))
+            {
+                Debug.Log("<color=red>[Debug]</color> 강제 전투 패배!");
+                ForceFinishCombat(CombatEndReason.Defeat);
+            }
+#endif
+        }
 
         public void ConfirmPlanningFromUI()
         {
@@ -83,88 +124,6 @@ namespace Game.Combat.Core
             return true;
         }
 
-        private void Awake()
-        {
-            if (flowOrchestrator == null)
-                flowOrchestrator = FindFirstObjectByType<CombatFlowOrchestrator>();
-
-            _book = new SkillBook();
-            if (skillDefinitions != null)
-            {
-                for (int i = 0; i < skillDefinitions.Length; i++)
-                {
-                    var so = skillDefinitions[i];
-                    if (so == null) continue;
-                    _book.Register(new SoSkill(so));
-                }
-            }
-        }
-
-        private void Update()
-        {
-            if (ActiveStateMachine == null) return;
-
-            ActiveStateMachine.Tick();
-
-            if (!_endedRaised && ActiveStateMachine.Phase == Phase.ExitCombat)
-            {
-                _endedRaised = true;
-
-                if (director != null)
-                    ActiveStateMachine.OnRequireResolutionPlay -= director.PlayResolution;
-
-                ApplyCombatOutcomeToField(ActiveSession);
-
-                var reason = ActiveStateMachine.EndReason;
-                if (reason == CombatEndReason.None)
-                    reason = CombatEndEvaluator.Evaluate(ActiveSession);
-
-                var result = CombatResultBuilder.Build(ActiveSession, reason);
-
-                OnCombatEnded?.Invoke(result);
-
-                ActiveSession = null;
-                ActiveStateMachine = null;
-            }
-
-#if UNITY_EDITOR
-            if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F9))
-            {
-                Debug.Log("<color=cyan>[Debug]</color> 강제 전투 승리!");
-                ForceFinishCombat(CombatEndReason.Victory);
-            }
-
-            if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F10))
-            {
-                Debug.Log("<color=red>[Debug]</color> 강제 전투 패배!");
-                ForceFinishCombat(CombatEndReason.Defeat);
-            }
-#endif
-        }
-
-#if UNITY_EDITOR
-        private void ForceFinishCombat(CombatEndReason reason)
-        {
-            if (ActiveStateMachine == null)
-                return;
-
-            _endedRaised = true;
-
-            if (director != null)
-                ActiveStateMachine.OnRequireResolutionPlay -= director.PlayResolution;
-
-            ActiveStateMachine.ForceExit(reason);
-
-            ApplyCombatOutcomeToField(ActiveSession);
-
-            var result = CombatResultBuilder.Build(ActiveSession, reason);
-            OnCombatEnded?.Invoke(result);
-
-            ActiveSession = null;
-            ActiveStateMachine = null;
-        }
-#endif
-
         public bool StartCombatFromField(
             List<GameObject> allyFieldObjects,
             List<GameObject> enemyFieldObjects,
@@ -176,15 +135,15 @@ namespace Game.Combat.Core
                 return false;
 
             if (allyFieldObjects == null || allyFieldObjects.Count == 0)
-                Debug.LogWarning("[CombatEntryPoint] StartCombatFromField called with no ally field objects.");
+                Debug.LogWarning("[CombatEntryPoint] StartCombatFromField called with no ally field objects.", this);
 
             if (enemyFieldObjects == null || enemyFieldObjects.Count == 0)
-                Debug.LogWarning("[CombatEntryPoint] StartCombatFromField called with no enemy field objects.");
+                Debug.LogWarning("[CombatEntryPoint] StartCombatFromField called with no enemy field objects.", this);
 
             _endedRaised = false;
             _startingCombat = true;
 
-            var req = new CombatStartRequest(
+            CombatStartRequest request = new CombatStartRequest(
                 reason,
                 initiativeSide,
                 inspirationMax,
@@ -192,15 +151,15 @@ namespace Game.Combat.Core
                 openingEffectOrNull
             );
 
-            AddFirstFieldObject(req.AllyFieldObjects, allyFieldObjects);
-            AddFirstFieldObject(req.EnemyFieldObjects, enemyFieldObjects);
+            AddFirstFieldObject(request.AllyFieldObjects, allyFieldObjects);
+            AddFirstFieldObject(request.EnemyFieldObjects, enemyFieldObjects);
 
-            var factory = new FieldCombatantFactory(_book);
-            (ActiveSession, ActiveStateMachine) = CombatBootstrapper.StartCombat(req, _book, factory);
+            FieldCombatantFactory factory = new FieldCombatantFactory(_book);
+            (ActiveSession, ActiveStateMachine) = CombatBootstrapper.StartCombat(request, _book, factory);
 
             if (ActiveSession == null)
             {
-                Debug.LogError("[CombatEntryPoint] CombatBootstrapper returned a null session.");
+                Debug.LogError("[CombatEntryPoint] CombatBootstrapper returned a null session.", this);
                 ActiveStateMachine = null;
                 _startingCombat = false;
                 return false;
@@ -208,31 +167,36 @@ namespace Game.Combat.Core
 
             if (ActiveStateMachine == null)
             {
-                Debug.LogError("[CombatEntryPoint] CombatBootstrapper returned a null state machine.");
+                Debug.LogError("[CombatEntryPoint] CombatBootstrapper returned a null state machine.", this);
                 ActiveSession = null;
                 _startingCombat = false;
                 return false;
             }
 
             if (ActiveSession.Allies.Count == 0)
-                Debug.LogError("[CombatEntryPoint] Combat start produced no allies. Check player HP component and ally field object binding.");
+                Debug.LogError("[CombatEntryPoint] Combat start produced no allies. Check player HP component and ally field object binding.", this);
 
             if (ActiveSession.Enemies.Count == 0)
-                Debug.LogError("[CombatEntryPoint] Combat start produced no enemies. Check enemy HP component, active state, and encounter group binding.");
+                Debug.LogError("[CombatEntryPoint] Combat start produced no enemies. Check enemy HP component, active state, and encounter group binding.", this);
 
             if (flowOrchestrator != null)
                 flowOrchestrator.BindSession(ActiveSession);
 
-            if (ActiveStateMachine != null && ActiveStateMachine.Phase == Phase.EnterCombat)
+            if (ActiveStateMachine.Phase == Phase.EnterCombat)
             {
                 ActiveStateMachine.Tick();
-                Debug.Log($"[EntryPoint] Forced first tick. Phase={ActiveStateMachine.Phase}, Turn={ActiveSession.TurnIndex}");
+                Debug.Log($"[CombatEntryPoint] Forced first tick. Phase={ActiveStateMachine.Phase}, Turn={ActiveSession.TurnIndex}", this);
             }
 
             if (director != null)
                 ActiveStateMachine.OnRequireResolutionPlay += director.PlayResolution;
 
-            Debug.Log($"[EntryPoint] Combat started. Reason={reason}, Initiative={initiativeSide}, Allies={ActiveSession.Allies.Count}, Enemies={ActiveSession.Enemies.Count}");
+            Debug.Log(
+                $"[CombatEntryPoint] Combat started. Reason={reason}, Initiative={initiativeSide}, " +
+                $"Allies={ActiveSession.Allies.Count}, Enemies={ActiveSession.Enemies.Count}",
+                this
+            );
+
             OnCombatStarted?.Invoke(ActiveSession);
 
             _startingCombat = false;
@@ -264,26 +228,66 @@ namespace Game.Combat.Core
                    GameStateMachine.Instance.Is(GameState.Exploration);
         }
 
+        private void FinishCombat(CombatEndReason reason)
+        {
+            if (_endedRaised)
+                return;
+
+            _endedRaised = true;
+
+            CombatSession endingSession = ActiveSession;
+            CombatStateMachine endingStateMachine = ActiveStateMachine;
+
+            if (director != null && endingStateMachine != null)
+                endingStateMachine.OnRequireResolutionPlay -= director.PlayResolution;
+
+            ApplyCombatOutcomeToField(endingSession);
+
+            if (reason == CombatEndReason.None)
+                reason = CombatEndEvaluator.Evaluate(endingSession);
+
+            CombatResult result = CombatResultBuilder.Build(endingSession, reason);
+            OnCombatEnded?.Invoke(result);
+
+            ActiveSession = null;
+            ActiveStateMachine = null;
+            _startingCombat = false;
+        }
+
+#if UNITY_EDITOR
+        private void ForceFinishCombat(CombatEndReason reason)
+        {
+            if (ActiveStateMachine == null)
+                return;
+
+            ActiveStateMachine.ForceExit(reason);
+            FinishCombat(reason);
+        }
+#endif
+
         private void ApplyCombatOutcomeToField(CombatSession session)
         {
-            if (session == null) return;
+            if (session == null)
+                return;
 
             for (int i = 0; i < session.Enemies.Count; i++)
             {
-                var c = session.Enemies[i];
-                if (c == null) continue;
-                if (c.HP > 0) continue;
+                ICombatant combatant = session.Enemies[i];
+                if (combatant == null || combatant.HP > 0)
+                    continue;
 
-                if (c is FieldCombatantAdapter fa)
-                {
-                    var go = fa.FieldObject;
-                    if (go == null) continue;
+                FieldCombatantAdapter adapter = combatant as FieldCombatantAdapter;
+                if (adapter == null)
+                    continue;
 
-                    if (destroyDefeatedEnemies)
-                        Destroy(go);
-                    else if (deactivateDefeatedEnemies)
-                        go.SetActive(false);
-                }
+                GameObject fieldObject = adapter.FieldObject;
+                if (fieldObject == null)
+                    continue;
+
+                if (destroyDefeatedEnemies)
+                    Destroy(fieldObject);
+                else if (deactivateDefeatedEnemies)
+                    fieldObject.SetActive(false);
             }
         }
     }

@@ -25,6 +25,11 @@ namespace Game.Combat.Data
         public float moveSpeed = 6.0f;
         public float actionDelayAfterMove = 0.15f;
 
+        public SkillMovementMode MovementMode => movementMode;
+        public float DesiredTargetDistance => desiredTargetDistance;
+        public float MoveSpeed => moveSpeed;
+        public float ActionDelayAfterMove => actionDelayAfterMove;
+
         [Header("MVP Numbers")]
         public int baseDamage = 1;
         public int baseStagger = 1;
