@@ -1,5 +1,6 @@
 // Assets/GAME/Scripts/Mission/Runtime/Data/MissionDefinitionSO.cs
 using System.Collections.Generic;
+using Game.Cutscene;
 using UnityEngine;
 
 namespace Game.Mission.Data
@@ -12,12 +13,14 @@ namespace Game.Mission.Data
         [SerializeField, TextArea(2, 5)] private string description;
         [SerializeField] private List<MissionObjective> objectives = new();
         [SerializeField] private bool autoCompleteWhenAllObjectivesComplete = true;
+        [SerializeField] private CutscenePlaybackRequest completionCutscene;
 
         public string MissionId => missionId;
         public string Title => title;
         public string Description => description;
         public IReadOnlyList<MissionObjective> Objectives => objectives;
         public bool AutoCompleteWhenAllObjectivesComplete => autoCompleteWhenAllObjectivesComplete;
+        public CutscenePlaybackRequest CompletionCutscene => completionCutscene;
 
         public MissionObjective GetObjective(string objectiveId)
         {

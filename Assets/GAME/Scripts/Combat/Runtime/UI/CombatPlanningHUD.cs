@@ -1,5 +1,4 @@
-﻿// Assets/GAME/Scripts/Combat/Runtime/UI/CombatPlanningHUD.cs
-using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using Game.Combat.Core;
@@ -11,6 +10,7 @@ namespace Game.Combat.UI
     {
         [Header("Bind")]
         [SerializeField] private CombatEntryPoint entryPoint;
+        [SerializeField] private CombatFlowOrchestrator flowOrchestrator;
 
         [Header("Panel")]
         [SerializeField] private GameObject panelPlanning;
@@ -22,88 +22,40 @@ namespace Game.Combat.UI
         [Header("Prefabs")]
         [SerializeField] private Button buttonPrefab;
 
-        [Header("Slots")]
-        [SerializeField] private Button slot1Button;
-        [SerializeField] private Button slot2Button;
-
         [Header("Confirm")]
         [SerializeField] private Button confirmButton;
 
-        [Header("Text (Legacy)")]
+        [Header("Text")]
+        [SerializeField] private TMP_Text errorText;
         [SerializeField] private Text statusText;
 
-        [Header("MVP")]
-        [SerializeField] private int actorAllyIndex = 0;
-        [SerializeField] private bool autoFillEnemyPlansOnConfirm = true;
-
         private CombatSession _session;
-        private ICombatant _actor;
-        private int _selectedSlot;
-        private ISkill _pendingSkill;
+        private ICombatant _player;
+        private ISkill _selectedSkill;
+        private ICombatant _selectedTarget;
         private int _shownTurnIndex = -1;
-        private readonly CombatPlanDraft _draft = new();
-
-        private readonly Dictionary<SkillId, string> _skillNameById = new();
-        private bool _subscribedToEntryPoint;
-        private bool _buttonListenersBound;
+        private bool _entrySubscribed;
+        private bool _confirmBound;
+        private bool _submittedThisPlanning;
 
         private void Awake()
         {
             AutoBindReferences();
-
-            if (panelPlanning != null)
-                panelPlanning.SetActive(false);
+            Hide();
         }
 
         private void OnEnable()
         {
             AutoBindReferences();
             SubscribeToEntryPoint();
-            BindButtonListeners();
+            BindConfirmButton();
             RecoverActiveSessionIfNeeded();
-        }
-
-        private void BindButtonListeners()
-        {
-            if (_buttonListenersBound)
-                return;
-
-            if (slot1Button != null)
-            {
-                slot1Button.onClick.AddListener(OnSlot1Clicked);
-            }
-
-            if (slot2Button != null)
-            {
-                slot2Button.onClick.AddListener(OnSlot2Clicked);
-            }
-
-            if (confirmButton != null)
-            {
-                confirmButton.onClick.AddListener(Confirm);
-            }
-
-            _buttonListenersBound = true;
         }
 
         private void OnDisable()
         {
             UnsubscribeFromEntryPoint();
-            UnbindButtonListeners();
-        }
-
-        private void UnbindButtonListeners()
-        {
-            if (slot1Button != null)
-                slot1Button.onClick.RemoveListener(OnSlot1Clicked);
-
-            if (slot2Button != null)
-                slot2Button.onClick.RemoveListener(OnSlot2Clicked);
-
-            if (confirmButton != null)
-                confirmButton.onClick.RemoveListener(Confirm);
-
-            _buttonListenersBound = false;
+            UnbindConfirmButton();
         }
 
         private void Update()
@@ -114,45 +66,95 @@ namespace Game.Combat.UI
             if (entryPoint.ActiveStateMachine.Phase == Phase.Planning &&
                 _session.TurnIndex != _shownTurnIndex)
             {
-                TryShowPlanningUI();
+                Show();
             }
+        }
+
+        public void Bind(CombatSession session)
+        {
+            _session = session;
+            _shownTurnIndex = -1;
+            ResetSelection();
+        }
+
+        public void Show()
+        {
+            if (_session == null)
+                return;
+
+            _player = _session.Allies.Count > 0 ? _session.Allies[0] : null;
+            _shownTurnIndex = _session.TurnIndex;
+            _submittedThisPlanning = false;
+            ResetSelection();
+
+            if (panelPlanning != null)
+                panelPlanning.SetActive(true);
+
+            RebuildSkillButtons();
+            RebuildTargetButtons();
+            RefreshConfirmState();
+            SetMessage(string.Empty);
+        }
+
+        public void Hide()
+        {
+            if (panelPlanning != null)
+                panelPlanning.SetActive(false);
+
+            SetMessage(string.Empty);
         }
 
         private void AutoBindReferences()
         {
             if (entryPoint == null)
                 entryPoint = FindFirstObjectByType<CombatEntryPoint>();
+
+            if (flowOrchestrator == null)
+                flowOrchestrator = FindFirstObjectByType<CombatFlowOrchestrator>();
         }
 
         private void SubscribeToEntryPoint()
         {
-            if (_subscribedToEntryPoint)
+            if (_entrySubscribed || entryPoint == null)
                 return;
 
-            if (entryPoint == null)
-            {
-                Debug.LogError("[CombatPlanningHUD] EntryPoint가 연결되지 않았습니다.");
-                return;
-            }
-
-            entryPoint.OnCombatStarted -= HandleCombatStarted;
-            entryPoint.OnCombatEnded -= HandleCombatEnded;
             entryPoint.OnCombatStarted += HandleCombatStarted;
             entryPoint.OnCombatEnded += HandleCombatEnded;
-            _subscribedToEntryPoint = true;
+            _entrySubscribed = true;
         }
 
         private void UnsubscribeFromEntryPoint()
         {
-            if (!_subscribedToEntryPoint || entryPoint == null)
+            if (!_entrySubscribed || entryPoint == null)
             {
-                _subscribedToEntryPoint = false;
+                _entrySubscribed = false;
                 return;
             }
 
             entryPoint.OnCombatStarted -= HandleCombatStarted;
             entryPoint.OnCombatEnded -= HandleCombatEnded;
-            _subscribedToEntryPoint = false;
+            _entrySubscribed = false;
+        }
+
+        private void BindConfirmButton()
+        {
+            if (_confirmBound || confirmButton == null)
+                return;
+
+            confirmButton.onClick.AddListener(Confirm);
+            _confirmBound = true;
+        }
+
+        private void UnbindConfirmButton()
+        {
+            if (!_confirmBound || confirmButton == null)
+            {
+                _confirmBound = false;
+                return;
+            }
+
+            confirmButton.onClick.RemoveListener(Confirm);
+            _confirmBound = false;
         }
 
         private void RecoverActiveSessionIfNeeded()
@@ -160,152 +162,58 @@ namespace Game.Combat.UI
             if (entryPoint == null || entryPoint.ActiveSession == null)
                 return;
 
-            if (_session == entryPoint.ActiveSession)
-                return;
-
-            HandleCombatStarted(entryPoint.ActiveSession);
+            Bind(entryPoint.ActiveSession);
+            if (entryPoint.ActiveStateMachine != null && entryPoint.ActiveStateMachine.Phase == Phase.Planning)
+                Show();
         }
 
         private void HandleCombatStarted(CombatSession session)
         {
-            if (session == null)
-                return;
-
-            if (_session == session && _shownTurnIndex == session.TurnIndex)
-                return;
-
-            _session = session;
-            _actor = null;
-            _pendingSkill = null;
-            _selectedSlot = 0;
-            _shownTurnIndex = -1;
-            _draft.Clear();
-
-            Debug.Log(
-                $"[CombatPlanningHUD] 전투 시작 이벤트 수신. " +
-                $"Turn={_session.TurnIndex}, " +
-                $"Phase={(entryPoint != null && entryPoint.ActiveStateMachine != null ? entryPoint.ActiveStateMachine.Phase.ToString() : "NULL")}"
-            );
-
-            TryShowPlanningUI();
+            Bind(session);
+            Show();
         }
 
         private void HandleCombatEnded(CombatResult result)
         {
-            if (panelPlanning != null)
-                panelPlanning.SetActive(false);
-
+            Hide();
             _session = null;
-            _actor = null;
-            _pendingSkill = null;
+            _player = null;
+            _selectedSkill = null;
+            _selectedTarget = null;
             _shownTurnIndex = -1;
-            _draft.Clear();
-
-            SetStatus("Combat ended.");
-        }
-
-        private void TryShowPlanningUI()
-        {
-            if (_session == null || entryPoint == null || entryPoint.ActiveStateMachine == null)
-                return;
-
-            if (entryPoint.ActiveStateMachine.Phase != Phase.Planning)
-                return;
-
-            _shownTurnIndex = _session.TurnIndex;
-            ShowPlanningUI();
-        }
-
-        private void ShowPlanningUI()
-        {
-            if (_session == null)
-                return;
-
-            _actor = (_session.Allies.Count > actorAllyIndex)
-                ? _session.Allies[actorAllyIndex]
-                : null;
-
-            if (_actor == null)
-            {
-                Debug.LogWarning("[CombatPlanningHUD] 표시할 아군 전투원을 찾지 못했습니다.");
-                return;
-            }
-
-            _pendingSkill = null;
-            _selectedSlot = 0;
-
-            if (panelPlanning != null)
-                panelPlanning.SetActive(true);
-            else
-                Debug.LogWarning("[CombatPlanningHUD] Panel Planning이 연결되지 않았습니다.");
-
-            CacheSkillNames();
-            EnsurePlanExists(_actor);
-            RebuildSkillButtons();
-            RebuildTargetButtons();
-            RefreshSlotLabels();
-
-            SetStatus("슬롯 선택 → 스킬 선택 → 타겟 선택 → Confirm");
-
-            Debug.Log(
-                $"[CombatPlanningHUD] Planning UI 표시. " +
-                $"Turn={_session.TurnIndex}, " +
-                $"Skills={_actor.Skills.Count}, " +
-                $"Enemies={_session.Enemies.Count}"
-            );
-        }
-
-        private void CacheSkillNames()
-        {
-            _skillNameById.Clear();
-
-            if (_actor == null)
-                return;
-
-            foreach (ISkill skill in _actor.Skills)
-            {
-                if (skill != null)
-                    _skillNameById[skill.Id] = skill.Name;
-            }
-        }
-
-        private void OnSlot1Clicked()
-        {
-            SelectSlot(0);
-        }
-
-        private void OnSlot2Clicked()
-        {
-            SelectSlot(1);
-        }
-
-        private void SelectSlot(int slot)
-        {
-            _selectedSlot = Mathf.Clamp(slot, 0, 1);
-            SetStatus($"슬롯 {_selectedSlot + 1} 선택됨. 스킬을 고르세요.");
         }
 
         private void RebuildSkillButtons()
         {
             ClearChildren(skillListRoot);
 
-            if (_actor == null || buttonPrefab == null || skillListRoot == null)
+            if (_player == null)
+            {
+                SetMessage("플레이어 전투원을 찾지 못했습니다.");
+                return;
+            }
+
+            if (_player.Skills == null || _player.Skills.Count == 0)
+            {
+                Debug.LogWarning("[CombatPlanningHUD] Player has no combat skills.", this);
+                SetMessage("사용 가능한 스킬이 없습니다.");
+                return;
+            }
+
+            if (buttonPrefab == null || skillListRoot == null)
                 return;
 
-            foreach (ISkill skill in _actor.Skills)
+            int count = Mathf.Min(_player.Skills.Count, 3);
+            for (int i = 0; i < count; i++)
             {
+                ISkill skill = _player.Skills[i];
                 if (skill == null)
                     continue;
 
                 ISkill localSkill = skill;
-
                 Button button = Instantiate(buttonPrefab, skillListRoot);
-                SetButtonText(
-                    button,
-                    $"{localSkill.Name} (Tag:{localSkill.Tag}, Cost:{localSkill.InspirationCost})"
-                );
-
-                button.onClick.AddListener(() => OnSkillClicked(localSkill));
+                SetButtonText(button, $"{localSkill.Name}  Cost:{localSkill.InspirationCost}");
+                button.onClick.AddListener(() => SelectSkill(localSkill));
             }
         }
 
@@ -316,230 +224,175 @@ namespace Game.Combat.UI
             if (_session == null || buttonPrefab == null || targetListRoot == null)
                 return;
 
-            foreach (ICombatant enemy in _session.Enemies)
+            bool hasLivingEnemy = false;
+            for (int i = 0; i < _session.Enemies.Count; i++)
             {
-                if (enemy == null)
+                ICombatant enemy = _session.Enemies[i];
+                if (enemy == null || enemy.HP <= 0)
                     continue;
 
+                hasLivingEnemy = true;
                 ICombatant localEnemy = enemy;
-
                 Button button = Instantiate(buttonPrefab, targetListRoot);
-
-                string weakText =
-                    _session.Knowledge != null &&
-                    _session.Knowledge.IsWeaknessRevealed(localEnemy.Id)
-                        ? localEnemy.Weakness.ToString()
-                        : "???";
-
-                SetButtonText(
-                    button,
-                    $"Enemy {localEnemy.Id} HP:{localEnemy.HP}/{localEnemy.MaxHP} Weak:{weakText}"
-                );
-
-                button.onClick.AddListener(() => OnTargetClicked(localEnemy));
-            }
-        }
-
-        private void OnSkillClicked(ISkill skill)
-        {
-            _pendingSkill = null;
-
-            if (skill == null)
-                return;
-
-            if (RequiresTarget(skill))
-            {
-                _pendingSkill = skill;
-                SetStatus($"[{skill.Name}] 선택됨. 타겟을 고르세요.");
-                return;
+                SetButtonText(button, $"Enemy {localEnemy.Id.Value}  HP {localEnemy.HP}/{localEnemy.MaxHP}");
+                button.onClick.AddListener(() => SelectTarget(localEnemy));
             }
 
-            CommitToSlot(skill, null);
+            if (!hasLivingEnemy)
+                SetMessage("선택 가능한 적이 없습니다.");
         }
 
-        private void OnTargetClicked(ICombatant target)
+        private void SelectSkill(ISkill skill)
         {
-            if (_pendingSkill == null)
-            {
-                SetStatus("타겟 선택됨. 먼저 스킬을 고르세요.");
-                return;
-            }
+            _selectedSkill = skill;
+            _selectedTarget = GetDefaultTargetFor(skill, _selectedTarget);
 
-            CommitToSlot(_pendingSkill, target);
-            _pendingSkill = null;
-        }
-
-        private static bool RequiresTarget(ISkill skill)
-        {
-            if (skill == null)
-                return false;
-
-            if (skill.Tag == SkillTag.Inspect)
-                return true;
-
-            return skill.Targeting == TargetingRule.SingleEnemy;
-        }
-
-        private void CommitToSlot(ISkill skill, ICombatant targetOrNull)
-        {
-            if (_session == null || _actor == null || skill == null)
-                return;
-
-            if (RequiresTarget(skill) && targetOrNull == null)
-            {
-                SetStatus("이 스킬은 타겟이 필요합니다.");
-                return;
-            }
-
-            if (!_draft.TryGetPlan(_actor.Id, out ActionPlan currentPlan))
-                currentPlan = new ActionPlan(PlannedAction.None, PlannedAction.None);
-
-            PlannedAction plannedAction = new PlannedAction(
-                skillId: skill.Id,
-                tag: skill.Tag,
-                targeting: skill.Targeting,
-                targetCombatantId: targetOrNull != null ? targetOrNull.Id : default,
-                plannedSpeed: skill.Speed,
-                consumesTurn: skill.ConsumesTurn
-            );
-
-            PlannedAction slot1 = currentPlan.Slot1;
-            PlannedAction slot2 = currentPlan.Slot2;
-
-            if (_selectedSlot == 0)
-                slot1 = plannedAction;
+            if (RequiresEnemyTarget(skill) && _selectedTarget == null)
+                SetMessage($"{skill.Name}: 대상을 선택하세요.");
             else
-                slot2 = plannedAction;
+                SetMessage($"{skill.Name} 선택됨.");
 
-            _draft.EnsureActor(_actor.Id);
-            _draft.SetSlot(_actor.Id, 0, slot1);
-            _draft.SetSlot(_actor.Id, 1, slot2);
-
-            RefreshSlotLabels();
-            SetStatus($"슬롯 {_selectedSlot + 1} 예약 완료: {skill.Name}");
+            RefreshConfirmState();
         }
 
-        private void RefreshSlotLabels()
+        private void SelectTarget(ICombatant target)
         {
-            if (_session == null || _actor == null)
+            if (target == null || target.HP <= 0)
+            {
+                SetMessage("선택할 수 없는 대상입니다.");
                 return;
+            }
 
-            if (!_draft.TryGetPlan(_actor.Id, out ActionPlan plan))
-                plan = new ActionPlan(PlannedAction.None, PlannedAction.None);
-
-            if (slot1Button != null)
-                SetButtonText(slot1Button, SlotLabel(1, plan.Slot1));
-
-            if (slot2Button != null)
-                SetButtonText(slot2Button, SlotLabel(2, plan.Slot2));
-        }
-
-        private string SlotLabel(int slotNo, PlannedAction action)
-        {
-            if (action.IsNone)
-                return $"Slot {slotNo}: (empty)";
-
-            string name = _skillNameById.TryGetValue(action.SkillId, out string skillName)
-                ? skillName
-                : action.SkillId.ToString();
-
-            string targetText = action.Targeting == TargetingRule.SingleEnemy
-                ? $" -> {action.TargetCombatantId}"
-                : string.Empty;
-
-            return $"Slot {slotNo}: {name}{targetText}";
+            _selectedTarget = target;
+            SetMessage(_selectedSkill != null ? $"{_selectedSkill.Name} -> Enemy {target.Id.Value}" : "스킬을 먼저 선택하세요.");
+            RefreshConfirmState();
         }
 
         private void Confirm()
         {
-            if (_session == null || entryPoint == null)
+            if (_submittedThisPlanning)
+                return;
+
+            if (!CanConfirm(out string reason))
             {
-                Debug.LogWarning("[CombatPlanningHUD] Confirm 실패: Session 또는 EntryPoint가 없습니다.");
+                SetMessage(reason);
                 return;
             }
 
-            if (_session.CurrentTurn == null)
+            CombatPlanDraft draft = new CombatPlanDraft();
+            draft.SetSlot(_player.Id, 0, BuildAction(_selectedSkill, _selectedTarget));
+            draft.SetSlot(_player.Id, 1, PlannedAction.None);
+
+            if (flowOrchestrator == null)
             {
-                Debug.LogWarning("[CombatPlanningHUD] Confirm 실패: CurrentTurn이 없습니다.");
+                SetMessage("CombatFlowOrchestrator 참조가 없습니다.");
                 return;
             }
 
-            foreach (var pair in _draft.Plans)
-                _session.CurrentTurn.SetPlan(pair.Key, pair.Value);
-
-            if (autoFillEnemyPlansOnConfirm)
-                AutoFillEnemiesIfMissing();
-
-            if (panelPlanning != null)
-                panelPlanning.SetActive(false);
-
-            bool submitted = entryPoint.SubmitCurrentTurn();
-            SetStatus(submitted ? "Confirmed." : "Submit failed.");
-        }
-
-        private void AutoFillEnemiesIfMissing()
-        {
-            if (_session == null || _session.Allies.Count == 0)
-                return;
-
-            ICombatant firstAlly = _session.Allies[0];
-
-            foreach (ICombatant enemy in _session.Enemies)
+            if (!flowOrchestrator.SubmitPlayerDraftAndAdvance(draft, _player, out string errorMessage))
             {
-                if (enemy == null)
-                    continue;
-
-                if (_session.CurrentTurn.TryGetPlan(enemy.Id, out _))
-                    continue;
-
-                if (enemy.IsStunned)
-                {
-                    _session.CurrentTurn.SetPlan(
-                        enemy.Id,
-                        new ActionPlan(PlannedAction.None, PlannedAction.None)
-                    );
-                    continue;
-                }
-
-                ISkill skill = enemy.Skills.Count > 0 ? enemy.Skills[0] : null;
-                if (skill == null)
-                {
-                    _session.CurrentTurn.SetPlan(
-                        enemy.Id,
-                        new ActionPlan(PlannedAction.None, PlannedAction.None)
-                    );
-                    continue;
-                }
-
-                PlannedAction plannedAction = new PlannedAction(
-                    skillId: skill.Id,
-                    tag: skill.Tag,
-                    targeting: skill.Targeting,
-                    targetCombatantId: firstAlly.Id,
-                    plannedSpeed: skill.Speed,
-                    consumesTurn: skill.ConsumesTurn
-                );
-
-                _session.CurrentTurn.SetPlan(
-                    enemy.Id,
-                    new ActionPlan(plannedAction, PlannedAction.None)
-                );
+                SetMessage(string.IsNullOrEmpty(errorMessage) ? "Confirm 실패" : errorMessage);
+                RefreshConfirmState();
+                return;
             }
+
+            _submittedThisPlanning = true;
+            if (confirmButton != null)
+                confirmButton.interactable = false;
+
+            Hide();
         }
 
-        private void EnsurePlanExists(ICombatant combatant)
+        private PlannedAction BuildAction(ISkill skill, ICombatant target)
         {
-            if (_session == null || combatant == null)
-                return;
-
-            if (_draft.TryGetPlan(combatant.Id, out _))
-                return;
-
-            _draft.EnsureActor(combatant.Id);
+            return new PlannedAction(
+                skillId: skill.Id,
+                tag: skill.Tag,
+                targeting: skill.Targeting,
+                targetCombatantId: target != null ? target.Id : default,
+                plannedSpeed: skill.Speed,
+                consumesTurn: skill.ConsumesTurn
+            );
         }
 
-        private void SetStatus(string message)
+        private void RefreshConfirmState()
         {
+            if (confirmButton == null)
+                return;
+
+            confirmButton.interactable = !_submittedThisPlanning && CanConfirm(out _);
+        }
+
+        private bool CanConfirm(out string reason)
+        {
+            reason = null;
+
+            if (_session == null)
+            {
+                reason = "전투 세션이 없습니다.";
+                return false;
+            }
+
+            if (_player == null || _player.HP <= 0)
+            {
+                reason = "행동 가능한 플레이어가 없습니다.";
+                return false;
+            }
+
+            if (_selectedSkill == null)
+            {
+                reason = "스킬을 선택하세요.";
+                return false;
+            }
+
+            if (RequiresEnemyTarget(_selectedSkill) && (_selectedTarget == null || _selectedTarget.HP <= 0))
+            {
+                reason = "살아있는 적 대상을 선택하세요.";
+                return false;
+            }
+
+            return true;
+        }
+
+        private ICombatant GetDefaultTargetFor(ISkill skill, ICombatant currentTarget)
+        {
+            if (skill == null)
+                return null;
+
+            if (skill.Targeting == TargetingRule.Self)
+                return _player;
+
+            if (!RequiresEnemyTarget(skill))
+                return null;
+
+            if (currentTarget != null && currentTarget.HP > 0)
+                return currentTarget;
+
+            return null;
+        }
+
+        private static bool RequiresEnemyTarget(ISkill skill)
+        {
+            if (skill == null)
+                return false;
+
+            return skill.Targeting == TargetingRule.SingleEnemy ||
+                   skill.Targeting == TargetingRule.AnySingle ||
+                   skill.Targeting == TargetingRule.AllEnemies ||
+                   skill.Tag == SkillTag.Inspect;
+        }
+
+        private void ResetSelection()
+        {
+            _selectedSkill = null;
+            _selectedTarget = null;
+        }
+
+        private void SetMessage(string message)
+        {
+            if (errorText != null)
+                errorText.text = message;
+
             if (statusText != null)
                 statusText.text = message;
         }
@@ -558,9 +411,16 @@ namespace Game.Combat.UI
             if (button == null)
                 return;
 
-            Text label = button.GetComponentInChildren<Text>();
-            if (label != null)
-                label.text = text;
+            TMP_Text tmpLabel = button.GetComponentInChildren<TMP_Text>(true);
+            if (tmpLabel != null)
+            {
+                tmpLabel.text = text;
+                return;
+            }
+
+            Text legacyLabel = button.GetComponentInChildren<Text>(true);
+            if (legacyLabel != null)
+                legacyLabel.text = text;
         }
     }
 }

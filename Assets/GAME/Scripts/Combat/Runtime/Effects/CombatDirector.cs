@@ -1,11 +1,11 @@
-﻿// GAME/Scripts/Combat/Effects/CombatDirector.cs
 using System;
 using System.Collections;
 using UnityEngine;
-using Game.Combat.Core;
-using Game.Combat.Model;
 using Game.Combat.Adapters;
+using Game.Combat.Core;
 using Game.Combat.Data;
+using Game.Combat.Integration;
+using Game.Combat.Model;
 
 namespace Game.Combat.Effects
 {
@@ -13,17 +13,24 @@ namespace Game.Combat.Effects
     {
         [Header("References")]
         [SerializeField] private CombatEntryPoint entryPoint;
+        [SerializeField] private CombatCameraController cameraController;
 
-        [Header("Animation Settings")]
-        [SerializeField] private float approachDuration = 0.2f;
-        [SerializeField] private float returnDuration = 0.25f;
-        [SerializeField] private float stopDistance = 1.0f;
+        [Header("Fallback Animation Settings")]
+        [SerializeField] private float fallbackApproachDuration = 0.2f;
+        [SerializeField] private float fallbackActionDelay = 0.15f;
 
         public void PlayResolution(CombatSession session, Action onComplete)
         {
-            Debug.Log($"[Director] Playbook Count = {session.CurrentTurn.Playbook.Count}");
-
             StartCoroutine(Co_PlayTurnAnimation(session, onComplete));
+        }
+
+        private void Awake()
+        {
+            if (entryPoint == null)
+                entryPoint = FindFirstObjectByType<CombatEntryPoint>();
+
+            if (cameraController == null)
+                cameraController = FindFirstObjectByType<CombatCameraController>();
         }
 
         private IEnumerator Co_PlayTurnAnimation(CombatSession session, Action onComplete)
@@ -34,20 +41,16 @@ namespace Game.Combat.Effects
                 yield break;
             }
 
-            foreach (var playbookEvent in session.CurrentTurn.Playbook)
+            for (int i = 0; i < session.CurrentTurn.Playbook.Count; i++)
             {
+                PlaybookEvent playbookEvent = session.CurrentTurn.Playbook[i];
+
                 if (playbookEvent is Event_Unopposed unopposed)
-                {
-                    yield return StartCoroutine(PlayUnopposed(unopposed));
-                }
+                    yield return PlayUnopposed(unopposed);
                 else if (playbookEvent is Event_Clash clash)
-                {
-                    yield return StartCoroutine(PlayClash(clash));
-                }
+                    yield return PlayClash(clash);
                 else if (playbookEvent is Event_Utility utility)
-                {
-                    yield return StartCoroutine(PlayUtility(utility));
-                }
+                    yield return PlayUtility(utility);
 
                 yield return new WaitForSeconds(0.2f);
             }
@@ -57,9 +60,11 @@ namespace Game.Combat.Effects
 
         private IEnumerator PlayUnopposed(Event_Unopposed ev)
         {
+            if (ev == null)
+                yield break;
+
             if (ev.IsCancelled || ev.LackOfInspiration)
             {
-                Debug.Log($"[Director] 행동 취소: {ev.Actor?.Id}");
                 yield return new WaitForSeconds(0.3f);
                 yield break;
             }
@@ -67,109 +72,175 @@ namespace Game.Combat.Effects
             GameObject actorObj = GetFieldObject(ev.Actor);
             GameObject targetObj = GetFieldObject(ev.Target);
 
-            if (actorObj != null && targetObj != null)
+            if (actorObj == null)
+                yield break;
+
+            Debug.Log($"[CombatDirector] Actor={ev.Actor?.Id.Value} Skill={ev.Skill?.Name} Target={ev.Target?.Id.Value}", this);
+
+            if (targetObj != null)
             {
-                Vector3 originalPos = actorObj.transform.position;
-                Vector3 targetPos = targetObj.transform.position;
-                Vector3 dir = (targetPos - originalPos).normalized;
-                Vector3 attackPos = targetPos - (dir * stopDistance);
+                cameraController?.FocusAction(ev.Actor, ev.Target);
+                yield return MoveActorForSkill(actorObj.transform, targetObj.transform, ev.Skill);
+            }
 
-                yield return StartCoroutine(MoveTransform(actorObj.transform, originalPos, attackPos, approachDuration));
+            PlayAttackTrigger(actorObj);
+            yield return WaitAfterMove(ev.Skill);
 
-                Animator anim = actorObj.GetComponentInChildren<Animator>();
-                if (anim != null)
-                    anim.SetTrigger("Attack");
-
-                yield return new WaitForSeconds(0.15f);
-
+            if (targetObj != null)
                 StartCoroutine(FlashColor(targetObj, Color.red, 0.2f));
 
-                yield return new WaitForSeconds(0.3f);
+            yield return new WaitForSeconds(0.3f);
 
-                if (ev.Target != null && ev.Target.HP <= 0)
-                    yield break;
-
-                yield return StartCoroutine(MoveTransform(actorObj.transform, attackPos, originalPos, returnDuration));
-            }
         }
 
         private IEnumerator PlayClash(Event_Clash ev)
         {
+            if (ev == null)
+                yield break;
+
             GameObject objA = GetFieldObject(ev.ActorA);
             GameObject objB = GetFieldObject(ev.ActorB);
 
-            if (objA != null && objB != null)
+            if (objA == null || objB == null)
+                yield break;
+
+            Debug.Log(
+                $"[CombatDirector] Clash A={ev.ActorA?.Id.Value}:{ev.SkillA?.Name} B={ev.ActorB?.Id.Value}:{ev.SkillB?.Name}",
+                this
+            );
+
+            cameraController?.FocusAction(ev.ActorA, ev.ActorB);
+
+            yield return MoveActorForSkill(objA.transform, objB.transform, ev.SkillA);
+            yield return MoveActorForSkill(objB.transform, objA.transform, ev.SkillB);
+
+            PlayAttackTrigger(objA);
+            PlayAttackTrigger(objB);
+
+            float delay = Mathf.Max(GetActionDelay(ev.SkillA), GetActionDelay(ev.SkillB));
+            yield return new WaitForSeconds(delay);
+
+            if (ev.Loser != null)
             {
-                Vector3 posA = objA.transform.position;
-                Vector3 posB = objB.transform.position;
-
-                Vector3 center = (posA + posB) / 2f;
-                Vector3 dirA = (center - posA).normalized;
-                Vector3 dirB = (center - posB).normalized;
-
-                Vector3 clashPosA = center - (dirA * (stopDistance * 0.5f));
-                Vector3 clashPosB = center - (dirB * (stopDistance * 0.5f));
-
-                Coroutine moveA = StartCoroutine(MoveTransform(objA.transform, posA, clashPosA, approachDuration));
-                Coroutine moveB = StartCoroutine(MoveTransform(objB.transform, posB, clashPosB, approachDuration));
-                yield return moveA;
-                yield return moveB;
-
-                Animator animA = objA.GetComponentInChildren<Animator>();
-                Animator animB = objB.GetComponentInChildren<Animator>();
-                if (animA != null) animA.SetTrigger("Attack");
-                if (animB != null) animB.SetTrigger("Attack");
-
-                yield return new WaitForSeconds(0.15f);
-
-                if (ev.Loser != null)
-                {
-                    GameObject loserObj = GetFieldObject(ev.Loser);
-                    if (loserObj != null)
-                        StartCoroutine(FlashColor(loserObj, Color.red, 0.2f));
-                }
-
-                yield return new WaitForSeconds(0.4f);
-
-                bool actorADead = ev.ActorA != null && ev.ActorA.HP <= 0;
-                bool actorBDead = ev.ActorB != null && ev.ActorB.HP <= 0;
-
-                if (!actorADead && !actorBDead)
-                {
-                    StartCoroutine(MoveTransform(objA.transform, clashPosA, posA, returnDuration));
-                    StartCoroutine(MoveTransform(objB.transform, clashPosB, posB, returnDuration));
-                    yield return new WaitForSeconds(returnDuration);
-                }
+                GameObject loserObj = GetFieldObject(ev.Loser);
+                if (loserObj != null)
+                    StartCoroutine(FlashColor(loserObj, Color.red, 0.2f));
             }
+
+            yield return new WaitForSeconds(0.4f);
+
         }
 
         private IEnumerator PlayUtility(Event_Utility ev)
         {
-            if (ev.IsCancelled)
+            if (ev == null || ev.IsCancelled)
                 yield break;
 
             GameObject actorObj = GetFieldObject(ev.Actor);
-            if (actorObj != null)
-            {
-                Animator anim = actorObj.GetComponentInChildren<Animator>();
-                if (anim != null)
-                    anim.SetTrigger("Attack");
+            if (actorObj == null)
+                yield break;
 
-                StartCoroutine(FlashColor(actorObj, Color.yellow, 0.3f));
-                yield return new WaitForSeconds(0.5f);
-            }
+            Debug.Log($"[CombatDirector] Utility Actor={ev.Actor?.Id.Value} Skill={ev.Skill?.Name}", this);
+
+            cameraController?.FocusAction(ev.Actor, ev.Actor);
+            PlayAttackTrigger(actorObj);
+            StartCoroutine(FlashColor(actorObj, Color.yellow, 0.3f));
+            yield return WaitAfterMove(ev.Skill);
+        }
+
+        private IEnumerator MoveActorForSkill(Transform actor, Transform target, ISkill skill)
+        {
+            if (actor == null || target == null || !ShouldApproach(skill))
+                yield break;
+
+            Vector3 attackPoint = CalculateAttackPoint(actor.position, target.position, skill);
+            attackPoint.z = actor.position.z;
+
+            cameraController?.FocusAction(GetCombatant(actor.gameObject), GetCombatant(target.gameObject));
+            yield return MoveTransform(actor, actor.position, attackPoint, GetMoveDuration(actor.position, attackPoint, skill));
+            cameraController?.FocusAction(GetCombatant(actor.gameObject), GetCombatant(target.gameObject));
+        }
+
+        private static bool ShouldApproach(ISkill skill)
+        {
+            if (skill == null)
+                return false;
+
+            return skill.MovementMode == SkillMovementMode.ApproachAndStay;
+        }
+
+        private static Vector3 CalculateAttackPoint(Vector3 actorPosition, Vector3 targetPosition, ISkill skill)
+        {
+            Vector3 direction = actorPosition - targetPosition;
+            direction.z = 0f;
+
+            if (direction.sqrMagnitude < 0.0001f)
+                direction = Vector3.left;
+            else
+                direction.Normalize();
+
+            float distance = skill != null ? Mathf.Max(0f, skill.DesiredTargetDistance) : 1f;
+            return targetPosition + direction * distance;
+        }
+
+        private float GetMoveDuration(Vector3 start, Vector3 end, ISkill skill)
+        {
+            float distance = Vector3.Distance(start, end);
+            if (distance <= 0.001f)
+                return 0f;
+
+            float speed = skill != null ? skill.MoveSpeed : 0f;
+            if (speed > 0.001f)
+                return Mathf.Max(0.01f, distance / speed);
+
+            return Mathf.Max(0.01f, fallbackApproachDuration);
+        }
+
+        private float GetActionDelay(ISkill skill)
+        {
+            return skill != null ? Mathf.Max(0f, skill.ActionDelayAfterMove) : fallbackActionDelay;
+        }
+
+        private IEnumerator WaitAfterMove(ISkill skill)
+        {
+            yield return new WaitForSeconds(GetActionDelay(skill));
+        }
+
+        private static void PlayAttackTrigger(GameObject actorObj)
+        {
+            Animator anim = actorObj != null ? actorObj.GetComponentInChildren<Animator>() : null;
+            if (anim != null)
+                anim.SetTrigger("Attack");
         }
 
         private GameObject GetFieldObject(ICombatant combatant)
         {
-            Debug.Log($"[Director] combatant={combatant?.Id}, type={combatant?.GetType().Name}");
-
             if (combatant is FieldCombatantAdapter fieldCombatant)
                 return fieldCombatant.FieldObject;
 
             return null;
+        }
 
+        private ICombatant GetCombatant(GameObject fieldObject)
+        {
+            if (fieldObject == null || entryPoint == null || entryPoint.ActiveSession == null)
+                return null;
 
+            CombatSession session = entryPoint.ActiveSession;
+
+            for (int i = 0; i < session.Allies.Count; i++)
+            {
+                if (session.Allies[i] is FieldCombatantAdapter adapter && adapter.FieldObject == fieldObject)
+                    return adapter;
+            }
+
+            for (int i = 0; i < session.Enemies.Count; i++)
+            {
+                if (session.Enemies[i] is FieldCombatantAdapter adapter && adapter.FieldObject == fieldObject)
+                    return adapter;
+            }
+
+            return null;
         }
 
         private IEnumerator MoveTransform(Transform tf, Vector3 start, Vector3 end, float duration)
@@ -177,12 +248,19 @@ namespace Game.Combat.Effects
             if (tf == null)
                 yield break;
 
+            if (duration <= 0.001f)
+            {
+                tf.position = end;
+                yield break;
+            }
+
             float t = 0f;
             while (t < duration)
             {
                 t += Time.deltaTime;
-                float normalizedTime = Mathf.Sin((t / duration) * Mathf.PI * 0.5f);
-                tf.position = Vector3.Lerp(start, end, normalizedTime);
+                float normalizedTime = Mathf.Clamp01(t / duration);
+                float eased = Mathf.Sin(normalizedTime * Mathf.PI * 0.5f);
+                tf.position = Vector3.Lerp(start, end, eased);
                 yield return null;
             }
 

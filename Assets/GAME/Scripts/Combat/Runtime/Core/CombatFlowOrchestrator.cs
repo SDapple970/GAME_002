@@ -1,4 +1,3 @@
-// GAME_002/Assets/GAME/Scripts/Combat/Core/CombatFlowOrchestrator.cs
 using Game.Combat.Model;
 using UnityEngine;
 
@@ -30,13 +29,13 @@ namespace Game.Combat.Core
 
             if (_session == null)
             {
-                errorMessage = "ÀüÅõ ¼¼¼ÇÀÌ ¿¬°áµÇÁö ¾Ê¾Ò½À´Ï´Ù.";
+                errorMessage = "ì „íˆ¬ ì„¸ì…˜ì´ ì—°ê²°ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.";
                 return false;
             }
 
             if (entryPoint == null)
             {
-                errorMessage = "CombatEntryPoint ÂüÁ¶°¡ ¾ø½À´Ï´Ù.";
+                errorMessage = "CombatEntryPoint ì°¸ì¡°ê°€ ì—†ìŠµë‹ˆë‹¤.";
                 return false;
             }
 
@@ -53,47 +52,75 @@ namespace Game.Combat.Core
 
         private void CommitDraftToSession(CombatPlanDraft draft)
         {
+            if (draft == null || _session == null || _session.CurrentTurn == null)
+                return;
+
             foreach (var pair in draft.Plans)
-            {
                 _session.CurrentTurn.SetPlan(pair.Key, pair.Value);
-            }
         }
 
         private void FillEnemyPlansFallbackIfMissing()
         {
-            if (_session == null || _session.Allies.Count == 0)
+            if (_session == null || _session.CurrentTurn == null || _session.Allies.Count == 0)
                 return;
 
-            var firstAlly = _session.Allies[0];
-
-            foreach (var enemy in _session.Enemies)
+            ICombatant player = _session.Allies[0];
+            if (player == null || player.HP <= 0)
             {
-                if (enemy == null) continue;
-                if (_session.CurrentTurn.TryGetPlan(enemy.Id, out _)) continue;
+                FillEnemiesWithNone();
+                return;
+            }
 
-                if (enemy.IsStunned)
+            for (int i = 0; i < _session.Enemies.Count; i++)
+            {
+                ICombatant enemy = _session.Enemies[i];
+                if (enemy == null)
+                    continue;
+
+                if (_session.CurrentTurn.TryGetPlan(enemy.Id, out _))
+                    continue;
+
+                if (enemy.HP <= 0 || enemy.IsStunned || enemy.Skills == null || enemy.Skills.Count == 0)
                 {
                     _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(PlannedAction.None, PlannedAction.None));
                     continue;
                 }
 
-                ISkill skill = enemy.Skills.Count > 0 ? enemy.Skills[0] : null;
-                if (skill == null)
+                int skillIndex = _session.TurnIndex % enemy.Skills.Count;
+                ISkill selectedSkill = enemy.Skills[skillIndex];
+
+                if (selectedSkill == null)
                 {
                     _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(PlannedAction.None, PlannedAction.None));
                     continue;
                 }
 
-                var pa = new PlannedAction(
-                    skillId: skill.Id,
-                    tag: skill.Tag,
-                    targeting: skill.Targeting,
-                    targetCombatantId: firstAlly.Id,
-                    plannedSpeed: skill.Speed,
-                    consumesTurn: skill.ConsumesTurn
+                PlannedAction enemyAction = new PlannedAction(
+                    skillId: selectedSkill.Id,
+                    tag: selectedSkill.Tag,
+                    targeting: selectedSkill.Targeting,
+                    targetCombatantId: player.Id,
+                    plannedSpeed: selectedSkill.Speed,
+                    consumesTurn: selectedSkill.ConsumesTurn
                 );
 
-                _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(pa, PlannedAction.None));
+                _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(enemyAction, PlannedAction.None));
+            }
+        }
+
+        private void FillEnemiesWithNone()
+        {
+            if (_session == null || _session.CurrentTurn == null)
+                return;
+
+            for (int i = 0; i < _session.Enemies.Count; i++)
+            {
+                ICombatant enemy = _session.Enemies[i];
+                if (enemy == null)
+                    continue;
+
+                if (!_session.CurrentTurn.TryGetPlan(enemy.Id, out _))
+                    _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(PlannedAction.None, PlannedAction.None));
             }
         }
     }
