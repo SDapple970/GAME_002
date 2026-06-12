@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 4789b3efef17a3e438b1a7e4baad32ce
+guid: 47e397e0ae7d4c24993b352e96b898ef
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -5477697351591520546
-    second: apartment_side_house_inside 1_0
+      213: -4888566471806428430
+    second: apartment_side_house_inside_1-4_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -113,12 +113,12 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: apartment_side_house_inside 1_0
+      name: apartment_side_house_inside_1-4_0
       rect:
         serializedVersion: 2
         x: 6
         y: 0
-        width: 344
+        width: 340
         height: 730
       alignment: 0
       pivot: {x: 0, y: 0}
@@ -128,8 +128,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: ed61a43e74f4bf3b0800000000000000
-      internalID: -5477697351591520546
+      spriteID: 2fad713d1b2582cb0800000000000000
+      internalID: -4888566471806428430
       vertices: []
       indices: 
       edges: []
@@ -148,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      apartment_side_house_inside 1_0: -5477697351591520546
+      apartment_side_house_inside_1-4_0: -4888566471806428430
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
