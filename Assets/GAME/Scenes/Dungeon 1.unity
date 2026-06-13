@@ -636,7 +636,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a834384705db7c84192858b6b8c06df5, type: 3}
-  m_Name: 
+  m_Name: ""
   m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.QuestTrackerUI
   questManager: {fileID: 0}
   root: {fileID: 142427650}
@@ -3607,8 +3607,7 @@ MonoBehaviour:
   disableAfterInteract: 0
   playerTag: Player
   events:
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 11400000, guid: 43aae2698c384aaaa1595acacc6faed7, type: 2}
 --- !u!61 &555011045
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -11803,6 +11802,7 @@ RectTransform:
   - {fileID: 1269336597}
   - {fileID: 1880689326}
   - {fileID: 1494647251}
+  - {fileID: 2147000001}
   m_Father: {fileID: 421006579}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -16004,6 +16004,71 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Adapters.CombatSkillLoadoutComponent
   skillIds: 01000000020000000a000000
+--- !u!1 &2147000000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2147000001}
+  - component: {fileID: 2147000002}
+  m_Layer: 0
+  m_Name: TimedChoiceDialoguePanel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &2147000001
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2147000000}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1567702206}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &2147000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2147000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 32c34eb81a044e26a7a6dd70064c0d42, type: 3}
+  m_Name: ""
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Dialogue.TimedChoiceDialoguePanel
+  panelRoot: {fileID: 0}
+  autoBuildIfMissing: 1
+  speakerText: {fileID: 0}
+  bodyText: {fileID: 0}
+  optionAText: {fileID: 0}
+  optionBText: {fileID: 0}
+  timerText: {fileID: 0}
+  legacySpeakerText: {fileID: 0}
+  legacyBodyText: {fileID: 0}
+  legacyOptionAText: {fileID: 0}
+  legacyOptionBText: {fileID: 0}
+  legacyTimerText: {fileID: 0}
+  optionAButton: {fileID: 0}
+  optionBButton: {fileID: 0}
+  timerSlider: {fileID: 0}
+  timerFill: {fileID: 0}
+  pauseTimeScale: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

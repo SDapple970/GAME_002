@@ -10,8 +10,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f38ee9d24ea24f6f8b89a46035d0483c, type: 3}
-  m_Name: Rescue NPC Objective Event
+  m_Name: Evnet_RescueNpc
   m_EditorClassIdentifier: Assembly-CSharp::Game.Demo.RescueNpcObjectiveEventSO
   objectiveManager: {fileID: 0}
   completeQuestOnRescue: 0
-  questId: 101
+  questId: 100
