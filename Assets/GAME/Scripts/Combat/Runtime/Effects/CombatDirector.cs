@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
+using Game.Combat.Actions;
 using UnityEngine;
 using Game.Combat.Adapters;
+using Game.Combat.Animation;
 using Game.Combat.Core;
 using Game.Combat.Data;
 using Game.Combat.Integration;
@@ -83,11 +85,14 @@ namespace Game.Combat.Effects
                 yield return MoveActorForSkill(actorObj.transform, targetObj.transform, ev.Skill);
             }
 
-            PlayAttackTrigger(actorObj);
+            PlayAttackTrigger(actorObj, ev.Skill);
             yield return WaitAfterMove(ev.Skill);
 
             if (targetObj != null)
+            {
+                PlayTargetReaction(ev.Target, targetObj, ev.DamageDealt, ev.StaggerDealt);
                 StartCoroutine(FlashColor(targetObj, Color.red, 0.2f));
+            }
 
             yield return new WaitForSeconds(0.3f);
 
@@ -114,8 +119,8 @@ namespace Game.Combat.Effects
             yield return MoveActorForSkill(objA.transform, objB.transform, ev.SkillA);
             yield return MoveActorForSkill(objB.transform, objA.transform, ev.SkillB);
 
-            PlayAttackTrigger(objA);
-            PlayAttackTrigger(objB);
+            PlayAttackTrigger(objA, ev.SkillA);
+            PlayAttackTrigger(objB, ev.SkillB);
 
             float delay = Mathf.Max(GetActionDelay(ev.SkillA), GetActionDelay(ev.SkillB));
             yield return new WaitForSeconds(delay);
@@ -124,7 +129,10 @@ namespace Game.Combat.Effects
             {
                 GameObject loserObj = GetFieldObject(ev.Loser);
                 if (loserObj != null)
+                {
+                    PlayTargetReaction(ev.Loser, loserObj, ev.DamageDealtToLoser, ev.StaggerDealtToLoser);
                     StartCoroutine(FlashColor(loserObj, Color.red, 0.2f));
+                }
             }
 
             yield return new WaitForSeconds(0.4f);
@@ -143,7 +151,7 @@ namespace Game.Combat.Effects
             Debug.Log($"[CombatDirector] Utility Actor={ev.Actor?.Id.Value} Skill={ev.Skill?.Name}", this);
 
             cameraController?.FocusAction(ev.Actor, ev.Actor);
-            PlayAttackTrigger(actorObj);
+            PlayAttackTrigger(actorObj, ev.Skill);
             StartCoroutine(FlashColor(actorObj, Color.yellow, 0.3f));
             yield return WaitAfterMove(ev.Skill);
         }
@@ -206,11 +214,47 @@ namespace Game.Combat.Effects
             yield return new WaitForSeconds(GetActionDelay(skill));
         }
 
-        private static void PlayAttackTrigger(GameObject actorObj)
+        private static void PlayAttackTrigger(GameObject actorObj, ISkill skill)
         {
-            Animator anim = actorObj != null ? actorObj.GetComponentInChildren<Animator>() : null;
+            if (actorObj == null)
+                return;
+
+            CombatantAnimationDriver driver = actorObj.GetComponentInChildren<CombatantAnimationDriver>();
+            SkillDefinitionSO skillDefinition = ResolveSkillDefinition(skill);
+            if (driver != null && skillDefinition != null)
+            {
+                driver.PlaySkill(skillDefinition, combatMode: true);
+                return;
+            }
+
+            Animator anim = actorObj.GetComponentInChildren<Animator>();
             if (anim != null)
-                anim.SetTrigger("Attack");
+                anim.SetTrigger(Animator.StringToHash("Attack"));
+        }
+
+        private static void PlayTargetReaction(ICombatant target, GameObject targetObj, int damageDealt, int staggerDealt)
+        {
+            if (targetObj == null || target == null)
+                return;
+
+            if (damageDealt <= 0 && staggerDealt <= 0)
+                return;
+
+            CombatantAnimationDriver driver = targetObj.GetComponentInChildren<CombatantAnimationDriver>();
+            if (driver == null)
+                return;
+
+            if (target.HP <= 0)
+                driver.PlayDie();
+            else if (staggerDealt > 0 && target.Stagger >= target.StaggerMax)
+                driver.PlayStagger();
+            else
+                driver.PlayHit();
+        }
+
+        private static SkillDefinitionSO ResolveSkillDefinition(ISkill skill)
+        {
+            return skill is SoSkill soSkill ? soSkill.Definition : null;
         }
 
         private GameObject GetFieldObject(ICombatant combatant)

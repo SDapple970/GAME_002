@@ -17610,6 +17610,8 @@ GameObject:
   - component: {fileID: 2136546006}
   - component: {fileID: 2136546014}
   - component: {fileID: 2136546015}
+  - component: {fileID: 2136546016}
+  - component: {fileID: 2136546017}
   m_Layer: 6
   m_Name: Player
   m_TagString: Player
@@ -17685,6 +17687,7 @@ MonoBehaviour:
   animator: {fileID: 0}
   attackTrigger: Attack
   hitBoxOffset: {x: 1.2, y: 0}
+  fieldSkillCaster: {fileID: 2136546016}
 --- !u!114 &2136546010
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17816,6 +17819,42 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Adapters.CombatSkillLoadoutComponent
   skillIds: 01000000020000000a000000
+--- !u!114 &2136546016
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2136546004}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6d279ec8880d42019caf0f7acf2cc56b, type: 3}
+  m_Name: ""
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Player.FieldSkillCaster
+  defaultSkill: {fileID: 11400000, guid: 34762abf398a5714c8798709879a251d, type: 2}
+  hitOrigin: {fileID: 456503058}
+  targetMask:
+    serializedVersion: 2
+    m_Bits: 128
+  animationDriver: {fileID: 2136546017}
+  subscribeToGameInput: 0
+--- !u!114 &2136546017
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2136546004}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a62d32819d30460d97814dd1d1147295, type: 3}
+  m_Name: ""
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Animation.CombatantAnimationDriver
+  animator: {fileID: 0}
+  hitTrigger: Hit
+  staggerTrigger: Stagger
+  dieTrigger: Die
+  warnWhenAnimatorMissing: 1
 --- !u!1 &2138087184
 GameObject:
   m_ObjectHideFlags: 0

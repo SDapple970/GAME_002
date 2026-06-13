@@ -30,10 +30,47 @@ namespace Game.Combat.Data
         public float MoveSpeed => moveSpeed;
         public float ActionDelayAfterMove => actionDelayAfterMove;
 
+        [Header("Animation")]
+        [SerializeField] private string combatAnimationTrigger = "Attack";
+        [SerializeField] private string fieldAnimationTrigger = "Attack";
+
+        [Header("Field Use")]
+        [SerializeField] private bool fieldUsable = true;
+        [SerializeField] private float fieldCooldown = 0.25f;
+        [SerializeField] private float fieldHitTiming = 0.08f;
+        [SerializeField] private Vector2 fieldHitBoxSize = new Vector2(1.2f, 0.8f);
+        [SerializeField] private Vector2 fieldHitBoxOffset = new Vector2(1.2f, 0f);
+
+        [Header("Presentation Assets")]
+        [SerializeField] private GameObject castVfxPrefab;
+        [SerializeField] private GameObject impactVfxPrefab;
+        [SerializeField] private AudioClip castSfx;
+        [SerializeField] private AudioClip impactSfx;
+
+        public string CombatAnimationTrigger => combatAnimationTrigger;
+        public string FieldAnimationTrigger => fieldAnimationTrigger;
+        public bool FieldUsable => fieldUsable;
+        public float FieldCooldown => fieldCooldown;
+        public float FieldHitTiming => fieldHitTiming;
+        public Vector2 FieldHitBoxSize => fieldHitBoxSize;
+        public Vector2 FieldHitBoxOffset => fieldHitBoxOffset;
+        public GameObject CastVfxPrefab => castVfxPrefab;
+        public GameObject ImpactVfxPrefab => impactVfxPrefab;
+        public AudioClip CastSfx => castSfx;
+        public AudioClip ImpactSfx => impactSfx;
+
         [Header("MVP Numbers")]
         public int baseDamage = 1;
         public int baseStagger = 1;
         public int weaknessStaggerBonus = 3;
         public int speed = 5;
+
+        private void OnValidate()
+        {
+            fieldCooldown = Mathf.Max(0f, fieldCooldown);
+            fieldHitTiming = Mathf.Max(0f, fieldHitTiming);
+            fieldHitBoxSize.x = Mathf.Max(0f, fieldHitBoxSize.x);
+            fieldHitBoxSize.y = Mathf.Max(0f, fieldHitBoxSize.y);
+        }
     }
 }

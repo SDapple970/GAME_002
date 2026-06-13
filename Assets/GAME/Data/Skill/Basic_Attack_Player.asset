@@ -23,6 +23,17 @@ MonoBehaviour:
   desiredTargetDistance: 1
   moveSpeed: 6
   actionDelayAfterMove: 0.15
+  combatAnimationTrigger: Attack
+  fieldAnimationTrigger: Attack
+  fieldUsable: 1
+  fieldCooldown: 0.25
+  fieldHitTiming: 0.08
+  fieldHitBoxSize: {x: 1.2, y: 0.8}
+  fieldHitBoxOffset: {x: 1.2, y: 0}
+  castVfxPrefab: {fileID: 0}
+  impactVfxPrefab: {fileID: 0}
+  castSfx: {fileID: 0}
+  impactSfx: {fileID: 0}
   baseDamage: 1
   baseStagger: 1
   weaknessStaggerBonus: 3

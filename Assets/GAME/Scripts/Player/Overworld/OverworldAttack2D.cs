@@ -2,6 +2,7 @@
 using UnityEngine;
 using Game.Core;
 using Game.Common;
+using Game.Player;
 
 public sealed class OverworldAttack2D : MonoBehaviour
 {
@@ -19,18 +20,28 @@ public sealed class OverworldAttack2D : MonoBehaviour
     [SerializeField] private string attackTrigger = "Attack";
 
     [SerializeField] private Vector2 hitBoxOffset = new(1.2f, 0f);
+    [SerializeField] private FieldSkillCaster fieldSkillCaster;
 
     private float _nextTime;
     private readonly Collider2D[] _buffer = new Collider2D[16];
 
     private void Awake()
     {
+        if (fieldSkillCaster == null)
+            fieldSkillCaster = GetComponent<FieldSkillCaster>();
+
         if (animator == null)
             animator = GetComponentInChildren<Animator>();
     }
 
     public void RequestAttack()
     {
+        if (fieldSkillCaster != null)
+        {
+            fieldSkillCaster.RequestPrimaryAttack();
+            return;
+        }
+
         TryAttack();
     }
 

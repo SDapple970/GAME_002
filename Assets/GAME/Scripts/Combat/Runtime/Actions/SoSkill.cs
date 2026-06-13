@@ -8,6 +8,7 @@ namespace Game.Combat.Actions
         private readonly SkillDefinitionSO _so;
 
         public SoSkill(SkillDefinitionSO so) => _so = so;
+        public SkillDefinitionSO Definition => _so;
 
         public SkillId Id => new SkillId(_so.skillId);
         public string Name => _so.displayName;
