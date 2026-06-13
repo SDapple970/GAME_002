@@ -28,6 +28,15 @@ namespace Game.UI
         [SerializeField] private float fieldRewardAutoHideSeconds = 1.5f;
         [SerializeField] private RewardApplier rewardApplier;
 
+        [Header("Combat Result")]
+        [SerializeField] private string victoryTitle = "전투 승리";
+        [SerializeField] private string defeatTitle = "전투 패배";
+        [SerializeField] private string[] victoryRewardLines = { "Gold 100", "Potion 1" };
+        [SerializeField] private string[] defeatRewardLines = { "획득 보상 없음" };
+        [SerializeField] private bool showResultText = false;
+        [SerializeField] private string victoryResultText = "";
+        [SerializeField] private string defeatResultText = "";
+
         public event Action OnClosed;
 
         private readonly List<GameObject> _spawnedRows = new();
@@ -60,14 +69,13 @@ namespace Game.UI
             ClearRewardRows();
 
             bool isWin = result != null && result.IsWin;
-            SetText(titleText, titleLegacyText, isWin ? "임무 완료" : "임무 실패");
-            SetText(resultText, resultLegacyText, BuildResultText(result));
+            SetText(titleText, titleLegacyText, isWin ? victoryTitle : defeatTitle);
+            SetText(resultText, resultLegacyText, showResultText ? BuildResultText(isWin) : string.Empty);
 
-            if (isWin)
-            {
-                AddRewardRow("Gold 100");
-                AddRewardRow("Potion 1");
-            }
+            string[] rewardLines = isWin ? victoryRewardLines : defeatRewardLines;
+            if (rewardLines != null)
+                for (int i = 0; i < rewardLines.Length; i++)
+                    AddRewardRow(rewardLines[i]);
 
             if (root != null)
                 root.SetActive(true);
@@ -79,6 +87,9 @@ namespace Game.UI
 
             if (root != null)
                 root.SetActive(false);
+
+            if (simpleMessageText != null)
+                simpleMessageText.text = string.Empty;
         }
 
         public bool TryShowFieldRewardMessage(string message)
@@ -126,15 +137,26 @@ namespace Game.UI
         private void AddRewardRow(string text)
         {
             if (rewardRowRoot == null)
+            {
+                Debug.LogWarning($"{nameof(RewardUIPanel)} rewardRowRoot is not assigned.", this);
+                return;
+            }
+
+            if (string.IsNullOrEmpty(text))
                 return;
 
             GameObject row = new GameObject(text, typeof(RectTransform));
             row.transform.SetParent(rewardRowRoot, false);
 
+            RectTransform rowRect = row.GetComponent<RectTransform>();
+            if (rowRect != null)
+                rowRect.sizeDelta = new Vector2(rowRect.sizeDelta.x, 32f);
+
             TMP_Text rowText = row.AddComponent<TextMeshProUGUI>();
             rowText.text = text;
             rowText.fontSize = 22f;
             rowText.color = Color.white;
+            rowText.alignment = TextAlignmentOptions.Center;
             rowText.raycastTarget = false;
 
             _spawnedRows.Add(row);
@@ -161,15 +183,9 @@ namespace Game.UI
                 applier.ApplyCombatResult(result);
         }
 
-        private static string BuildResultText(CombatResult result)
+        private string BuildResultText(bool isWin)
         {
-            if (result == null)
-                return string.Empty;
-
-            if (result.IsWin)
-                return "Gold 100\nPotion 1";
-
-            return $"전투 종료 사유: {result.EndReason}";
+            return isWin ? victoryResultText : defeatResultText;
         }
 
         private static void SetText(TMP_Text tmpText, Text legacyText, string value)
