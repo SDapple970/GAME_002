@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3baa3ef759199ed49b9b134c3585ba09, type: 3}
+  m_Name: Dialogue_RescueN{pc
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Interaction.DialogueInteractionEventSO
+  lines:
+  - "\uBB50\uC57C, \uB204\uAD6C\uC57C?"
+  - "\uC2E0\uC0B4\uCCAD\uC5D0\uC11C \uBCF4\uB0B4\uC11C \uC628\uAC74\uAC00..?"
+  - "\uC774\uBBF8 \uB2A6\uC5C8\uC5B4"
+  - "\uCC9C\uC0AC\uB4E4\uC774 \uD55C\uACC4\uC120\uC744 \uB118\uC5C8\uB2E4...."
+  - "\uB098\uB294 \uC77C\uB2E8 \uC5EC\uAE30\uC11C \uB188\uB4E4\uC744 \uB9C9\uC744
+    \uC0DD\uAC01\uC774\uC57C"
+  - "\uB108\uB294?"
+  secondsPerLine: 1.5
+  logLines: 1
