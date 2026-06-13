@@ -14,4 +14,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Demo.RescueNpcObjectiveEventSO
   objectiveManager: {fileID: 0}
   completeQuestOnRescue: 0
-  questId: 100
+  questId: 101

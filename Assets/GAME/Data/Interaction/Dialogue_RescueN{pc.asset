@@ -19,6 +19,5 @@ MonoBehaviour:
   - "\uCC9C\uC0AC\uB4E4\uC774 \uD55C\uACC4\uC120\uC744 \uB118\uC5C8\uB2E4...."
   - "\uB098\uB294 \uC77C\uB2E8 \uC5EC\uAE30\uC11C \uB188\uB4E4\uC744 \uB9C9\uC744
     \uC0DD\uAC01\uC774\uC57C"
-  - "\uB108\uB294?"
-  secondsPerLine: 1.5
+  secondsPerLine: 1.7
   logLines: 1
