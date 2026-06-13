@@ -17628,9 +17628,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 2136546004}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d6e7f1d7ba95cd548810ec0ba01f6344, type: 3}
+  m_Script: {fileID: 11500000, guid: 7f64a15d9dce49058d7a8e5d72ade400, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Player.OverworldPlayerController
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Player.PlayerInputController
+  motor: {fileID: 2136546007}
+  fieldAttackController: {fileID: 2136546009}
 --- !u!114 &2136546007
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17640,9 +17642,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 2136546004}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 22cf86950b7e16e4a868106a81f4d008, type: 3}
+  m_Script: {fileID: 11500000, guid: 5a163238ad0c488bb63bf6463a4c31c2, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerMotor2D
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Player.PlayerMotor2D_New
   moveSpeed: 7
   jumpForce: 13
   groundCheck: {fileID: 650377736}
@@ -17650,7 +17652,6 @@ MonoBehaviour:
   groundMask:
     serializedVersion: 2
     m_Bits: 256
-  <IsGrounded>k__BackingField: 0
 --- !u!114 &2136546008
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17674,20 +17675,23 @@ MonoBehaviour:
   m_GameObject: {fileID: 2136546004}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 13a92282f3f9f334aa18ef768bb58264, type: 3}
+  m_Script: {fileID: 11500000, guid: cce9e8ee44bc43439dc063dec7710e92, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::OverworldAttack2D
-  hitOrigin: {fileID: 456503058}
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Player.PlayerFieldAttackController
+  animationController: {fileID: 2136546016}
+  attackOrigin: {fileID: 456503058}
   hitBoxSize: {x: 1.2, y: 0.8}
+  hitBoxOffset: {x: 0, y: 0}
   targetMask:
     serializedVersion: 2
     m_Bits: 128
+  hitDelay: 0.12
   cooldown: 0.25
-  damage: 1
-  animator: {fileID: 0}
-  attackTrigger: Attack
-  hitBoxOffset: {x: 1.2, y: 0}
-  fieldSkillCaster: {fileID: 2136546016}
+  entryPoint: {fileID: 1873649839}
+  openingEffectOrNull: {fileID: 0}
+  startReason: 0
+  initiativeSide: 0
+  enemyTag: Enemy
 --- !u!114 &2136546010
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17828,16 +17832,19 @@ MonoBehaviour:
   m_GameObject: {fileID: 2136546004}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6d279ec8880d42019caf0f7acf2cc56b, type: 3}
+  m_Script: {fileID: 11500000, guid: 6e54206c0a494739a4bbb2dc29a88550, type: 3}
   m_Name: ""
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Player.FieldSkillCaster
-  defaultSkill: {fileID: 11400000, guid: 34762abf398a5714c8798709879a251d, type: 2}
-  hitOrigin: {fileID: 456503058}
-  targetMask:
-    serializedVersion: 2
-    m_Bits: 128
-  animationDriver: {fileID: 2136546017}
-  subscribeToGameInput: 0
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Player.PlayerAnimationController
+  animator: {fileID: 1571390938}
+  visualRoot: {fileID: 1571390940}
+  motor: {fileID: 2136546007}
+  rb: {fileID: 2136546012}
+  speedParam: Speed
+  groundedParam: IsGrounded
+  airSpeedYParam: AirSpeedY
+  attackTrigger: Attack
+  hitTrigger: Hit
+  dieTrigger: Die
 --- !u!114 &2136546017
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17850,7 +17857,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a62d32819d30460d97814dd1d1147295, type: 3}
   m_Name: ""
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Animation.CombatantAnimationDriver
-  animator: {fileID: 0}
+  animator: {fileID: 1571390938}
+  defaultAttackTrigger: Attack
   hitTrigger: Hit
   staggerTrigger: Stagger
   dieTrigger: Die

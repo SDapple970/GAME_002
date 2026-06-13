@@ -221,9 +221,9 @@ namespace Game.Combat.Effects
 
             CombatantAnimationDriver driver = actorObj.GetComponentInChildren<CombatantAnimationDriver>();
             SkillDefinitionSO skillDefinition = ResolveSkillDefinition(skill);
-            if (driver != null && skillDefinition != null)
+            if (driver != null)
             {
-                driver.PlaySkill(skillDefinition, combatMode: true);
+                driver.PlaySkill(skillDefinition != null ? skillDefinition.CombatAnimationTrigger : null);
                 return;
             }
 

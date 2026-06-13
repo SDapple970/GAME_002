@@ -27,7 +27,7 @@ MonoBehaviour:
   fieldAnimationTrigger: Attack
   fieldUsable: 1
   fieldCooldown: 0.25
-  fieldHitTiming: 0.08
+  fieldHitDelay: 0.12
   fieldHitBoxSize: {x: 1.2, y: 0.8}
   fieldHitBoxOffset: {x: 1.2, y: 0}
   castVfxPrefab: {fileID: 0}

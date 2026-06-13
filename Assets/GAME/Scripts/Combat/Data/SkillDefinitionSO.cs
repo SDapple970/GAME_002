@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 using Game.Combat.Model;
 
 namespace Game.Combat.Data
@@ -35,11 +36,12 @@ namespace Game.Combat.Data
         [SerializeField] private string fieldAnimationTrigger = "Attack";
 
         [Header("Field Use")]
-        [SerializeField] private bool fieldUsable = true;
-        [SerializeField] private float fieldCooldown = 0.25f;
-        [SerializeField] private float fieldHitTiming = 0.08f;
+        [SerializeField] private bool fieldUsable;
+        [SerializeField] private float fieldCooldown = 0.35f;
+        [FormerlySerializedAs("fieldHitTiming")]
+        [SerializeField] private float fieldHitDelay = 0.12f;
         [SerializeField] private Vector2 fieldHitBoxSize = new Vector2(1.2f, 0.8f);
-        [SerializeField] private Vector2 fieldHitBoxOffset = new Vector2(1.2f, 0f);
+        [SerializeField] private Vector2 fieldHitBoxOffset = Vector2.zero;
 
         [Header("Presentation Assets")]
         [SerializeField] private GameObject castVfxPrefab;
@@ -51,7 +53,8 @@ namespace Game.Combat.Data
         public string FieldAnimationTrigger => fieldAnimationTrigger;
         public bool FieldUsable => fieldUsable;
         public float FieldCooldown => fieldCooldown;
-        public float FieldHitTiming => fieldHitTiming;
+        public float FieldHitDelay => fieldHitDelay;
+        public float FieldHitTiming => fieldHitDelay;
         public Vector2 FieldHitBoxSize => fieldHitBoxSize;
         public Vector2 FieldHitBoxOffset => fieldHitBoxOffset;
         public GameObject CastVfxPrefab => castVfxPrefab;
@@ -68,7 +71,7 @@ namespace Game.Combat.Data
         private void OnValidate()
         {
             fieldCooldown = Mathf.Max(0f, fieldCooldown);
-            fieldHitTiming = Mathf.Max(0f, fieldHitTiming);
+            fieldHitDelay = Mathf.Max(0f, fieldHitDelay);
             fieldHitBoxSize.x = Mathf.Max(0f, fieldHitBoxSize.x);
             fieldHitBoxSize.y = Mathf.Max(0f, fieldHitBoxSize.y);
         }

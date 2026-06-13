@@ -6,6 +6,7 @@ namespace Game.Combat.Animation
     public sealed class CombatantAnimationDriver : MonoBehaviour
     {
         [SerializeField] private Animator animator;
+        [SerializeField] private string defaultAttackTrigger = "Attack";
         [SerializeField] private string hitTrigger = "Hit";
         [SerializeField] private string staggerTrigger = "Stagger";
         [SerializeField] private string dieTrigger = "Die";
@@ -21,13 +22,25 @@ namespace Game.Combat.Animation
             AutoBindAnimator();
         }
 
+        public void PlayAttack()
+        {
+            PlaySkill(defaultAttackTrigger);
+        }
+
+        public void PlaySkill(string triggerName)
+        {
+            SetTrigger(string.IsNullOrWhiteSpace(triggerName) ? defaultAttackTrigger : triggerName);
+        }
+
         public void PlaySkill(SkillDefinitionSO skill, bool combatMode)
         {
             if (skill == null)
+            {
+                PlayAttack();
                 return;
+            }
 
-            string trigger = combatMode ? skill.CombatAnimationTrigger : skill.FieldAnimationTrigger;
-            SetTrigger(trigger);
+            PlaySkill(combatMode ? skill.CombatAnimationTrigger : skill.FieldAnimationTrigger);
         }
 
         public void PlayHit()
