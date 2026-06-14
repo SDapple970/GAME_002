@@ -23,8 +23,8 @@ MonoBehaviour:
   desiredTargetDistance: 1
   moveSpeed: 6
   actionDelayAfterMove: 0.15
-  combatAnimationTrigger: Attack
-  fieldAnimationTrigger: Attack
+  combatAnimationTrigger: Attack2
+  fieldAnimationTrigger: Attack2
   fieldUsable: 0
   fieldCooldown: 0.35
   fieldHitDelay: 0.12

@@ -23,15 +23,15 @@ MonoBehaviour:
   desiredTargetDistance: 1
   moveSpeed: 6
   actionDelayAfterMove: 0.15
-  combatAnimationTrigger: Attack
-  fieldAnimationTrigger: Attack
+  combatAnimationTrigger: Skill
+  fieldAnimationTrigger: Skill
   fieldUsable: 0
   fieldCooldown: 0.35
   fieldHitDelay: 0.12
   fieldHitBoxSize: {x: 1.2, y: 0.8}
   fieldHitBoxOffset: {x: 0, y: 0}
   castVfxPrefab: {fileID: 0}
-  impactVfxPrefab: {fileID: 0}
+  impactVfxPrefab: {fileID: 5500774079238757747, guid: 12d8afde6e1725740ae1ed2314822feb, type: 3}
   castSfx: {fileID: 0}
   impactSfx: {fileID: 0}
   baseDamage: 4

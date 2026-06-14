@@ -285,7 +285,7 @@ Transform:
   m_GameObject: {fileID: 29706576}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -39.93, y: 5.12, z: 0}
+  m_LocalPosition: {x: -20.77, y: -3.9, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -365,11 +365,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 161f0608b7c2dfd46a69cffcc4fd3b84, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.RewardUIPanel
-  combatEntryPoint: {fileID: 1112993898}
+  root: {fileID: 2146957450}
+  titleText: {fileID: 0}
+  resultText: {fileID: 0}
+  rewardRowRoot: {fileID: 0}
+  closeButton: {fileID: 0}
+  titleLegacyText: {fileID: 0}
+  resultLegacyText: {fileID: 0}
+  simpleMessageText: {fileID: 0}
+  fieldRewardAutoHideSeconds: 1.5
   rewardApplier: {fileID: 0}
-  rewardPanelRoot: {fileID: 2146957450}
-  contentContainer: {fileID: 0}
-  rewardItemPrefab: {fileID: 8172805614827323121, guid: f6dc70a0aeaf30945b61ee031c6278ee, type: 3}
+  victoryTitle: "\uC804\uD22C \uC2B9\uB9AC"
+  defeatTitle: "\uC804\uD22C \uD328\uBC30"
+  victoryRewardLines:
+  - Gold 100
+  - Potion 1
+  defeatRewardLines:
+  - "\uD68D\uB4DD \uBCF4\uC0C1 \uC5C6\uC74C"
+  showResultText: 0
+  victoryResultText: 
+  defeatResultText: 
 --- !u!114 &62296343
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -875,10 +890,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fbf096185b8cd914cb6784548fefb4e0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatCameraController
-  entryPoint: {fileID: 1112993898}
+  targetCamera: {fileID: 0}
+  explorationCameraFollow: {fileID: 0}
   mainCamera: {fileID: 124900432}
-  combatCenterPoint: {fileID: 0}
-  combatZoomSize: 6.5
+  transitionDuration: 0.35
+  combatPadding: 2
+  minOrthoSize: 4
+  maxOrthoSize: 8
+  combatOffset: {x: 0, y: 0.8, z: 0}
 --- !u!114 &124900432
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2974,16 +2993,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.UI.CombatPlanningHUD
   entryPoint: {fileID: 1112993898}
+  flowOrchestrator: {fileID: 0}
   panelPlanning: {fileID: 582581117}
   skillListRoot: {fileID: 889650158}
   targetListRoot: {fileID: 1519149943}
   buttonPrefab: {fileID: 526333728481953729, guid: fd919863b90d98540875093effc7e8a6, type: 3}
-  slot1Button: {fileID: 2056705443}
-  slot2Button: {fileID: 2099789414}
   confirmButton: {fileID: 1188902796}
+  errorText: {fileID: 0}
   statusText: {fileID: 981897528}
-  actorAllyIndex: 0
-  autoFillEnemyPlansOnConfirm: 1
 --- !u!114 &582581120
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3575,11 +3592,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b9863487589361d41a2336caec5fc875, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatFieldLock
-  entryPoint: {fileID: 1112993898}
-  disableBehaviours:
+  behavioursToDisable:
   - {fileID: 0}
   - {fileID: 0}
   - {fileID: 0}
+  gameObjectsToDisable: []
   freezeBodies2D:
   - {fileID: 1588627654}
   disableColliders2D:
@@ -3648,16 +3665,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.UI.CombatPlanningHUD
   entryPoint: {fileID: 1112993898}
+  flowOrchestrator: {fileID: 0}
   panelPlanning: {fileID: 582581117}
   skillListRoot: {fileID: 889650158}
   targetListRoot: {fileID: 1519149943}
   buttonPrefab: {fileID: 526333728481953729, guid: fd919863b90d98540875093effc7e8a6, type: 3}
-  slot1Button: {fileID: 2056705443}
-  slot2Button: {fileID: 2099789414}
   confirmButton: {fileID: 1188902796}
+  errorText: {fileID: 0}
   statusText: {fileID: 981897528}
-  actorAllyIndex: 0
-  autoFillEnemyPlansOnConfirm: 1
 --- !u!1 &789922237
 GameObject:
   m_ObjectHideFlags: 0
@@ -3834,9 +3849,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Effects.CombatDirector
   entryPoint: {fileID: 1112993898}
-  approachDuration: 0.2
-  returnDuration: 0.25
-  stopDistance: 1
+  cameraController: {fileID: 0}
+  fallbackApproachDuration: 0.2
+  fallbackActionDelay: 0.15
 --- !u!4 &884530305
 Transform:
   m_ObjectHideFlags: 0
@@ -4693,6 +4708,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Core.CombatEntryPoint
   director: {fileID: 884530304}
+  flowOrchestrator: {fileID: 0}
   skillDefinitions:
   - {fileID: 11400000, guid: 6f96b5e4d3eb64c4bb134d957906ad97, type: 2}
   - {fileID: 11400000, guid: 687e80eb0d677ea4e87a90e47d61097d, type: 2}
@@ -4701,7 +4717,6 @@ MonoBehaviour:
   inspirationStart: 3
   deactivateDefeatedEnemies: 1
   destroyDefeatedEnemies: 0
-  flowOrchestrator: {fileID: 0}
 --- !u!4 &1112993899
 Transform:
   m_ObjectHideFlags: 0
@@ -4775,6 +4790,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatFormationManager
   entryPoint: {fileID: 1112993898}
+  enableFormationPlacement: 0
   allyStartX: -3
   enemyStartX: 3
   spacing: 1.5
@@ -7331,8 +7347,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 13a92282f3f9f334aa18ef768bb58264, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::OverworldAttack2D
-  attack: {fileID: 1824782823915276009, guid: 5b2eeede448ec3f439fc8dfccc07d8c2, type: 3}
-  useDirectInputAction: 1
   hitOrigin: {fileID: 1150778707}
   hitBoxSize: {x: 1.2, y: 0.8}
   targetMask:
@@ -7343,6 +7357,7 @@ MonoBehaviour:
   animator: {fileID: 0}
   attackTrigger: Attack
   hitBoxOffset: {x: 1.2, y: 0}
+  fieldSkillCaster: {fileID: 0}
 --- !u!114 &1588627659
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7586,11 +7601,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 161f0608b7c2dfd46a69cffcc4fd3b84, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.RewardUIPanel
-  combatEntryPoint: {fileID: 1112993898}
+  root: {fileID: 2146957450}
+  titleText: {fileID: 0}
+  resultText: {fileID: 0}
+  rewardRowRoot: {fileID: 1764407007}
+  closeButton: {fileID: 0}
+  titleLegacyText: {fileID: 0}
+  resultLegacyText: {fileID: 0}
+  simpleMessageText: {fileID: 0}
+  fieldRewardAutoHideSeconds: 1.5
   rewardApplier: {fileID: 0}
-  rewardPanelRoot: {fileID: 2146957450}
-  contentContainer: {fileID: 1764407007}
-  rewardItemPrefab: {fileID: 5046370094042305859, guid: c4420a16fcdb355449eaaeb26d3db5c7, type: 3}
+  victoryTitle: "\uC804\uD22C \uC2B9\uB9AC"
+  defeatTitle: "\uC804\uD22C \uD328\uBC30"
+  victoryRewardLines:
+  - Gold 100
+  - Potion 1
+  defeatRewardLines:
+  - "\uD68D\uB4DD \uBCF4\uC0C1 \uC5C6\uC74C"
+  showResultText: 0
+  victoryResultText: 
+  defeatResultText: 
 --- !u!1 &1674693674
 GameObject:
   m_ObjectHideFlags: 0
@@ -8853,6 +8883,7 @@ MonoBehaviour:
   startReason: 0
   initiativeSide: 0
   playerTag: Player
+  debugLog: 0
 --- !u!212 &1980329933
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -8908,7 +8939,7 @@ SpriteRenderer:
   m_Size: {x: 0.69, y: 1.49}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!95 &1980329934
@@ -8947,12 +8978,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Battle.FieldEnemy
   combatEntryPoint: {fileID: 0}
   playerTag: Player
+  battleSceneName: Battle
   openingEffectOrNull: {fileID: 0}
   touchStartReason: 1
   hitStartReason: 0
   playerTarget: {fileID: 1588627655}
   aggroRange: 5
   moveSpeed: 2.5
+  countForDemoMission: 0
+  demoMissionRuntime: {fileID: 0}
 --- !u!1 &2001923831
 GameObject:
   m_ObjectHideFlags: 0
@@ -9726,164 +9760,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2099789412}
   m_CullTransparentMesh: 1
---- !u!1 &2138274804
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2138274805}
-  - component: {fileID: 2138274807}
-  - component: {fileID: 2138274806}
-  m_Layer: 0
-  m_Name: Text (Legacy)
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!224 &2138274805
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2138274804}
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 2099789413}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
-  m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &2138274806
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2138274804}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Text
-  m_Material: {fileID: 0}
-  m_Color: {r: 0.19607843, g: 0.19607843, b: 0.19607843, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
-    m_FontSize: 14
-    m_FontStyle: 0
-    m_BestFit: 0
-    m_MinSize: 10
-    m_MaxSize: 40
-    m_Alignment: 4
-    m_AlignByGeometry: 0
-    m_RichText: 1
-    m_HorizontalOverflow: 0
-    m_VerticalOverflow: 0
-    m_LineSpacing: 1
-  m_Text: 'Slot2
-
-'
---- !u!222 &2138274807
-CanvasRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2138274804}
-  m_CullTransparentMesh: 1
---- !u!1 &2146957450
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2146957451}
-  - component: {fileID: 2146957453}
-  - component: {fileID: 2146957452}
-  m_Layer: 5
-  m_Name: RewardUIPanel
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!224 &2146957451
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2146957450}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 2001923832}
-  - {fileID: 1764407007}
-  m_Father: {fileID: 62296341}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 385, y: -52}
-  m_SizeDelta: {x: -1600, y: -600}
-  m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &2146957452
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2146957450}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 0}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 10907, guid: 0000000000000000f000000000000000, type: 0}
-  m_Type: 1
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
---- !u!222 &2146957453
-CanvasRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2146957450}
-  m_CullTransparentMesh: 1
 --- !u!114 &2100000002
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9903,90 +9779,6 @@ MonoBehaviour:
   mapHUD: {fileID: 2100000062}
   dialogueLogHUD: {fileID: 2100000072}
   itemAcquisitionHUD: {fileID: 2100000093}
---- !u!114 &2100000120
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 583108848}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8b73a932f6524bc4a259a490c368a77f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Search.SearchRewardManager
-  smallLootCount: 0
-  largeLootCount: 0
-  journalCount: 0
-  catCount: 0
-  currency: 0
-  mentality: 0
-  stress: 0
---- !u!114 &2100000121
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1796763055}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
-  m_Navigation:
-    m_Mode: 3
-    m_WrapAround: 0
-    m_SelectOnUp: {fileID: 0}
-    m_SelectOnDown: {fileID: 0}
-    m_SelectOnLeft: {fileID: 0}
-    m_SelectOnRight: {fileID: 0}
-  m_Transition: 1
-  m_Colors:
-    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
-    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
-    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
-    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 1, a: 1}
-    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
-    m_ColorMultiplier: 1
-    m_FadeDuration: 0.1
-  m_SpriteState:
-    m_HighlightedSprite: {fileID: 0}
-    m_PressedSprite: {fileID: 0}
-    m_SelectedSprite: {fileID: 0}
-    m_DisabledSprite: {fileID: 0}
-  m_AnimationTriggers:
-    m_NormalTrigger: Normal
-    m_HighlightedTrigger: Highlighted
-    m_PressedTrigger: Pressed
-    m_SelectedTrigger: Selected
-    m_DisabledTrigger: Disabled
-  m_Interactable: 1
-  m_TargetGraphic: {fileID: 1796763057}
-  m_OnClick:
-    m_PersistentCalls:
-      m_Calls: []
---- !u!114 &2100000122
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1674693674}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 369b6d21ebd742b0a82d65d240f17ba8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Search.SearchObjectVisualState2D
-  targetRenderer: {fileID: 1674693677}
-  defaultSprite: {fileID: 3084304332095299921, guid: 1125fc3e0215f2e4fbee712afbd1247f, type: 3}
-  searchedSprite: {fileID: 0}
-  defaultObject: {fileID: 0}
-  searchedObject: {fileID: 0}
-  animator: {fileID: 0}
-  searchedTrigger: Open
-  useAnimator: 0
-  applyOnAwake: 1
 --- !u!1 &2100000010
 GameObject:
   m_ObjectHideFlags: 0
@@ -10078,6 +9870,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cf8ae323620b4e14bd04aaf6c2ad7807, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.StatusHUD
+  root: {fileID: 0}
+  hpText: {fileID: 0}
+  hungerText: {fileID: 0}
+  stressText: {fileID: 0}
 --- !u!1 &2100000023
 GameObject:
   m_ObjectHideFlags: 0
@@ -10232,6 +10028,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a51aaae768eb4c1395298b16fe4f92c9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.CurrencyHUD
+  root: {fileID: 0}
+  currencyText: {fileID: 0}
 --- !u!1 &2100000033
 GameObject:
   m_ObjectHideFlags: 0
@@ -10316,6 +10114,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c523418174a84beab977c30450eda5ff, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.BagButtonHUD
+  root: {fileID: 0}
+  bagButton: {fileID: 0}
 --- !u!1 &2100000043
 GameObject:
   m_ObjectHideFlags: 0
@@ -10401,6 +10201,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1a83b59cd9e349b5967a143194ea17ab, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.MissionTrackerHUD
+  root: {fileID: 0}
+  missionTitleText: {fileID: 0}
+  missionObjectiveText: {fileID: 0}
 --- !u!1 &2100000053
 GameObject:
   m_ObjectHideFlags: 0
@@ -10521,6 +10324,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e9a7e4bf0a9147709fd8b541921db378, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.MapHUD
+  root: {fileID: 0}
+  mapImage: {fileID: 0}
+  areaNameText: {fileID: 0}
 --- !u!1 &2100000063
 GameObject:
   m_ObjectHideFlags: 0
@@ -10643,6 +10449,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 21244c1e3a6e4772a38c0bddf68a6735, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.DialogueLogHUD
+  root: {fileID: 0}
+  lineTexts: []
   maxLines: 4
 --- !u!1 &2100000073
 GameObject:
@@ -11144,6 +10952,248 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &2100000120
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 583108848}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8b73a932f6524bc4a259a490c368a77f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Search.SearchRewardManager
+  smallLootCount: 0
+  largeLootCount: 0
+  journalCount: 0
+  catCount: 0
+  currency: 0
+  mentality: 0
+  stress: 0
+--- !u!114 &2100000121
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1796763055}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
+  m_Navigation:
+    m_Mode: 3
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 1, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 1796763057}
+  m_OnClick:
+    m_PersistentCalls:
+      m_Calls: []
+--- !u!114 &2100000122
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1674693674}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 369b6d21ebd742b0a82d65d240f17ba8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Search.SearchObjectVisualState2D
+  targetRenderer: {fileID: 1674693677}
+  defaultSprite: {fileID: 3084304332095299921, guid: 1125fc3e0215f2e4fbee712afbd1247f, type: 3}
+  searchedSprite: {fileID: 0}
+  defaultObject: {fileID: 0}
+  searchedObject: {fileID: 0}
+  animator: {fileID: 0}
+  searchedTrigger: Open
+  useAnimator: 0
+  applyOnAwake: 1
+--- !u!1 &2138274804
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2138274805}
+  - component: {fileID: 2138274807}
+  - component: {fileID: 2138274806}
+  m_Layer: 0
+  m_Name: Text (Legacy)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &2138274805
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2138274804}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2099789413}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &2138274806
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2138274804}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Text
+  m_Material: {fileID: 0}
+  m_Color: {r: 0.19607843, g: 0.19607843, b: 0.19607843, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_FontData:
+    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
+    m_FontSize: 14
+    m_FontStyle: 0
+    m_BestFit: 0
+    m_MinSize: 10
+    m_MaxSize: 40
+    m_Alignment: 4
+    m_AlignByGeometry: 0
+    m_RichText: 1
+    m_HorizontalOverflow: 0
+    m_VerticalOverflow: 0
+    m_LineSpacing: 1
+  m_Text: 'Slot2
+
+'
+--- !u!222 &2138274807
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2138274804}
+  m_CullTransparentMesh: 1
+--- !u!1 &2146957450
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2146957451}
+  - component: {fileID: 2146957453}
+  - component: {fileID: 2146957452}
+  m_Layer: 5
+  m_Name: RewardUIPanel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &2146957451
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2146957450}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 2001923832}
+  - {fileID: 1764407007}
+  m_Father: {fileID: 62296341}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 385, y: -52}
+  m_SizeDelta: {x: -1600, y: -600}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &2146957452
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2146957450}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 0, g: 0, b: 0, a: 0}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 10907, guid: 0000000000000000f000000000000000, type: 0}
+  m_Type: 1
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &2146957453
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2146957450}
+  m_CullTransparentMesh: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
