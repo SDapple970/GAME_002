@@ -1,5 +1,6 @@
 // Assets/GAME/Scripts/Story/Runtime/StoryEventRunner.cs
 using Game.Core;
+using Game.Dialogue;
 using Game.Story.Data;
 using Game.Story.UI;
 using System.Collections.Generic;
@@ -11,6 +12,7 @@ namespace Game.Story
     {
         [SerializeField] private DialoguePanel dialoguePanel;
         [SerializeField] private StoryDialogueHUD storyDialogueHUD;
+        [SerializeField] private TimedChoiceDialoguePanel timedChoiceDialoguePanel;
         [SerializeField] private GameState stateWhileRunning = GameState.UIOnly;
         [SerializeField] private bool restoreExplorationOnEnd = true;
         [SerializeField] private bool markCurrentEventCompletedOnEnd = true;
@@ -23,8 +25,15 @@ namespace Game.Story
 
         public bool IsRunning => _running;
 
+        private void Awake()
+        {
+            ResolveReferences();
+        }
+
         private void OnEnable()
         {
+            ResolveReferences();
+
             if (dialoguePanel != null)
             {
                 dialoguePanel.OnNextRequested -= Advance;
@@ -78,6 +87,8 @@ namespace Game.Story
             {
                 GameStateMachine.Instance.SetState(stateWhileRunning);
             }
+
+            timedChoiceDialoguePanel?.Hide();
 
             if (dialoguePanel != null)
             {
@@ -181,6 +192,7 @@ namespace Game.Story
 
             dialoguePanel?.Hide();
             storyDialogueHUD?.HideAll();
+            timedChoiceDialoguePanel?.Hide();
             _currentEvent = null;
             _currentNode = null;
             _currentSpeakerAnchor = null;
@@ -195,6 +207,12 @@ namespace Game.Story
                     GameStateMachine.Instance.SetState(GameState.Exploration);
                 }
             }
+        }
+
+        private void ResolveReferences()
+        {
+            if (timedChoiceDialoguePanel == null)
+                timedChoiceDialoguePanel = FindFirstObjectByType<TimedChoiceDialoguePanel>(FindObjectsInactive.Include);
         }
 
         private void MarkCurrentEventCompletedIfNeeded()
