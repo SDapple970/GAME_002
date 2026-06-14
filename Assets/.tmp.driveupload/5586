@@ -10,13 +10,13 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 21d68e2dd9c74b048211aad1fd1f643e, type: 3}
-  m_Name: DemoMission_Dungeon1
+  m_Name: New Demo Mission Definition SO
   m_EditorClassIdentifier: Assembly-CSharp::Game.DemoMission.Data.DemoMissionDefinitionSO
   missionId: 
   missionTitle: 
   dungeonSceneName: 
   titleSceneName: 
-  rescueTarget: {fileID: 11400000, guid: 6cd869715ed67d346b8de21f4e2d8bce, type: 2}
+  rescueTarget: {fileID: 0}
   monsters: []
   requiredEnemyKills: 1
   objectiveDescription: 

@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6d3feef13fdc472e933ea7f7084c67f8, type: 3}
+  m_Name: New Rescue Npc Definition SO
+  m_EditorClassIdentifier: Assembly-CSharp::Game.DemoMission.Data.RescueNpcDefinitionSO
+  npcId: 16
+  displayName: 
+  portrait: {fileID: -6834886930427865613, guid: 670d4156c3804d74188c0a735f078a1c, type: 3}
+  fieldSprite: {fileID: -6834886930427865613, guid: 670d4156c3804d74188c0a735f078a1c, type: 3}
+  briefDescription: 
+  lastKnownLocation: 
+  beforeRescueDialogue: []
+  afterRescueDialogue: []
