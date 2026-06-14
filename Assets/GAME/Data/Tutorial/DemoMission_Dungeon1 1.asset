@@ -14,9 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Game.DemoMission.Data.DemoMissionDefinitionSO
   missionId: 
   missionTitle: 
-  dungeonSceneName: 
-  titleSceneName: 
+  dungeonSceneName: Dungeon1
+  titleSceneName: TitleScene
   rescueTarget: {fileID: 0}
   monsters: []
-  requiredEnemyKills: 1
+  requiredEnemyKills: 0
   objectiveDescription: 
