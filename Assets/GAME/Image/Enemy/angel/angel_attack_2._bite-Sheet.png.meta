@@ -1,0 +1,351 @@
+fileFormatVersion: 2
+guid: 185bab3c77bcf734abad94aff91092dd
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 2034481900348023862
+    second: angel_attack_2._bite-Sheet_0
+  - first:
+      213: 3610242915809502909
+    second: angel_attack_2._bite-Sheet_1
+  - first:
+      213: 936892260360794278
+    second: angel_attack_2._bite-Sheet_2
+  - first:
+      213: 211224347076729408
+    second: angel_attack_2._bite-Sheet_3
+  - first:
+      213: 2102975357622712359
+    second: angel_attack_2._bite-Sheet_4
+  - first:
+      213: -1813015654958463615
+    second: angel_attack_2._bite-Sheet_5
+  - first:
+      213: -5541105074651732737
+    second: angel_attack_2._bite-Sheet_6
+  - first:
+      213: -1209121643035466894
+    second: angel_attack_2._bite-Sheet_7
+  - first:
+      213: -1737543762162193932
+    second: angel_attack_2._bite-Sheet_8
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 0
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 16
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: angel_attack_2._bite-Sheet_0
+      rect:
+        serializedVersion: 2
+        x: 42
+        y: 84
+        width: 128
+        height: 177
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 634a43c528eeb3c10800000000000000
+      internalID: 2034481900348023862
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: angel_attack_2._bite-Sheet_1
+      rect:
+        serializedVersion: 2
+        x: 340
+        y: 85
+        width: 156
+        height: 159
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: db622b5ddc82a1230800000000000000
+      internalID: 3610242915809502909
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: angel_attack_2._bite-Sheet_2
+      rect:
+        serializedVersion: 2
+        x: 629
+        y: 83
+        width: 172
+        height: 153
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6a03e930c82800d00800000000000000
+      internalID: 936892260360794278
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: angel_attack_2._bite-Sheet_3
+      rect:
+        serializedVersion: 2
+        x: 931
+        y: 83
+        width: 137
+        height: 195
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 04a1c6fac6b6ee200800000000000000
+      internalID: 211224347076729408
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: angel_attack_2._bite-Sheet_4
+      rect:
+        serializedVersion: 2
+        x: 1243
+        y: 83
+        width: 116
+        height: 195
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 728708a12f44f2d10800000000000000
+      internalID: 2102975357622712359
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: angel_attack_2._bite-Sheet_5
+      rect:
+        serializedVersion: 2
+        x: 1533
+        y: 84
+        width: 149
+        height: 194
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1858af91edfd6d6e0800000000000000
+      internalID: -1813015654958463615
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: angel_attack_2._bite-Sheet_6
+      rect:
+        serializedVersion: 2
+        x: 1840
+        y: 84
+        width: 142
+        height: 194
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ff4e44aea4a0a13b0800000000000000
+      internalID: -5541105074651732737
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: angel_attack_2._bite-Sheet_7
+      rect:
+        serializedVersion: 2
+        x: 2140
+        y: 84
+        width: 142
+        height: 194
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 27362a89546583fe0800000000000000
+      internalID: -1209121643035466894
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: angel_attack_2._bite-Sheet_8
+      rect:
+        serializedVersion: 2
+        x: 2440
+        y: 84
+        width: 142
+        height: 194
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4f960aa772103e7e0800000000000000
+      internalID: -1737543762162193932
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      angel_attack_2._bite-Sheet_0: 2034481900348023862
+      angel_attack_2._bite-Sheet_1: 3610242915809502909
+      angel_attack_2._bite-Sheet_2: 936892260360794278
+      angel_attack_2._bite-Sheet_3: 211224347076729408
+      angel_attack_2._bite-Sheet_4: 2102975357622712359
+      angel_attack_2._bite-Sheet_5: -1813015654958463615
+      angel_attack_2._bite-Sheet_6: -5541105074651732737
+      angel_attack_2._bite-Sheet_7: -1209121643035466894
+      angel_attack_2._bite-Sheet_8: -1737543762162193932
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
