@@ -21,6 +21,7 @@ namespace Game.Enemies
         private bool _missingPatrolPointsWarned;
         private bool _gameStateSubscribed;
         private bool _playerTagWarningLogged;
+        private bool _patrolDirectionInitialized;
 
         private void Awake()
         {
@@ -42,6 +43,7 @@ namespace Game.Enemies
 
             TrySubscribeGameState();
             ResolvePlayer();
+            InitializePatrolDirection();
         }
 
         private void OnDisable()
@@ -71,10 +73,16 @@ namespace Game.Enemies
                 return;
             }
 
+            if (!chasePlayer)
+            {
+                Patrol();
+                return;
+            }
+
             if (player == null)
                 ResolvePlayer();
 
-            if (chasePlayer && IsPlayerInDetectionRange())
+            if (IsPlayerInDetectionRange())
             {
                 ChasePlayer();
                 return;
@@ -164,6 +172,8 @@ namespace Game.Enemies
                 return;
             }
 
+            InitializePatrolDirection();
+
             if (waitTimer > 0f)
             {
                 waitTimer -= Time.deltaTime;
@@ -183,6 +193,44 @@ namespace Game.Enemies
             }
 
             motor.Move(Mathf.Sign(deltaX));
+        }
+
+        private void InitializePatrolDirection()
+        {
+            if (_patrolDirectionInitialized || leftPoint == null || rightPoint == null)
+                return;
+
+            float currentX = transform.position.x;
+            float leftX = leftPoint.position.x;
+            float rightX = rightPoint.position.x;
+
+            if (Mathf.Approximately(leftX, rightX))
+            {
+                movingRight = true;
+                _patrolDirectionInitialized = true;
+                return;
+            }
+
+            bool rightPointIsRightSide = rightX > leftX;
+            float minX = Mathf.Min(leftX, rightX);
+            float maxX = Mathf.Max(leftX, rightX);
+
+            if (currentX <= minX)
+            {
+                movingRight = rightPointIsRightSide;
+            }
+            else if (currentX >= maxX)
+            {
+                movingRight = !rightPointIsRightSide;
+            }
+            else
+            {
+                float distanceToLeft = Mathf.Abs(currentX - leftX);
+                float distanceToRight = Mathf.Abs(currentX - rightX);
+                movingRight = distanceToRight >= distanceToLeft;
+            }
+
+            _patrolDirectionInitialized = true;
         }
 
         private void StopMotor()
@@ -207,6 +255,21 @@ namespace Game.Enemies
 
             _missingPatrolPointsWarned = true;
             Debug.LogWarning("[FieldEnemyPatrolAI2D] Left Point or Right Point is missing. Patrol movement will stop until both are assigned.", this);
+        }
+
+        private void OnDrawGizmosSelected()
+        {
+            if (leftPoint == null || rightPoint == null)
+                return;
+
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawLine(leftPoint.position, rightPoint.position);
+
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawWireSphere(leftPoint.position, 0.15f);
+
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(rightPoint.position, 0.15f);
         }
     }
 }

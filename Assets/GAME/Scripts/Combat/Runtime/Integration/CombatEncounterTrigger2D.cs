@@ -4,6 +4,7 @@ using UnityEngine;
 using Game.Combat.Core;
 using Game.Combat.Model;
 using Game.Combat.Adapters;
+using Game.Core;
 
 namespace Game.Combat.Integration
 {
@@ -25,6 +26,9 @@ namespace Game.Combat.Integration
         [Header("Filter")]
         [SerializeField] private string playerTag = "Player";
 
+        [Header("Debug")]
+        [SerializeField] private bool debugLog;
+
         private Collider2D _trigger;
         private bool _armed = true;
 
@@ -43,7 +47,21 @@ namespace Game.Combat.Integration
         private void OnTriggerEnter2D(Collider2D other)
         {
             if (!_armed)
+            {
+                LogDebug($"Ignored trigger from {GetColliderName(other)} because this encounter is disarmed.");
                 return;
+            }
+
+            LogDebug($"OnTriggerEnter2D other='{GetColliderName(other)}', tag='{GetColliderTag(other)}'.");
+
+            if (!HasPlayerTag(other))
+                return;
+
+            if (!CanStartInCurrentGameState())
+                return;
+
+            if (entryPoint == null)
+                entryPoint = FindFirstObjectByType<CombatEntryPoint>();
 
             if (entryPoint == null)
             {
@@ -52,10 +70,13 @@ namespace Game.Combat.Integration
             }
 
             if (entryPoint.ActiveStateMachine != null)
+            {
+                LogDebug($"Ignored trigger because an active combat state machine already exists. Phase={entryPoint.ActiveStateMachine.Phase}.");
                 return;
+            }
 
-            if (!other.CompareTag(playerTag))
-                return;
+            if (enemyObject == null)
+                enemyObject = gameObject;
 
             List<GameObject> allies = new List<GameObject>(1)
             {
@@ -98,15 +119,99 @@ namespace Game.Combat.Integration
                     $"Allies={allies.Count}, Enemies={enemies.Count}, Reason={startReason}, Initiative={initiativeSide}"
                 );
             }
+            else
+            {
+                LogDebug(
+                    "StartCombatFromField returned false. " +
+                    $"GameState={GetCurrentGameStateText()}, " +
+                    $"ActiveSessionNull={entryPoint.ActiveSession == null}, " +
+                    $"ActiveStateMachineNull={entryPoint.ActiveStateMachine == null}, " +
+                    $"Allies={allies.Count}, Enemies={enemies.Count}"
+                );
+            }
         }
 
         private void OnTriggerExit2D(Collider2D other)
         {
-            if (!other.CompareTag(playerTag))
+            if (!HasPlayerTag(other))
                 return;
 
             if (entryPoint != null && entryPoint.ActiveStateMachine == null)
                 _armed = true;
+        }
+
+        private bool HasPlayerTag(Collider2D other)
+        {
+            if (other == null)
+            {
+                LogDebug("Ignored trigger because collider is null.");
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(playerTag))
+            {
+                LogDebug($"Ignored trigger from '{GetColliderName(other)}' because PlayerTag is empty.");
+                return false;
+            }
+
+            try
+            {
+                if (other.CompareTag(playerTag))
+                    return true;
+
+                LogDebug($"Ignored trigger from '{GetColliderName(other)}' because tag '{GetColliderTag(other)}' does not match PlayerTag '{playerTag}'.");
+                return false;
+            }
+            catch (UnityException exception)
+            {
+                Debug.LogWarning($"[CombatEncounterTrigger2D] PlayerTag '{playerTag}' is not defined. Trigger ignored. {exception.Message}", this);
+                return false;
+            }
+        }
+
+        private bool CanStartInCurrentGameState()
+        {
+            if (GameStateMachine.Instance == null)
+                return true;
+
+            if (GameStateMachine.Instance.Is(GameState.Exploration))
+                return true;
+
+            LogDebug($"Ignored trigger because GameState is {GameStateMachine.Instance.Current}, not {GameState.Exploration}.");
+            return false;
+        }
+
+        private string GetCurrentGameStateText()
+        {
+            return GameStateMachine.Instance != null ? GameStateMachine.Instance.Current.ToString() : "<none>";
+        }
+
+        private static string GetColliderName(Collider2D other)
+        {
+            return other != null && other.gameObject != null ? other.gameObject.name : "<null>";
+        }
+
+        private static string GetColliderTag(Collider2D other)
+        {
+            if (other == null || other.gameObject == null)
+                return "<null>";
+
+            try
+            {
+                return other.gameObject.tag;
+            }
+            catch (UnityException exception)
+            {
+                return $"<invalid tag: {exception.Message}>";
+            }
+        }
+
+        private void LogDebug(string message)
+        {
+            if (!debugLog)
+                return;
+
+            Debug.Log($"[CombatEncounterTrigger2D] {message}", this);
         }
     }
 }

@@ -37,16 +37,20 @@ namespace Game.Combat.UI
         private bool _entrySubscribed;
         private bool _confirmBound;
         private bool _submittedThisPlanning;
+        private bool _missingEntryPointWarned;
+        private bool _missingPanelPlanningWarned;
 
         private void Awake()
         {
             AutoBindReferences();
+            WarnIfMissingBindings();
             Hide();
         }
 
         private void OnEnable()
         {
             AutoBindReferences();
+            WarnIfMissingBindings();
             SubscribeToEntryPoint();
             BindConfirmButton();
             RecoverActiveSessionIfNeeded();
@@ -88,7 +92,13 @@ namespace Game.Combat.UI
             ResetSelection();
 
             if (panelPlanning != null)
+            {
                 panelPlanning.SetActive(true);
+            }
+            else
+            {
+                WarnIfMissingPanelPlanning();
+            }
 
             RebuildSkillButtons();
             RebuildTargetButtons();
@@ -99,7 +109,13 @@ namespace Game.Combat.UI
         public void Hide()
         {
             if (panelPlanning != null)
+            {
                 panelPlanning.SetActive(false);
+            }
+            else
+            {
+                WarnIfMissingPanelPlanning();
+            }
 
             SetMessage(string.Empty);
         }
@@ -169,18 +185,44 @@ namespace Game.Combat.UI
 
         private void HandleCombatStarted(CombatSession session)
         {
+            Debug.Log("[CombatPlanningHUD] OnCombatStarted received. Show() will be called.", this);
             Bind(session);
             Show();
         }
 
         private void HandleCombatEnded(CombatResult result)
         {
+            Debug.Log("[CombatPlanningHUD] OnCombatEnded received. Hide() will be called.", this);
             Hide();
             _session = null;
             _player = null;
             _selectedSkill = null;
             _selectedTarget = null;
             _shownTurnIndex = -1;
+        }
+
+        private void WarnIfMissingBindings()
+        {
+            WarnIfMissingEntryPoint();
+            WarnIfMissingPanelPlanning();
+        }
+
+        private void WarnIfMissingEntryPoint()
+        {
+            if (entryPoint != null || _missingEntryPointWarned)
+                return;
+
+            _missingEntryPointWarned = true;
+            Debug.LogWarning("[CombatPlanningHUD] CombatEntryPoint auto-bind failed. Assign EntryPoint in the Inspector.", this);
+        }
+
+        private void WarnIfMissingPanelPlanning()
+        {
+            if (panelPlanning != null || _missingPanelPlanningWarned)
+                return;
+
+            _missingPanelPlanningWarned = true;
+            Debug.LogWarning("[CombatPlanningHUD] PanelPlanning is missing. Combat planning HUD visibility cannot be toggled.", this);
         }
 
         private void RebuildSkillButtons()
