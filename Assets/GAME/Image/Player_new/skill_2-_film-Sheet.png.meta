@@ -1,34 +1,40 @@
 fileFormatVersion: 2
-guid: 5eded4a91feb7204e8e918bc796c5669
+guid: 4ac0fb0a5f3011a4d94ee06203a6b56b
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 1061527380459089461
-    second: idle-Sheet_0
+      213: -3811444425969301931
+    second: skill_2-_film-Sheet_0
   - first:
-      213: 6207771810069409013
-    second: idle-Sheet_1
+      213: -2633507017174399636
+    second: skill_2-_film-Sheet_1
   - first:
-      213: -2380374124312247100
-    second: idle-Sheet_2
+      213: -4078429702976416099
+    second: skill_2-_film-Sheet_2
   - first:
-      213: -4915520102833538046
-    second: idle-Sheet_3
+      213: -3441458302147296602
+    second: skill_2-_film-Sheet_3
   - first:
-      213: -6764626519084162193
-    second: idle-Sheet_4
+      213: 837543668447055495
+    second: skill_2-_film-Sheet_4
   - first:
-      213: 7712586498915102320
-    second: idle-Sheet_5
+      213: 7217512943200456603
+    second: skill_2-_film-Sheet_5
   - first:
-      213: -4582570695404790461
-    second: idle-Sheet_6
+      213: -6394074189780002218
+    second: skill_2-_film-Sheet_6
   - first:
-      213: -4226344154738904727
-    second: idle-Sheet_7
+      213: -1816886733141560395
+    second: skill_2-_film-Sheet_7
   - first:
-      213: 29797130601435583
-    second: idle-Sheet_8
+      213: -5145545345319652442
+    second: skill_2-_film-Sheet_8
+  - first:
+      213: 9038124985420235077
+    second: skill_2-_film-Sheet_9
+  - first:
+      213: 7757658928249949776
+    second: skill_2-_film-Sheet_10
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -124,13 +130,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: idle-Sheet_0
+      name: skill_2-_film-Sheet_0
       rect:
         serializedVersion: 2
-        x: 31
+        x: 30
         y: 19
-        width: 23
-        height: 49
+        width: 35
+        height: 48
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -139,20 +145,20 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 53e6d9f378d4bbe00800000000000000
-      internalID: 1061527380459089461
+      spriteID: 55605fc0d770b1bc0800000000000000
+      internalID: -3811444425969301931
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: idle-Sheet_1
+      name: skill_2-_film-Sheet_1
       rect:
         serializedVersion: 2
-        x: 131
+        x: 130
         y: 19
-        width: 23
-        height: 49
+        width: 35
+        height: 48
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -161,20 +167,20 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 5fceed1329f662650800000000000000
-      internalID: 6207771810069409013
+      spriteID: c6542df1257e37bd0800000000000000
+      internalID: -2633507017174399636
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: idle-Sheet_2
+      name: skill_2-_film-Sheet_2
       rect:
         serializedVersion: 2
-        x: 231
+        x: 230
         y: 19
-        width: 23
-        height: 49
+        width: 35
+        height: 48
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -183,17 +189,149 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 4c446df785637fed0800000000000000
-      internalID: -2380374124312247100
+      spriteID: d9650b82bc18667c0800000000000000
+      internalID: -4078429702976416099
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: idle-Sheet_3
+      name: skill_2-_film-Sheet_3
       rect:
         serializedVersion: 2
-        x: 331
+        x: 330
+        y: 19
+        width: 37
+        height: 48
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6a2013768eb7d30d0800000000000000
+      internalID: -3441458302147296602
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: skill_2-_film-Sheet_4
+      rect:
+        serializedVersion: 2
+        x: 430
+        y: 19
+        width: 26
+        height: 50
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 78e0aa9678d8f9b00800000000000000
+      internalID: 837543668447055495
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: skill_2-_film-Sheet_5
+      rect:
+        serializedVersion: 2
+        x: 530
+        y: 19
+        width: 29
+        height: 50
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b9f4f3528c1c92460800000000000000
+      internalID: 7217512943200456603
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: skill_2-_film-Sheet_6
+      rect:
+        serializedVersion: 2
+        x: 630
+        y: 19
+        width: 31
+        height: 48
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 65a5ba2d66fa347a0800000000000000
+      internalID: -6394074189780002218
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: skill_2-_film-Sheet_7
+      rect:
+        serializedVersion: 2
+        x: 730
+        y: 19
+        width: 33
+        height: 48
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5b33af9742f19c6e0800000000000000
+      internalID: -1816886733141560395
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: skill_2-_film-Sheet_8
+      rect:
+        serializedVersion: 2
+        x: 830
+        y: 19
+        width: 27
+        height: 48
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6a3be8c45c95798b0800000000000000
+      internalID: -5145545345319652442
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: skill_2-_film-Sheet_9
+      rect:
+        serializedVersion: 2
+        x: 930
         y: 19
         width: 23
         height: 48
@@ -205,17 +343,17 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 20cb050928098cbb0800000000000000
-      internalID: -4915520102833538046
+      spriteID: 5414e87c9cedd6d70800000000000000
+      internalID: 9038124985420235077
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: idle-Sheet_4
+      name: skill_2-_film-Sheet_10
       rect:
         serializedVersion: 2
-        x: 431
+        x: 1030
         y: 19
         width: 23
         height: 48
@@ -227,96 +365,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: f632dcb75083f12a0800000000000000
-      internalID: -6764626519084162193
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: idle-Sheet_5
-      rect:
-        serializedVersion: 2
-        x: 531
-        y: 19
-        width: 23
-        height: 48
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 07eee47ce8c980b60800000000000000
-      internalID: 7712586498915102320
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: idle-Sheet_6
-      rect:
-        serializedVersion: 2
-        x: 631
-        y: 19
-        width: 23
-        height: 48
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 34d58466b307760c0800000000000000
-      internalID: -4582570695404790461
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: idle-Sheet_7
-      rect:
-        serializedVersion: 2
-        x: 731
-        y: 19
-        width: 23
-        height: 48
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 9613d3622620955c0800000000000000
-      internalID: -4226344154738904727
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: idle-Sheet_8
-      rect:
-        serializedVersion: 2
-        x: 831
-        y: 19
-        width: 23
-        height: 48
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: fb113d8155cd96000800000000000000
-      internalID: 29797130601435583
+      spriteID: 05ec9f281bdb8ab60800000000000000
+      internalID: 7757658928249949776
       vertices: []
       indices: 
       edges: []
@@ -335,15 +385,17 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      idle-Sheet_0: 1061527380459089461
-      idle-Sheet_1: 6207771810069409013
-      idle-Sheet_2: -2380374124312247100
-      idle-Sheet_3: -4915520102833538046
-      idle-Sheet_4: -6764626519084162193
-      idle-Sheet_5: 7712586498915102320
-      idle-Sheet_6: -4582570695404790461
-      idle-Sheet_7: -4226344154738904727
-      idle-Sheet_8: 29797130601435583
+      skill_2-_film-Sheet_0: -3811444425969301931
+      skill_2-_film-Sheet_1: -2633507017174399636
+      skill_2-_film-Sheet_10: 7757658928249949776
+      skill_2-_film-Sheet_2: -4078429702976416099
+      skill_2-_film-Sheet_3: -3441458302147296602
+      skill_2-_film-Sheet_4: 837543668447055495
+      skill_2-_film-Sheet_5: 7217512943200456603
+      skill_2-_film-Sheet_6: -6394074189780002218
+      skill_2-_film-Sheet_7: -1816886733141560395
+      skill_2-_film-Sheet_8: -5145545345319652442
+      skill_2-_film-Sheet_9: 9038124985420235077
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
+using Game.Combat.Adapters;
 using Game.Combat.Core;
+using Game.Combat.Data;
 using Game.Combat.Integration;
 using Game.Combat.Model;
 using Game.Core;
@@ -18,7 +20,7 @@ namespace Game.Player
         [SerializeField] private float hitDelay = 0.12f;
         [SerializeField] private float cooldown = 0.35f;
         [SerializeField] private CombatEntryPoint entryPoint;
-        [SerializeField] private OpeningEffectSO openingEffectOrNull;
+        [SerializeField] private Game.Combat.Adapters.OpeningEffectSO openingEffectOrNull;
         [SerializeField] private StartReason startReason = StartReason.PlayerFirstHit;
         [SerializeField] private Side initiativeSide = Side.Allies;
         [SerializeField] private string enemyTag = "Enemy";

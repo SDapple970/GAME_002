@@ -1,34 +1,34 @@
 fileFormatVersion: 2
-guid: 5eded4a91feb7204e8e918bc796c5669
+guid: 50863a42bd9f1d84f87810ebd9251f70
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 1061527380459089461
-    second: idle-Sheet_0
+      213: 2097367636612496561
+    second: character_new_jiump-Sheet_0
   - first:
-      213: 6207771810069409013
-    second: idle-Sheet_1
+      213: 4429219608148431071
+    second: character_new_jiump-Sheet_1
   - first:
-      213: -2380374124312247100
-    second: idle-Sheet_2
+      213: 7538871055842464294
+    second: character_new_jiump-Sheet_2
   - first:
-      213: -4915520102833538046
-    second: idle-Sheet_3
+      213: -393679784458505185
+    second: character_new_jiump-Sheet_3
   - first:
-      213: -6764626519084162193
-    second: idle-Sheet_4
+      213: 5259827902456609014
+    second: character_new_jiump-Sheet_4
   - first:
-      213: 7712586498915102320
-    second: idle-Sheet_5
+      213: -5784429333051668591
+    second: character_new_jiump-Sheet_5
   - first:
-      213: -4582570695404790461
-    second: idle-Sheet_6
+      213: 5448720737757240057
+    second: character_new_jiump-Sheet_6
   - first:
-      213: -4226344154738904727
-    second: idle-Sheet_7
+      213: 1877680608455857800
+    second: character_new_jiump-Sheet_7
   - first:
-      213: 29797130601435583
-    second: idle-Sheet_8
+      213: 2207987296485716341
+    second: character_new_jiump-Sheet_8
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -124,76 +124,10 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: idle-Sheet_0
+      name: character_new_jiump-Sheet_0
       rect:
         serializedVersion: 2
-        x: 31
-        y: 19
-        width: 23
-        height: 49
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 53e6d9f378d4bbe00800000000000000
-      internalID: 1061527380459089461
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: idle-Sheet_1
-      rect:
-        serializedVersion: 2
-        x: 131
-        y: 19
-        width: 23
-        height: 49
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 5fceed1329f662650800000000000000
-      internalID: 6207771810069409013
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: idle-Sheet_2
-      rect:
-        serializedVersion: 2
-        x: 231
-        y: 19
-        width: 23
-        height: 49
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 4c446df785637fed0800000000000000
-      internalID: -2380374124312247100
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: idle-Sheet_3
-      rect:
-        serializedVersion: 2
-        x: 331
+        x: 48
         y: 19
         width: 23
         height: 48
@@ -205,17 +139,171 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 20cb050928098cbb0800000000000000
-      internalID: -4915520102833538046
+      spriteID: 1bc30bfc0c85b1d10800000000000000
+      internalID: 2097367636612496561
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: idle-Sheet_4
+      name: character_new_jiump-Sheet_1
       rect:
         serializedVersion: 2
-        x: 431
+        x: 147
+        y: 19
+        width: 24
+        height: 47
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: fd0d1ef34cfb77d30800000000000000
+      internalID: 4429219608148431071
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: character_new_jiump-Sheet_2
+      rect:
+        serializedVersion: 2
+        x: 239
+        y: 42
+        width: 36
+        height: 37
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 622d6fa58437f9860800000000000000
+      internalID: 7538871055842464294
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: character_new_jiump-Sheet_3
+      rect:
+        serializedVersion: 2
+        x: 339
+        y: 41
+        width: 38
+        height: 41
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f143914625e598af0800000000000000
+      internalID: -393679784458505185
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: character_new_jiump-Sheet_4
+      rect:
+        serializedVersion: 2
+        x: 439
+        y: 32
+        width: 38
+        height: 46
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6f83d990c99aef840800000000000000
+      internalID: 5259827902456609014
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: character_new_jiump-Sheet_5
+      rect:
+        serializedVersion: 2
+        x: 550
+        y: 19
+        width: 23
+        height: 45
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1970b173b2499bfa0800000000000000
+      internalID: -5784429333051668591
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: character_new_jiump-Sheet_6
+      rect:
+        serializedVersion: 2
+        x: 650
+        y: 19
+        width: 23
+        height: 37
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9fa135674aebd9b40800000000000000
+      internalID: 5448720737757240057
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: character_new_jiump-Sheet_7
+      rect:
+        serializedVersion: 2
+        x: 747
+        y: 19
+        width: 24
+        height: 47
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 88696a4a09cde0a10800000000000000
+      internalID: 1877680608455857800
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: character_new_jiump-Sheet_8
+      rect:
+        serializedVersion: 2
+        x: 848
         y: 19
         width: 23
         height: 48
@@ -227,96 +315,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: f632dcb75083f12a0800000000000000
-      internalID: -6764626519084162193
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: idle-Sheet_5
-      rect:
-        serializedVersion: 2
-        x: 531
-        y: 19
-        width: 23
-        height: 48
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 07eee47ce8c980b60800000000000000
-      internalID: 7712586498915102320
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: idle-Sheet_6
-      rect:
-        serializedVersion: 2
-        x: 631
-        y: 19
-        width: 23
-        height: 48
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 34d58466b307760c0800000000000000
-      internalID: -4582570695404790461
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: idle-Sheet_7
-      rect:
-        serializedVersion: 2
-        x: 731
-        y: 19
-        width: 23
-        height: 48
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 9613d3622620955c0800000000000000
-      internalID: -4226344154738904727
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: idle-Sheet_8
-      rect:
-        serializedVersion: 2
-        x: 831
-        y: 19
-        width: 23
-        height: 48
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: fb113d8155cd96000800000000000000
-      internalID: 29797130601435583
+      spriteID: 5713b9b6fb854ae10800000000000000
+      internalID: 2207987296485716341
       vertices: []
       indices: 
       edges: []
@@ -335,15 +335,15 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      idle-Sheet_0: 1061527380459089461
-      idle-Sheet_1: 6207771810069409013
-      idle-Sheet_2: -2380374124312247100
-      idle-Sheet_3: -4915520102833538046
-      idle-Sheet_4: -6764626519084162193
-      idle-Sheet_5: 7712586498915102320
-      idle-Sheet_6: -4582570695404790461
-      idle-Sheet_7: -4226344154738904727
-      idle-Sheet_8: 29797130601435583
+      character_new_jiump-Sheet_0: 2097367636612496561
+      character_new_jiump-Sheet_1: 4429219608148431071
+      character_new_jiump-Sheet_2: 7538871055842464294
+      character_new_jiump-Sheet_3: -393679784458505185
+      character_new_jiump-Sheet_4: 5259827902456609014
+      character_new_jiump-Sheet_5: -5784429333051668591
+      character_new_jiump-Sheet_6: 5448720737757240057
+      character_new_jiump-Sheet_7: 1877680608455857800
+      character_new_jiump-Sheet_8: 2207987296485716341
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
