@@ -85,11 +85,13 @@ namespace Game.Combat.Effects
                 yield return MoveActorForSkill(actorObj.transform, targetObj.transform, ev.Skill);
             }
 
+            PlayCastPresentation(actorObj, ev.Skill);
             PlayAttackTrigger(actorObj, ev.Skill);
             yield return WaitAfterMove(ev.Skill);
 
             if (targetObj != null)
             {
+                PlayImpactPresentation(targetObj, ev.Skill);
                 PlayTargetReaction(ev.Target, targetObj, ev.DamageDealt, ev.StaggerDealt);
                 StartCoroutine(FlashColor(targetObj, Color.red, 0.2f));
             }
@@ -119,7 +121,9 @@ namespace Game.Combat.Effects
             yield return MoveActorForSkill(objA.transform, objB.transform, ev.SkillA);
             yield return MoveActorForSkill(objB.transform, objA.transform, ev.SkillB);
 
+            PlayCastPresentation(objA, ev.SkillA);
             PlayAttackTrigger(objA, ev.SkillA);
+            PlayCastPresentation(objB, ev.SkillB);
             PlayAttackTrigger(objB, ev.SkillB);
 
             float delay = Mathf.Max(GetActionDelay(ev.SkillA), GetActionDelay(ev.SkillB));
@@ -130,6 +134,7 @@ namespace Game.Combat.Effects
                 GameObject loserObj = GetFieldObject(ev.Loser);
                 if (loserObj != null)
                 {
+                    PlayImpactPresentation(loserObj, GetWinnerSkill(ev));
                     PlayTargetReaction(ev.Loser, loserObj, ev.DamageDealtToLoser, ev.StaggerDealtToLoser);
                     StartCoroutine(FlashColor(loserObj, Color.red, 0.2f));
                 }
@@ -151,7 +156,9 @@ namespace Game.Combat.Effects
             Debug.Log($"[CombatDirector] Utility Actor={ev.Actor?.Id.Value} Skill={ev.Skill?.Name}", this);
 
             cameraController?.FocusAction(ev.Actor, ev.Actor);
+            PlayCastPresentation(actorObj, ev.Skill);
             PlayAttackTrigger(actorObj, ev.Skill);
+            PlayImpactPresentation(actorObj, ev.Skill);
             StartCoroutine(FlashColor(actorObj, Color.yellow, 0.3f));
             yield return WaitAfterMove(ev.Skill);
         }
@@ -232,6 +239,77 @@ namespace Game.Combat.Effects
                 anim.SetTrigger(Animator.StringToHash("Attack"));
         }
 
+        private void PlayCastPresentation(GameObject actorObj, ISkill skill)
+        {
+            if (actorObj == null)
+                return;
+
+            SkillDefinitionSO skillDefinition = ResolveSkillDefinition(skill);
+            if (skillDefinition == null)
+                return;
+
+            Vector3 position = actorObj.transform.position;
+            SpawnPresentationVfx(skillDefinition.CastVfxPrefab, position);
+            PlayPresentationSfx(skillDefinition.CastSfx, position);
+        }
+
+        private void PlayImpactPresentation(GameObject targetObj, ISkill skill)
+        {
+            if (targetObj == null)
+                return;
+
+            SkillDefinitionSO skillDefinition = ResolveSkillDefinition(skill);
+            if (skillDefinition == null)
+                return;
+
+            Vector3 position = targetObj.transform.position;
+            SpawnPresentationVfx(skillDefinition.ImpactVfxPrefab, position);
+            PlayPresentationSfx(skillDefinition.ImpactSfx, position);
+        }
+
+        private static void SpawnPresentationVfx(GameObject prefab, Vector3 position)
+        {
+            if (prefab == null)
+                return;
+
+            GameObject instance = Instantiate(prefab, position, Quaternion.identity);
+            Destroy(instance, GetPresentationVfxLifetime(instance));
+        }
+
+        private static void PlayPresentationSfx(AudioClip clip, Vector3 position)
+        {
+            if (clip == null)
+                return;
+
+            AudioSource.PlayClipAtPoint(clip, position);
+        }
+
+        private static float GetPresentationVfxLifetime(GameObject instance)
+        {
+            const float fallbackLifetime = 2f;
+
+            if (instance == null)
+                return fallbackLifetime;
+
+            ParticleSystem[] particleSystems = instance.GetComponentsInChildren<ParticleSystem>(true);
+            if (particleSystems == null || particleSystems.Length == 0)
+                return fallbackLifetime;
+
+            float lifetime = 0f;
+            for (int i = 0; i < particleSystems.Length; i++)
+            {
+                ParticleSystem particleSystem = particleSystems[i];
+                if (particleSystem == null)
+                    continue;
+
+                ParticleSystem.MainModule main = particleSystem.main;
+                float systemLifetime = main.duration + main.startLifetime.constantMax;
+                lifetime = Mathf.Max(lifetime, systemLifetime);
+            }
+
+            return lifetime > 0f ? lifetime : fallbackLifetime;
+        }
+
         private static void PlayTargetReaction(ICombatant target, GameObject targetObj, int damageDealt, int staggerDealt)
         {
             if (targetObj == null || target == null)
@@ -255,6 +333,20 @@ namespace Game.Combat.Effects
         private static SkillDefinitionSO ResolveSkillDefinition(ISkill skill)
         {
             return skill is SoSkill soSkill ? soSkill.Definition : null;
+        }
+
+        private static ISkill GetWinnerSkill(Event_Clash ev)
+        {
+            if (ev == null || ev.Winner == null)
+                return null;
+
+            if (ev.Winner == ev.ActorA)
+                return ev.SkillA;
+
+            if (ev.Winner == ev.ActorB)
+                return ev.SkillB;
+
+            return null;
         }
 
         private GameObject GetFieldObject(ICombatant combatant)
