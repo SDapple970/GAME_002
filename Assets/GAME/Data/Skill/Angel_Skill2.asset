@@ -10,19 +10,30 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ae81748dc58caa24ea0ef0da4e0d3329, type: 3}
-  m_Name: Skill_Attack_Player
+  m_Name: Angel_Skill2
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Data.SkillDefinitionSO
-  skillId: 0
-  displayName: 
+  skillId: 12
+  displayName: "\uCC9C\uC0AC \uACF5\uACA9"
   inspirationCost: 0
   tag: 0
-  targeting: 2
+  targeting: 3
   consumesTurn: 1
   keywords: 0
   movementMode: 0
   desiredTargetDistance: 1
   moveSpeed: 6
   actionDelayAfterMove: 0.15
+  combatAnimationTrigger: Attack
+  fieldAnimationTrigger: Attack
+  fieldUsable: 0
+  fieldCooldown: 0.35
+  fieldHitDelay: 0.12
+  fieldHitBoxSize: {x: 1.2, y: 0.8}
+  fieldHitBoxOffset: {x: 0, y: 0}
+  castVfxPrefab: {fileID: 0}
+  impactVfxPrefab: {fileID: 0}
+  castSfx: {fileID: 0}
+  impactSfx: {fileID: 0}
   baseDamage: 1
   baseStagger: 1
   weaknessStaggerBonus: 3
