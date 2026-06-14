@@ -39,6 +39,7 @@ namespace Game.Combat.UI
         private bool _submittedThisPlanning;
         private bool _missingEntryPointWarned;
         private bool _missingPanelPlanningWarned;
+        private bool _missingConfirmButtonWarned;
 
         private void Awake()
         {
@@ -103,7 +104,6 @@ namespace Game.Combat.UI
             RebuildSkillButtons();
             RebuildTargetButtons();
             RefreshConfirmState();
-            SetMessage(string.Empty);
         }
 
         public void Hide()
@@ -154,8 +154,14 @@ namespace Game.Combat.UI
 
         private void BindConfirmButton()
         {
-            if (_confirmBound || confirmButton == null)
+            if (_confirmBound)
                 return;
+
+            if (confirmButton == null)
+            {
+                WarnIfMissingConfirmButton();
+                return;
+            }
 
             confirmButton.onClick.AddListener(Confirm);
             _confirmBound = true;
@@ -205,6 +211,7 @@ namespace Game.Combat.UI
         {
             WarnIfMissingEntryPoint();
             WarnIfMissingPanelPlanning();
+            WarnIfMissingConfirmButton();
         }
 
         private void WarnIfMissingEntryPoint()
@@ -225,26 +232,47 @@ namespace Game.Combat.UI
             Debug.LogWarning("[CombatPlanningHUD] PanelPlanning is missing. Combat planning HUD visibility cannot be toggled.", this);
         }
 
+        private void WarnIfMissingConfirmButton()
+        {
+            if (confirmButton != null || _missingConfirmButtonWarned)
+                return;
+
+            _missingConfirmButtonWarned = true;
+            Debug.LogWarning("[CombatPlanningHUD] ConfirmButton is missing. The player cannot submit a combat plan from this HUD.", this);
+        }
+
         private void RebuildSkillButtons()
         {
             ClearChildren(skillListRoot);
 
             if (_player == null)
             {
-                SetMessage("플레이어 전투원을 찾지 못했습니다.");
+                SetMessage("No player combatant found in the active combat session.");
                 return;
             }
 
             if (_player.Skills == null || _player.Skills.Count == 0)
             {
                 Debug.LogWarning("[CombatPlanningHUD] Player has no combat skills.", this);
-                SetMessage("사용 가능한 스킬이 없습니다.");
+                SetMessage("No available skills. Check the player's CombatSkillLoadoutComponent and skill definitions.");
                 return;
             }
 
-            if (buttonPrefab == null || skillListRoot == null)
+            if (buttonPrefab == null)
+            {
+                Debug.LogWarning("[CombatPlanningHUD] ButtonPrefab is missing. Skill buttons cannot be created.", this);
+                SetMessage("Skill list cannot be shown because ButtonPrefab is missing.");
                 return;
+            }
 
+            if (skillListRoot == null)
+            {
+                Debug.LogWarning("[CombatPlanningHUD] SkillListRoot is missing. Skill buttons cannot be created.", this);
+                SetMessage("Skill list cannot be shown because SkillListRoot is missing.");
+                return;
+            }
+
+            int created = 0;
             int count = Mathf.Min(_player.Skills.Count, 3);
             for (int i = 0; i < count; i++)
             {
@@ -256,15 +284,36 @@ namespace Game.Combat.UI
                 Button button = Instantiate(buttonPrefab, skillListRoot);
                 SetButtonText(button, $"{localSkill.Name}  Cost:{localSkill.InspirationCost}");
                 button.onClick.AddListener(() => SelectSkill(localSkill));
+                created++;
             }
+
+            if (created == 0)
+                SetMessage("No usable skill buttons were created.");
         }
 
         private void RebuildTargetButtons()
         {
             ClearChildren(targetListRoot);
 
-            if (_session == null || buttonPrefab == null || targetListRoot == null)
+            if (_session == null)
+            {
+                SetMessage("No active combat session. Target list cannot be shown.");
                 return;
+            }
+
+            if (buttonPrefab == null)
+            {
+                Debug.LogWarning("[CombatPlanningHUD] ButtonPrefab is missing. Target buttons cannot be created.", this);
+                SetMessage("Target list cannot be shown because ButtonPrefab is missing.");
+                return;
+            }
+
+            if (targetListRoot == null)
+            {
+                Debug.LogWarning("[CombatPlanningHUD] TargetListRoot is missing. Target buttons cannot be created.", this);
+                SetMessage("Target list cannot be shown because TargetListRoot is missing.");
+                return;
+            }
 
             bool hasLivingEnemy = false;
             for (int i = 0; i < _session.Enemies.Count; i++)
@@ -281,7 +330,7 @@ namespace Game.Combat.UI
             }
 
             if (!hasLivingEnemy)
-                SetMessage("선택 가능한 적이 없습니다.");
+                SetMessage("No living enemy targets are available.");
         }
 
         private void SelectSkill(ISkill skill)
@@ -290,9 +339,9 @@ namespace Game.Combat.UI
             _selectedTarget = GetDefaultTargetFor(skill, _selectedTarget);
 
             if (RequiresEnemyTarget(skill) && _selectedTarget == null)
-                SetMessage($"{skill.Name}: 대상을 선택하세요.");
+                SetMessage($"{skill.Name}: select a target.");
             else
-                SetMessage($"{skill.Name} 선택됨.");
+                SetMessage($"{skill.Name} selected.");
 
             RefreshConfirmState();
         }
@@ -301,12 +350,12 @@ namespace Game.Combat.UI
         {
             if (target == null || target.HP <= 0)
             {
-                SetMessage("선택할 수 없는 대상입니다.");
+                SetMessage("Selected target is not available.");
                 return;
             }
 
             _selectedTarget = target;
-            SetMessage(_selectedSkill != null ? $"{_selectedSkill.Name} -> Enemy {target.Id.Value}" : "스킬을 먼저 선택하세요.");
+            SetMessage(_selectedSkill != null ? $"{_selectedSkill.Name} -> Enemy {target.Id.Value}" : "Select a skill first.");
             RefreshConfirmState();
         }
 
@@ -327,13 +376,13 @@ namespace Game.Combat.UI
 
             if (flowOrchestrator == null)
             {
-                SetMessage("CombatFlowOrchestrator 참조가 없습니다.");
+                SetMessage("CombatFlowOrchestrator is missing.");
                 return;
             }
 
             if (!flowOrchestrator.SubmitPlayerDraftAndAdvance(draft, _player, out string errorMessage))
             {
-                SetMessage(string.IsNullOrEmpty(errorMessage) ? "Confirm 실패" : errorMessage);
+                SetMessage(string.IsNullOrEmpty(errorMessage) ? "Confirm failed." : errorMessage);
                 RefreshConfirmState();
                 return;
             }
@@ -371,25 +420,25 @@ namespace Game.Combat.UI
 
             if (_session == null)
             {
-                reason = "전투 세션이 없습니다.";
+                reason = "No active combat session.";
                 return false;
             }
 
             if (_player == null || _player.HP <= 0)
             {
-                reason = "행동 가능한 플레이어가 없습니다.";
+                reason = "No player combatant can act.";
                 return false;
             }
 
             if (_selectedSkill == null)
             {
-                reason = "스킬을 선택하세요.";
+                reason = "Select a skill.";
                 return false;
             }
 
             if (RequiresEnemyTarget(_selectedSkill) && (_selectedTarget == null || _selectedTarget.HP <= 0))
             {
-                reason = "살아있는 적 대상을 선택하세요.";
+                reason = "Select a living target.";
                 return false;
             }
 

@@ -5,6 +5,7 @@ using Game.Combat.Core;
 using Game.Combat.Model;
 using Game.Combat.Adapters;
 using Game.Core;
+using Game.Player;
 
 namespace Game.Combat.Integration
 {
@@ -54,8 +55,13 @@ namespace Game.Combat.Integration
 
             LogDebug($"OnTriggerEnter2D other='{GetColliderName(other)}', tag='{GetColliderTag(other)}'.");
 
-            if (!HasPlayerTag(other))
+            GameObject playerRoot = ResolvePlayerRoot(other);
+            if (playerRoot == null)
+            {
+                LogDebug($"Ignored trigger from '{GetColliderName(other)}' because a player root could not be resolved.");
+                Debug.LogWarning("[CombatEncounterTrigger2D] Player root could not be resolved from the trigger collider. Check PlayerInputController, CombatHpComponent, or Player tag placement.", this);
                 return;
+            }
 
             if (!CanStartInCurrentGameState())
                 return;
@@ -80,7 +86,7 @@ namespace Game.Combat.Integration
 
             List<GameObject> allies = new List<GameObject>(1)
             {
-                other.gameObject
+                playerRoot
             };
 
             List<GameObject> enemies;
@@ -133,7 +139,7 @@ namespace Game.Combat.Integration
 
         private void OnTriggerExit2D(Collider2D other)
         {
-            if (!HasPlayerTag(other))
+            if (ResolvePlayerRoot(other) == null)
                 return;
 
             if (entryPoint != null && entryPoint.ActiveStateMachine == null)
@@ -165,6 +171,48 @@ namespace Game.Combat.Integration
             catch (UnityException exception)
             {
                 Debug.LogWarning($"[CombatEncounterTrigger2D] PlayerTag '{playerTag}' is not defined. Trigger ignored. {exception.Message}", this);
+                return false;
+            }
+        }
+
+        private GameObject ResolvePlayerRoot(Collider2D other)
+        {
+            if (other == null)
+                return null;
+
+            PlayerInputController playerInput = other.GetComponentInParent<PlayerInputController>();
+            if (playerInput != null)
+                return playerInput.gameObject;
+
+            CombatHpComponent hpComponent = other.GetComponentInParent<CombatHpComponent>();
+            if (hpComponent != null)
+                return hpComponent.gameObject;
+
+            Transform root = other.transform != null ? other.transform.root : null;
+            if (root != null && HasTag(root.gameObject, playerTag))
+                return root.gameObject;
+
+            return HasPlayerTag(other) ? other.gameObject : null;
+        }
+
+        private bool HasTag(GameObject target, string tagName)
+        {
+            if (target == null)
+                return false;
+
+            if (string.IsNullOrEmpty(tagName))
+            {
+                LogDebug($"Ignored '{target.name}' because PlayerTag is empty.");
+                return false;
+            }
+
+            try
+            {
+                return target.CompareTag(tagName);
+            }
+            catch (UnityException exception)
+            {
+                Debug.LogWarning($"[CombatEncounterTrigger2D] PlayerTag '{tagName}' is not defined. Trigger ignored. {exception.Message}", this);
                 return false;
             }
         }
