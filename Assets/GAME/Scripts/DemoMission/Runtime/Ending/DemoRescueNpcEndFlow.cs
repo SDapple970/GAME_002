@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using Game.Core;
 using Game.DemoMission.Runtime;
@@ -47,6 +48,8 @@ namespace Game.DemoMission
 
         [Header("End")]
         [SerializeField] private DemoEndPanelController endPanel;
+        [SerializeField] private bool returnToTitleAfterDialogue = true;
+        [SerializeField] private string titleSceneName = "Title";
 
         [Header("Debug")]
         [SerializeField] private bool debugLogs = true;
@@ -150,7 +153,7 @@ namespace Game.DemoMission
 
             if (dialogueLines == null || dialogueLines.Length == 0)
             {
-                EndDialogueAndShowChoices();
+                EndDialogue();
                 return;
             }
 
@@ -166,11 +169,53 @@ namespace Game.DemoMission
             dialogueIndex++;
             if (dialogueLines == null || dialogueIndex >= dialogueLines.Length)
             {
-                EndDialogueAndShowChoices();
+                EndDialogue();
                 return;
             }
 
             ShowCurrentDialogueLine();
+        }
+
+        private void EndDialogue()
+        {
+            if (returnToTitleAfterDialogue)
+            {
+                EndDialogueAndReturnToTitle();
+                return;
+            }
+
+            EndDialogueAndShowChoices();
+        }
+
+        private void EndDialogueAndReturnToTitle()
+        {
+            HideDialogue();
+            HideChoices();
+            HidePrompt();
+
+            dialogueActive = false;
+            choiceActive = false;
+            completed = true;
+
+            if (missionRuntime == null)
+                ResolveReferences();
+
+            if (missionRuntime != null)
+                missionRuntime.RegisterNpcRescued();
+            else
+                Debug.LogWarning("[DemoRescueNpcEndFlow] DemoMissionRuntime is missing. NPC rescue was not registered.", this);
+
+            if (GameStateMachine.Instance != null)
+                GameStateMachine.Instance.SetState(GameState.UIOnly);
+
+            if (string.IsNullOrWhiteSpace(titleSceneName))
+            {
+                Debug.LogWarning("[DemoRescueNpcEndFlow] Title scene name is empty. Cannot return to title.", this);
+                return;
+            }
+
+            Log($"Dialogue ended. Loading title scene '{titleSceneName}'.");
+            SceneManager.LoadScene(titleSceneName);
         }
 
         private void EndDialogueAndShowChoices()
@@ -209,8 +254,6 @@ namespace Game.DemoMission
 
             if (endPanel != null)
                 endPanel.Show();
-            else
-                Debug.LogWarning("[DemoRescueNpcEndFlow] DemoEndPanelController is not assigned.", this);
 
             Log("Choice selected. Demo end flow completed.");
         }

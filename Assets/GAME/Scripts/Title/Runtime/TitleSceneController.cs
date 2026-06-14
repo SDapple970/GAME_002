@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Game.DemoMission.Runtime;
 
 namespace GAME.Title
 {
@@ -161,6 +162,9 @@ namespace GAME.Title
             float delay = titleSceneAnimator != null ? titleSceneAnimator.SceneLoadDelay : 0f;
             if (delay > 0f)
                 yield return new WaitForSecondsRealtime(delay);
+
+            if (DemoMissionRuntime.Instance != null)
+                DemoMissionRuntime.Instance.ResetMissionProgress();
 
             SceneManager.LoadScene(dungeonSceneName);
         }
