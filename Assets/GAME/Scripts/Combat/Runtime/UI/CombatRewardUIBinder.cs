@@ -3,6 +3,7 @@ using Game.Combat.Core;
 using Game.Combat.Model;
 using Game.Core;
 using Game.DemoMission.Runtime;
+using Game.Reward;
 using Game.UI;
 
 namespace Game.Combat.UI
@@ -11,6 +12,7 @@ namespace Game.Combat.UI
     {
         [SerializeField] private CombatEntryPoint entryPoint;
         [SerializeField] private RewardUIPanel rewardPanel;
+        [SerializeField] private RewardService rewardService;
         [SerializeField] private bool countEnemyDefeatOnVictory = true;
         [SerializeField] private bool restoreExplorationAfterRewardClosed = true;
 
@@ -46,6 +48,11 @@ namespace Game.Combat.UI
 
             if (rewardPanel == null)
                 rewardPanel = FindFirstObjectByType<RewardUIPanel>(FindObjectsInactive.Include);
+
+            if (rewardService == null)
+                rewardService = RewardService.Instance != null
+                    ? RewardService.Instance
+                    : FindFirstObjectByType<RewardService>();
         }
 
         private void SubscribeToEntryPoint()
@@ -104,6 +111,16 @@ namespace Game.Combat.UI
             if (countEnemyDefeatOnVictory && result.IsWin)
                 DemoMissionRuntime.GetOrCreate().RegisterEnemyDefeated();
 
+            if (rewardService != null)
+                rewardService.GrantCombatResult(result);
+            else
+                Debug.LogWarning("[CombatRewardUIBinder] RewardService is missing. Combat result reward was not granted.", this);
+
+            if (GameFlowController.Instance != null)
+                GameFlowController.Instance.HandleCombatResult(result);
+            else if (GameStateMachine.Instance != null)
+                GameStateMachine.Instance.SetState(GameState.Reward);
+
             if (rewardPanel != null)
             {
                 rewardPanel.Show(result);
@@ -119,7 +136,9 @@ namespace Game.Combat.UI
             if (!restoreExplorationAfterRewardClosed)
                 return;
 
-            if (GameStateMachine.Instance != null)
+            if (GameFlowController.Instance != null)
+                GameFlowController.Instance.HandleRewardClosed();
+            else if (GameStateMachine.Instance != null)
                 GameStateMachine.Instance.SetState(GameState.Exploration);
         }
 

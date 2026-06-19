@@ -112,7 +112,7 @@ namespace Game.Player
         private static bool CanControl()
         {
             return GameStateMachine.Instance == null ||
-                   GameStateMachine.Instance.Is(GameState.Exploration);
+                   GameStateMachine.Instance.AllowsExplorationInput();
         }
     }
 }

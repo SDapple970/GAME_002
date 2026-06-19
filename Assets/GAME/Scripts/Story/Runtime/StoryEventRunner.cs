@@ -22,6 +22,8 @@ namespace Game.Story
         private StorySpeakerAnchor _currentSpeakerAnchor;
         private bool _running;
         private bool _waitingForChoice;
+        private GameInputInstaller _input;
+        private bool _inputSubscribed;
 
         public bool IsRunning => _running;
 
@@ -33,6 +35,7 @@ namespace Game.Story
         private void OnEnable()
         {
             ResolveReferences();
+            TrySubscribeInput();
 
             if (dialoguePanel != null)
             {
@@ -47,16 +50,14 @@ namespace Game.Story
             {
                 dialoguePanel.OnNextRequested -= Advance;
             }
+
+            UnsubscribeInput();
         }
 
         private void Update()
         {
-            if (!_running || _waitingForChoice || storyDialogueHUD == null) return;
-
-            if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetMouseButtonDown(0))
-            {
-                Advance();
-            }
+            if (!_inputSubscribed)
+                TrySubscribeInput();
         }
 
         public void StartEvent(StoryEventDefinitionSO eventDefinition)
@@ -213,6 +214,41 @@ namespace Game.Story
         {
             if (timedChoiceDialoguePanel == null)
                 timedChoiceDialoguePanel = FindFirstObjectByType<TimedChoiceDialoguePanel>(FindObjectsInactive.Include);
+        }
+
+        private void TrySubscribeInput()
+        {
+            if (_inputSubscribed)
+                return;
+
+            _input = global::GameInputInstaller.Instance;
+            if (_input == null)
+                return;
+
+            _input.Interact += HandleAdvanceInput;
+            _inputSubscribed = true;
+        }
+
+        private void UnsubscribeInput()
+        {
+            if (!_inputSubscribed || _input == null)
+            {
+                _inputSubscribed = false;
+                _input = null;
+                return;
+            }
+
+            _input.Interact -= HandleAdvanceInput;
+            _inputSubscribed = false;
+            _input = null;
+        }
+
+        private void HandleAdvanceInput()
+        {
+            if (!_running || _waitingForChoice || storyDialogueHUD == null)
+                return;
+
+            Advance();
         }
 
         private void MarkCurrentEventCompletedIfNeeded()

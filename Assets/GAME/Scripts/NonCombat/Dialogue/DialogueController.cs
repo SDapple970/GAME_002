@@ -41,7 +41,7 @@ namespace Game.NonCombat.Dialogue
         public void StartDialogue(DialogueNodeSO node)
         {
             if (node == null) return;
-            if (GameStateMachine.Instance != null && GameStateMachine.Instance.Is(GameState.Combat))
+            if (GameStateMachine.Instance != null && GameStateMachine.Instance.IsCombatState())
                 return;
 
             _stateBeforeDialogue = GameStateMachine.Instance != null ? GameStateMachine.Instance.Current : GameState.Exploration;

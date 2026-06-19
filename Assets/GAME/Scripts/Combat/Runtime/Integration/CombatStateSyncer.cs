@@ -75,7 +75,7 @@ namespace Game.Integration
             // 전투가 시작되면 묻지도 따지지도 않고 상태를 Combat으로 강제 고정! (플레이어 정지)
             if (GameStateMachine.Instance != null)
             {
-                GameStateMachine.Instance.SetState(GameState.Combat);
+                GameStateMachine.Instance.SetState(GameState.CombatPlanning);
                 Debug.Log("🔒 [CombatStateSyncer] 전투 시작 감지! 플레이어 조작을 차단합니다.");
             }
         }

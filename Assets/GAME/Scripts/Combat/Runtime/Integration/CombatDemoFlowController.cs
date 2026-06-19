@@ -69,7 +69,7 @@ namespace Game.Combat.Integration
             }
 
             if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(GameState.Combat);
+                GameStateMachine.Instance.SetState(GameState.CombatPlanning);
         }
 
         private void OnCombatEnded(CombatResult result)

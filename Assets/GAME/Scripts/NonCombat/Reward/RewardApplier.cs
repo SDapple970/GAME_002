@@ -1,5 +1,6 @@
 using Game.Combat.Model;
 using Game.NonCombat.Inventory;
+using Game.Reward;
 using UnityEngine;
 
 namespace Game.NonCombat.Reward
@@ -23,14 +24,18 @@ namespace Game.NonCombat.Reward
 
         public void ApplyCombatResult(CombatResult result)
         {
+            RewardService rewardService = RewardService.Instance;
+            if (rewardService != null)
+            {
+                rewardService.GrantCombatResult(result);
+                return;
+            }
+
             if (result == null || !result.IsWin) return;
 
             CurrencyWallet wallet = currencyWallet != null ? currencyWallet : CurrencyWallet.Instance;
             if (wallet != null)
                 wallet.AddGold(result.TotalGold);
-
-            if (result.TotalExp > 0)
-                Debug.Log($"[RewardApplier] TotalExp {result.TotalExp} received. TODO: connect character level system.", this);
         }
     }
 }

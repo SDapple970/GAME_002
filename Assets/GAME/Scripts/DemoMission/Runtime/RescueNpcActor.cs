@@ -23,6 +23,8 @@ namespace Game.DemoMission.Runtime
         private bool _rescueRegistered;
         private bool _dialogueRunning;
         private float _lastInteractionTime = -999f;
+        private GameInputInstaller _input;
+        private bool _inputSubscribed;
 
         private void Awake()
         {
@@ -41,15 +43,19 @@ namespace Game.DemoMission.Runtime
         {
             if (missionRuntime == null)
                 missionRuntime = DemoMissionRuntime.GetOrCreate();
+
+            TrySubscribeInput();
+        }
+
+        private void OnDisable()
+        {
+            UnsubscribeInput();
         }
 
         private void Update()
         {
-            if (!_playerInRange || _dialogueRunning)
-                return;
-
-            if (Input.GetKeyDown(interactKey))
-                TryInteract();
+            if (!_inputSubscribed)
+                TrySubscribeInput();
         }
 
         private void OnTriggerEnter2D(Collider2D other)
@@ -164,6 +170,41 @@ namespace Game.DemoMission.Runtime
         {
             if (interactPromptRoot != null)
                 interactPromptRoot.SetActive(visible);
+        }
+
+        private void TrySubscribeInput()
+        {
+            if (_inputSubscribed)
+                return;
+
+            _input = global::GameInputInstaller.Instance;
+            if (_input == null)
+                return;
+
+            _input.Interact += HandleInteractInput;
+            _inputSubscribed = true;
+        }
+
+        private void UnsubscribeInput()
+        {
+            if (!_inputSubscribed || _input == null)
+            {
+                _inputSubscribed = false;
+                _input = null;
+                return;
+            }
+
+            _input.Interact -= HandleInteractInput;
+            _inputSubscribed = false;
+            _input = null;
+        }
+
+        private void HandleInteractInput()
+        {
+            if (!_playerInRange || _dialogueRunning)
+                return;
+
+            TryInteract();
         }
     }
 }

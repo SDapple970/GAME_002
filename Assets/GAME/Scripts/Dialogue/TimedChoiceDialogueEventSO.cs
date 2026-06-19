@@ -90,8 +90,7 @@ namespace Game.Dialogue
         private static bool IsCombatBlockingState()
         {
             return GameStateMachine.Instance != null &&
-                   (GameStateMachine.Instance.Is(GameState.Combat) ||
-                    GameStateMachine.Instance.Is(GameState.CombatTransition));
+                   GameStateMachine.Instance.IsCombatState();
         }
     }
 }

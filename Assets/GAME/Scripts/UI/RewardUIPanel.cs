@@ -127,7 +127,6 @@ namespace Game.UI
 
         private void CloseRewardPanel()
         {
-            ApplyReward(_pendingResult);
             _pendingResult = null;
 
             Hide();
@@ -175,12 +174,7 @@ namespace Game.UI
 
         private void ApplyReward(CombatResult result)
         {
-            if (result == null)
-                return;
-
-            RewardApplier applier = rewardApplier != null ? rewardApplier : RewardApplier.Instance;
-            if (applier != null)
-                applier.ApplyCombatResult(result);
+            // Legacy compatibility hook. Reward granting is owned by RewardService/RewardFlow.
         }
 
         private string BuildResultText(bool isWin)

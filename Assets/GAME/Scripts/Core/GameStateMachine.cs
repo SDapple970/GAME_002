@@ -32,5 +32,42 @@ namespace Game.Core
         }
 
         public bool Is(GameState s) => Current == s;
+
+        public bool IsCombatState()
+        {
+            return IsCombatState(Current);
+        }
+
+        public bool AllowsExplorationInput()
+        {
+            return AllowsExplorationInput(Current);
+        }
+
+        public bool AllowsUIInput()
+        {
+            return AllowsUIInput(Current);
+        }
+
+        public static bool IsCombatState(GameState state)
+        {
+            return state == GameState.CombatTransition ||
+                   state == GameState.CombatPlanning ||
+                   state == GameState.CombatResolving;
+        }
+
+        public static bool AllowsExplorationInput(GameState state)
+        {
+            return state == GameState.Exploration;
+        }
+
+        public static bool AllowsUIInput(GameState state)
+        {
+            return state == GameState.Title ||
+                   state == GameState.Dialogue ||
+                   state == GameState.Choice ||
+                   state == GameState.Reward ||
+                   state == GameState.UIOnly ||
+                   state == GameState.Paused;
+        }
     }
 }

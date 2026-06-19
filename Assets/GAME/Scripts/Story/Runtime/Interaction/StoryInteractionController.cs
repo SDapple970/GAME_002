@@ -17,6 +17,8 @@ namespace Game.Story.Interaction
         [SerializeField] private bool debugLogs = false;
 
         private StoryInteractable2D _current;
+        private GameInputInstaller _input;
+        private bool _inputSubscribed;
 
         private void Awake()
         {
@@ -32,6 +34,11 @@ namespace Game.Story.Interaction
             promptUI?.Hide();
         }
 
+        private void OnEnable()
+        {
+            TrySubscribeInput();
+        }
+
         private void OnDisable()
         {
             if (Instance == this)
@@ -39,11 +46,15 @@ namespace Game.Story.Interaction
                 Instance = null;
             }
 
+            UnsubscribeInput();
             promptUI?.Hide();
         }
 
         private void Update()
         {
+            if (!_inputSubscribed)
+                TrySubscribeInput();
+
             ResolveRunner();
 
             if (runner != null && runner.IsRunning)
@@ -67,7 +78,7 @@ namespace Game.Story.Interaction
                 promptUI?.Hide();
             }
 
-            if (useLegacyFallbackKey && Input.GetKeyDown(fallbackInteractKey))
+            if (useLegacyFallbackKey && !_inputSubscribed && Input.GetKeyDown(fallbackInteractKey))
             {
                 if (debugLogs)
                 {
@@ -197,6 +208,38 @@ namespace Game.Story.Interaction
         private string GetCurrentName()
         {
             return _current != null ? _current.name : "null";
+        }
+
+        private void TrySubscribeInput()
+        {
+            if (_inputSubscribed)
+                return;
+
+            _input = global::GameInputInstaller.Instance;
+            if (_input == null)
+                return;
+
+            _input.Interact += HandleInteractInput;
+            _inputSubscribed = true;
+        }
+
+        private void UnsubscribeInput()
+        {
+            if (!_inputSubscribed || _input == null)
+            {
+                _inputSubscribed = false;
+                _input = null;
+                return;
+            }
+
+            _input.Interact -= HandleInteractInput;
+            _inputSubscribed = false;
+            _input = null;
+        }
+
+        private void HandleInteractInput()
+        {
+            TryInteract();
         }
     }
 }

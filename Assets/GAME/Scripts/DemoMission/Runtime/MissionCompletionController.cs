@@ -60,7 +60,7 @@ namespace Game.DemoMission.Runtime
             if (_handled)
                 return;
 
-            if (GameStateMachine.Instance != null && GameStateMachine.Instance.Is(GameState.Combat))
+            if (GameStateMachine.Instance != null && GameStateMachine.Instance.IsCombatState())
             {
                 if (_waitRoutine == null)
                     _waitRoutine = StartCoroutine(Co_WaitUntilNotCombatThenComplete());
@@ -74,7 +74,7 @@ namespace Game.DemoMission.Runtime
         {
             Debug.Log("[MissionCompletionController] Mission completed during combat. Waiting for combat state to end.", this);
 
-            while (GameStateMachine.Instance != null && GameStateMachine.Instance.Is(GameState.Combat))
+            while (GameStateMachine.Instance != null && GameStateMachine.Instance.IsCombatState())
                 yield return null;
 
             _waitRoutine = null;

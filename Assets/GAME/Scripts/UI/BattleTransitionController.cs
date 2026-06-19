@@ -57,7 +57,7 @@ namespace Game.Battle
                     yield return null;
             }
 
-            GameStateMachine.Instance.SetState(GameState.Combat);
+            GameStateMachine.Instance.SetState(GameState.CombatPlanning);
 
             if (fader != null)
                 yield return fader.FadeIn(this);
