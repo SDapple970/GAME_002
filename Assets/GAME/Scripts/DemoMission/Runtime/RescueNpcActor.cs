@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
+using Game.Core;
 using Game.DemoMission.Data;
 
 namespace Game.DemoMission.Runtime
@@ -202,6 +203,9 @@ namespace Game.DemoMission.Runtime
         private void HandleInteractInput()
         {
             if (!_playerInRange || _dialogueRunning)
+                return;
+
+            if (GameStateMachine.Instance != null && !GameStateMachine.Instance.AllowsExplorationInput())
                 return;
 
             TryInteract();

@@ -33,6 +33,9 @@ public sealed class GameInputInstaller : MonoBehaviour
 
     private void OnEnable()
     {
+        if (Actions == null)
+            return;
+
         Actions.Enable();
 
         Actions.Gameplay.Move.performed += OnMovePerformed;
@@ -46,6 +49,9 @@ public sealed class GameInputInstaller : MonoBehaviour
 
     private void OnDisable()
     {
+        if (Actions == null)
+            return;
+
         Actions.Gameplay.Move.performed -= OnMovePerformed;
         Actions.Gameplay.Move.canceled -= OnMoveCanceled;
         Actions.Gameplay.Jump.performed -= OnJumpPerformed;
