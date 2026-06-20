@@ -32,7 +32,7 @@ namespace Game.Debugging
 
         private void Update()
         {
-            if (validateOnHotkey && Input.GetKeyDown(validateKey))
+            if (validateOnHotkey && UnityEngine.Input.GetKeyDown(validateKey))
                 ValidateCurrentScene();
         }
 

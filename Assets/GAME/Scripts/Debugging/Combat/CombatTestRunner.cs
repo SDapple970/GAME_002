@@ -75,7 +75,7 @@ namespace Game.Combat.Core
             if (_sm == null) return;
 
             // Resolution ¡æ EndTurn ¡æ Planning(+new turn)
-            if (Input.GetKeyDown(KeyCode.Space))
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Space))
             {
                 _sm.Tick(); // Resolution
                 DumpEvents();

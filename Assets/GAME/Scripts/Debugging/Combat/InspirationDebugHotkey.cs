@@ -12,11 +12,11 @@ namespace Game.Combat.Core
             if (s == null) return;
 
             // G: 영감 +1
-            if (Input.GetKeyDown(KeyCode.G))
+            if (UnityEngine.Input.GetKeyDown(KeyCode.G))
                 s.Inspiration.Gain(1);
 
             // H: 영감 -1 (있을 때만)
-            if (Input.GetKeyDown(KeyCode.H))
+            if (UnityEngine.Input.GetKeyDown(KeyCode.H))
                 s.Inspiration.TrySpend(1);
         }
     }

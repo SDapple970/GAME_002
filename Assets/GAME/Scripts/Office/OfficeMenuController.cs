@@ -44,7 +44,7 @@ namespace Game.Office
             AutoBindReferences();
             UpdateHoveredHotspot();
 
-            if (Input.GetMouseButtonDown(0) && !IsPointerOverUI())
+            if (UnityEngine.Input.GetMouseButtonDown(0) && !IsPointerOverUI())
                 HandleClick(_hoveredHotspot);
         }
 
@@ -76,7 +76,7 @@ namespace Game.Office
             if (targetCamera == null)
                 return null;
 
-            Ray ray = targetCamera.ScreenPointToRay(Input.mousePosition);
+            Ray ray = targetCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
             RaycastHit2D hit = Physics2D.GetRayIntersection(ray);
             if (hit.collider == null)
                 return null;

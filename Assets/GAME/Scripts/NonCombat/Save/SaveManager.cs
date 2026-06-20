@@ -22,10 +22,10 @@ namespace Game.NonCombat.Save
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F5))
+            if (UnityEngine.Input.GetKeyDown(KeyCode.F5))
                 Save();
 
-            if (Input.GetKeyDown(KeyCode.F6))
+            if (UnityEngine.Input.GetKeyDown(KeyCode.F6))
                 Load();
         }
 

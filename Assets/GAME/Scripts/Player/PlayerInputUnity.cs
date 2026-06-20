@@ -7,14 +7,14 @@ namespace Game.Player
     // 나중에 Input System으로 바꾸려면 이 클래스만 교체하면 됨.
     public sealed class PlayerInputUnity : MonoBehaviour, IPlayerInput
     {
-        public float MoveX => Input.GetAxisRaw("Horizontal");
+        public float MoveX => UnityEngine.Input.GetAxisRaw("Horizontal");
 
         public bool JumpPressed { get; private set; }
-        public bool JumpHeld => Input.GetButton("Jump");
+        public bool JumpHeld => UnityEngine.Input.GetButton("Jump");
 
         private void Update()
         {
-            if (Input.GetButtonDown("Jump"))
+            if (UnityEngine.Input.GetButtonDown("Jump"))
                 JumpPressed = true;
         }
 

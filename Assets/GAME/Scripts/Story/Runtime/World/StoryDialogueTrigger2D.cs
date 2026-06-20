@@ -26,7 +26,7 @@ namespace Game.Story.World
 
         private void Update()
         {
-            if (useDebugEKey && _playerInside && Input.GetKeyDown(KeyCode.E))
+            if (useDebugEKey && _playerInside && UnityEngine.Input.GetKeyDown(KeyCode.E))
             {
                 TryStartEvent();
             }

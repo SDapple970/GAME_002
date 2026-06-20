@@ -116,7 +116,7 @@ namespace Game.Cutscene
             if (keyboard != null && keyboard[skipKey].wasPressedThisFrame)
                 FinishPlayback();
 #else
-            if (Input.GetKeyDown(skipKey))
+            if (UnityEngine.Input.GetKeyDown(skipKey))
                 FinishPlayback();
 #endif
         }

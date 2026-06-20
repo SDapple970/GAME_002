@@ -65,7 +65,7 @@ namespace Game.Search
             if (UsesQuestionFlow())
             {
                 promptUI?.Hide();
-                if (_questionVisible && Input.GetKeyDown(fallbackInteractKey))
+                if (_questionVisible && UnityEngine.Input.GetKeyDown(fallbackInteractKey))
                 {
                     OpenDecisionChoices();
                 }
@@ -82,7 +82,7 @@ namespace Game.Search
                 promptUI?.Hide();
             }
 
-            if (Input.GetKeyDown(fallbackInteractKey))
+            if (UnityEngine.Input.GetKeyDown(fallbackInteractKey))
             {
                 Search();
             }

@@ -36,11 +36,11 @@ namespace Game.Search.UI
         {
             if (!_visible) return;
 
-            if (Input.GetKeyDown(yesKey))
+            if (UnityEngine.Input.GetKeyDown(yesKey))
             {
                 Accept();
             }
-            else if (Input.GetKeyDown(noKey))
+            else if (UnityEngine.Input.GetKeyDown(noKey))
             {
                 Reject();
             }

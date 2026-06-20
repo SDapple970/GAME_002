@@ -40,13 +40,13 @@ namespace Game.Story.UI
         {
             if (_selectionLocked || _visibleChoices.Count == 0) return;
 
-            if (Input.GetKeyDown(firstChoiceKey))
+            if (UnityEngine.Input.GetKeyDown(firstChoiceKey))
             {
                 SelectVisibleChoice(0);
                 return;
             }
 
-            if (Input.GetKeyDown(secondChoiceKey))
+            if (UnityEngine.Input.GetKeyDown(secondChoiceKey))
             {
                 SelectVisibleChoice(1);
                 return;

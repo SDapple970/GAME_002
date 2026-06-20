@@ -78,7 +78,7 @@ namespace Game.Story.Interaction
                 promptUI?.Hide();
             }
 
-            if (useLegacyFallbackKey && !_inputSubscribed && Input.GetKeyDown(fallbackInteractKey))
+            if (useLegacyFallbackKey && !_inputSubscribed && UnityEngine.Input.GetKeyDown(fallbackInteractKey))
             {
                 if (debugLogs)
                 {

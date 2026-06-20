@@ -44,16 +44,16 @@ namespace Game.Combat.Debugging
             if (_session == null || _actor == null) return;
 
             // 0: 스킬 목록 다시 출력
-            if (Input.GetKeyDown(KeyCode.Alpha0)) PrintSkills();
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Alpha0)) PrintSkills();
 
             // 1: Inspect (타겟 필요)
-            if (Input.GetKeyDown(KeyCode.Alpha1)) UseFirstSkillByTag(SkillTag.Inspect, requireTarget: true);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Alpha1)) UseFirstSkillByTag(SkillTag.Inspect, requireTarget: true);
 
             // 2: Fire(Attack 중 keywords가 Fire인 스킬)
-            if (Input.GetKeyDown(KeyCode.Alpha2)) UseFirstSkillMatchingKeywords(KeywordMask.Fire);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Alpha2)) UseFirstSkillMatchingKeywords(KeywordMask.Fire);
 
             // 3: 기본 Attack(그냥 tag Attack 첫 번째)
-            if (Input.GetKeyDown(KeyCode.Alpha3)) UseFirstSkillByTag(SkillTag.Attack, requireTarget: true);
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Alpha3)) UseFirstSkillByTag(SkillTag.Attack, requireTarget: true);
         }
 
         private void PrintSkills()

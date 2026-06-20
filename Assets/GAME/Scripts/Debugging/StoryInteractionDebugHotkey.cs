@@ -9,7 +9,7 @@ namespace Game.Story.Interaction
 
         private void Update()
         {
-            if (!Input.GetKeyDown(interactKey)) return;
+            if (!UnityEngine.Input.GetKeyDown(interactKey)) return;
 
             if (StoryInteractionController.Instance != null)
             {

@@ -91,7 +91,7 @@ namespace Game.DemoMission
 
             if (dialogueActive)
             {
-                if (Input.GetKeyDown(interactKey))
+                if (UnityEngine.Input.GetKeyDown(interactKey))
                     AdvanceDialogue();
 
                 return;
@@ -105,7 +105,7 @@ namespace Game.DemoMission
             if (!CanStartInteraction())
                 return;
 
-            if (Input.GetKeyDown(interactKey))
+            if (UnityEngine.Input.GetKeyDown(interactKey))
                 StartDialogue();
         }
 
