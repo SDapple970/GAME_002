@@ -4,6 +4,7 @@ namespace Game.UI
 {
     public sealed class GameUIRootController : MonoBehaviour
     {
+        [SerializeField] private GameObject titleRoot;
         [SerializeField] private GameObject fieldRoot;
         [SerializeField] private GameObject dialogueRoot;
         [SerializeField] private GameObject choiceRoot;
@@ -17,6 +18,7 @@ namespace Game.UI
             AutoBindMissingReferences();
         }
 
+        public void SetTitleVisible(bool visible) => SetVisible(titleRoot, visible);
         public void SetFieldVisible(bool visible) => SetVisible(fieldRoot, visible);
         public void SetDialogueVisible(bool visible) => SetVisible(dialogueRoot, visible);
         public void SetChoiceVisible(bool visible) => SetVisible(choiceRoot, visible);
@@ -27,6 +29,8 @@ namespace Game.UI
 
         public void AutoBindMissingReferences()
         {
+            titleRoot ??= FindByName("TitleRoot");
+            titleRoot ??= FindByName("TitleGroup");
             fieldRoot ??= FindObjectRoot<OverworldHUDRoot>();
             dialogueRoot ??= FindObjectRoot<Game.Story.UI.DialoguePanel>();
             dialogueRoot ??= FindObjectRoot<Game.Story.UI.DialogueUIPanel>();

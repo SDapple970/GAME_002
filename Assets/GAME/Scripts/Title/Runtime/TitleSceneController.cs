@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Game.Core;
 using Game.DemoMission.Runtime;
 
 namespace GAME.Title
@@ -166,7 +167,7 @@ namespace GAME.Title
             if (DemoMissionRuntime.Instance != null)
                 DemoMissionRuntime.Instance.ResetMissionProgress();
 
-            SceneManager.LoadScene(dungeonSceneName);
+            LoadDungeonScene(dungeonSceneName);
         }
 
         private bool ValidateStartReferences()
@@ -285,6 +286,17 @@ namespace GAME.Title
             group.alpha = alpha;
             group.interactable = interactable;
             group.blocksRaycasts = blocksRaycasts;
+        }
+
+        private static void LoadDungeonScene(string sceneName)
+        {
+            if (SceneFlowController.Instance != null)
+            {
+                SceneFlowController.Instance.LoadScene(sceneName);
+                return;
+            }
+
+            SceneManager.LoadScene(sceneName);
         }
     }
 }

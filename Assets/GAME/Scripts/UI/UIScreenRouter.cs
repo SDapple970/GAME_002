@@ -42,6 +42,7 @@ namespace Game.UI
 
             bool isCombat = GameStateMachine.IsCombatState(state);
 
+            uiRoot.SetTitleVisible(state == GameState.Title);
             uiRoot.SetFieldVisible(state == GameState.Exploration);
             uiRoot.SetDialogueVisible(state == GameState.Dialogue || state == GameState.Cutscene);
             uiRoot.SetChoiceVisible(state == GameState.Choice);
