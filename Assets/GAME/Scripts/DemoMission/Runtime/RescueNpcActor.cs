@@ -95,6 +95,7 @@ namespace Game.DemoMission.Runtime
                 return;
 
             _lastInteractionTime = Time.unscaledTime;
+            missionRuntime.PublishQuestEvent(Game.Quest.QuestEventType.Talk, DemoMissionRuntime.NpcTalkedObjectiveId);
 
             if (requireEnemyKillsBeforeRescue && !missionRuntime.HasRequiredEnemyKills())
             {

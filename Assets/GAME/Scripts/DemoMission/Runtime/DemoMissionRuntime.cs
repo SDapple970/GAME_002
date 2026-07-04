@@ -1,11 +1,16 @@
 using System;
 using UnityEngine;
 using Game.DemoMission.Data;
+using Game.Quest;
 
 namespace Game.DemoMission.Runtime
 {
     public sealed class DemoMissionRuntime : MonoBehaviour
     {
+        public const string EnemyDefeatedObjectiveId = "enemy_defeated";
+        public const string NpcTalkedObjectiveId = "npc_talked";
+        public const string NpcRescuedObjectiveId = "npc_rescued";
+
         public static DemoMissionRuntime Instance { get; private set; }
 
         [SerializeField] private bool dontDestroyOnLoad = true;
@@ -75,11 +80,15 @@ namespace Game.DemoMission.Runtime
                 return;
             }
 
+            int previousKills = EnemyDefeatCount;
             int requiredKills = Mathf.Max(0, currentMission.requiredEnemyKills);
             if (requiredKills > 0)
                 EnemyDefeatCount = Mathf.Min(EnemyDefeatCount + 1, requiredKills);
             else
                 EnemyDefeatCount++;
+
+            if (EnemyDefeatCount != previousKills)
+                PublishQuestEvent(QuestEventType.Kill, EnemyDefeatedObjectiveId, 1);
 
             RaiseProgressChanged();
             TryRaiseCompleted();
@@ -97,6 +106,7 @@ namespace Game.DemoMission.Runtime
                 return;
 
             IsNpcRescued = true;
+            PublishQuestEvent(QuestEventType.Rescue, NpcRescuedObjectiveId, 1);
             RaiseProgressChanged();
             TryRaiseCompleted();
         }
@@ -126,6 +136,18 @@ namespace Game.DemoMission.Runtime
         private void RaiseProgressChanged()
         {
             OnMissionProgressChanged?.Invoke();
+        }
+
+        public void PublishQuestEvent(QuestEventType eventType, string objectiveId, int amount = 1)
+        {
+            if (currentMission == null)
+                return;
+
+            string questId = !string.IsNullOrWhiteSpace(currentMission.missionId)
+                ? currentMission.missionId
+                : currentMission.name;
+
+            QuestEventChannel.Publish(new QuestEvent(eventType, questId, objectiveId, amount, gameObject));
         }
     }
 }
