@@ -2,11 +2,12 @@ using System;
 using System.Collections.Generic;
 using Game.Mission;
 using Game.Mission.Data;
+using Game.NonCombat.Save;
 using UnityEngine;
 
 namespace Game.Quest
 {
-    public sealed class QuestRuntime : MonoBehaviour
+    public sealed class QuestRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
     {
         [SerializeField] private MissionManager missionManager;
         [SerializeField] private QuestDefinitionSO[] questDefinitions;
@@ -187,6 +188,47 @@ namespace Game.Quest
             return gold > 0 || exp > 0;
         }
 
+        public void CaptureSaveData(GameSaveData saveData)
+        {
+            if (saveData == null)
+                return;
+
+            saveData.quest ??= new QuestSaveData();
+            saveData.quest.quests.Clear();
+
+            foreach (KeyValuePair<string, RuntimeQuestState> pair in _runtimeByQuestId)
+            {
+                RuntimeQuestState state = pair.Value;
+                if (state == null || string.IsNullOrWhiteSpace(state.QuestId))
+                    continue;
+
+                QuestStateSaveData questState = new()
+                {
+                    questId = state.QuestId,
+                    completed = state.Completed
+                };
+                state.AppendObjectiveSaveData(questState.objectives);
+                saveData.quest.quests.Add(questState);
+            }
+        }
+
+        public void RestoreSaveData(GameSaveData saveData)
+        {
+            if (saveData?.quest?.quests == null)
+                return;
+
+            for (int i = 0; i < saveData.quest.quests.Count; i++)
+            {
+                QuestStateSaveData questState = saveData.quest.quests[i];
+                if (questState == null || string.IsNullOrWhiteSpace(questState.questId))
+                    continue;
+
+                RuntimeQuestState state = GetOrCreateState(questState.questId, FindDefinition(questState.questId));
+                state.Completed = questState.completed;
+                state.ApplyObjectiveSaveData(questState.objectives);
+            }
+        }
+
         private void ResolveMissionManager()
         {
             if (missionManager == null)
@@ -330,6 +372,44 @@ namespace Game.Quest
                 return hasRequiredObjective;
             }
 
+            public void AppendObjectiveSaveData(List<QuestObjectiveSaveData> objectives)
+            {
+                if (objectives == null)
+                    return;
+
+                foreach (KeyValuePair<string, int> pair in _progressByObjectiveId)
+                {
+                    string objectiveId = pair.Key;
+                    if (string.IsNullOrWhiteSpace(objectiveId))
+                        continue;
+
+                    objectives.Add(new QuestObjectiveSaveData
+                    {
+                        objectiveId = objectiveId,
+                        progress = Mathf.Max(0, pair.Value),
+                        requiredCount = GetRequiredCount(objectiveId)
+                    });
+                }
+            }
+
+            public void ApplyObjectiveSaveData(List<QuestObjectiveSaveData> objectives)
+            {
+                _progressByObjectiveId.Clear();
+                if (objectives == null)
+                    return;
+
+                for (int i = 0; i < objectives.Count; i++)
+                {
+                    QuestObjectiveSaveData objective = objectives[i];
+                    if (objective == null || string.IsNullOrWhiteSpace(objective.objectiveId))
+                        continue;
+
+                    SetProgress(objective.objectiveId, objective.progress);
+                    if (objective.requiredCount > 0 && !HasDefinitionObjective(objective.objectiveId))
+                        ConfigureObjective(objective.objectiveId, objective.requiredCount, false);
+                }
+            }
+
             private bool AreCompatibilityObjectivesComplete()
             {
                 bool hasRequiredObjective = false;
@@ -360,6 +440,11 @@ namespace Game.Quest
                 }
 
                 return null;
+            }
+
+            private bool HasDefinitionObjective(string objectiveId)
+            {
+                return FindDefinitionObjective(objectiveId) != null;
             }
         }
 

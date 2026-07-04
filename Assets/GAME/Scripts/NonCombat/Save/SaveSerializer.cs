@@ -9,12 +9,25 @@ namespace Game.NonCombat.Save
             return JsonUtility.ToJson(data, true);
         }
 
+        public static string ToJson(GameSaveData data)
+        {
+            return JsonUtility.ToJson(data, true);
+        }
+
         public static SaveData FromJson(string json)
         {
             if (string.IsNullOrEmpty(json))
                 return new SaveData();
 
             return JsonUtility.FromJson<SaveData>(json) ?? new SaveData();
+        }
+
+        public static GameSaveData FromGameSaveJson(string json)
+        {
+            if (string.IsNullOrEmpty(json))
+                return new GameSaveData();
+
+            return JsonUtility.FromJson<GameSaveData>(json) ?? new GameSaveData();
         }
     }
 }

@@ -1,8 +1,9 @@
 using UnityEngine;
+using Game.NonCombat.Save;
 
 namespace Game.NonCombat.Inventory
 {
-    public sealed class CurrencyWallet : MonoBehaviour
+    public sealed class CurrencyWallet : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
     {
         public static CurrencyWallet Instance { get; private set; }
 
@@ -39,5 +40,22 @@ namespace Game.NonCombat.Inventory
         }
 
         public void SetGold(int value) => gold = Mathf.Max(0, value);
+
+        public void CaptureSaveData(GameSaveData saveData)
+        {
+            if (saveData == null)
+                return;
+
+            saveData.currency ??= new CurrencySaveData();
+            saveData.currency.gold = gold;
+        }
+
+        public void RestoreSaveData(GameSaveData saveData)
+        {
+            if (saveData?.currency == null)
+                return;
+
+            SetGold(saveData.currency.gold);
+        }
     }
 }

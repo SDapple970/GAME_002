@@ -1,11 +1,12 @@
 using System;
 using UnityEngine;
 using Game.DemoMission.Data;
+using Game.NonCombat.Save;
 using Game.Quest;
 
 namespace Game.DemoMission.Runtime
 {
-    public sealed class DemoMissionRuntime : MonoBehaviour
+    public sealed class DemoMissionRuntime : MonoBehaviour, ISaveDataProvider
     {
         public const string EnemyDefeatedObjectiveId = "enemy_defeated";
         public const string NpcTalkedObjectiveId = "npc_talked";
@@ -174,6 +175,18 @@ namespace Game.DemoMission.Runtime
             }
 
             QuestEventChannel.Publish(questEvent);
+        }
+
+        public void CaptureSaveData(GameSaveData saveData)
+        {
+            if (saveData == null)
+                return;
+
+            saveData.demoMission ??= new DemoMissionSaveData();
+            saveData.demoMission.missionId = CurrentQuestId;
+            saveData.demoMission.enemyDefeatCount = EnemyDefeatCount;
+            saveData.demoMission.npcRescued = IsNpcRescued;
+            saveData.demoMission.completed = _completionRaised;
         }
 
         private void ConfigureQuestRuntime()

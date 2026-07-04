@@ -1,4 +1,5 @@
 using Game.NonCombat.Save;
+using System;
 using UnityEngine;
 
 namespace Game.Core
@@ -8,6 +9,8 @@ namespace Game.Core
         public static SaveLoadService Instance { get; private set; }
 
         [SerializeField] private SaveManager saveManager;
+
+        private bool _missingProviderWarned;
 
         private void Awake()
         {
@@ -37,6 +40,47 @@ namespace Game.Core
         {
             ResolveSaveManager();
             saveManager?.Load();
+        }
+
+        public GameSaveData CaptureGameSaveDataSnapshot()
+        {
+            GameSaveData saveData = new();
+            saveData.header.savedAtUtc = DateTime.UtcNow.ToString("O");
+
+            MonoBehaviour[] behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            int providerCount = 0;
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                if (behaviours[i] is ISaveDataProvider provider)
+                {
+                    provider.CaptureSaveData(saveData);
+                    providerCount++;
+                }
+            }
+
+            if (providerCount == 0 && !_missingProviderWarned)
+            {
+                _missingProviderWarned = true;
+                Debug.LogWarning("[SaveLoadService] No save data providers were found for GameSaveData snapshot capture.", this);
+            }
+
+            return saveData;
+        }
+
+        public void RestoreGameSaveDataSnapshot(GameSaveData saveData)
+        {
+            if (saveData == null)
+            {
+                Debug.LogWarning("[SaveLoadService] Restore ignored. GameSaveData is null.", this);
+                return;
+            }
+
+            MonoBehaviour[] behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < behaviours.Length; i++)
+            {
+                if (behaviours[i] is ISaveDataConsumer consumer)
+                    consumer.RestoreSaveData(saveData);
+            }
         }
 
         private static bool CanSaveNow()
