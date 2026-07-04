@@ -98,13 +98,17 @@ namespace Game.Player
 
                 List<GameObject> allies = new List<GameObject>(1) { gameObject };
 
-                bool started = entryPoint.StartCombatFromField(
-                    allies,
-                    enemies,
+                CombatStartRequest request = new CombatStartRequest(
                     startReason,
                     initiativeSide,
+                    0,
+                    -1,
                     openingEffectOrNull
                 );
+                request.AllyFieldObjects.AddRange(allies);
+                request.EnemyFieldObjects.AddRange(enemies);
+
+                bool started = entryPoint.StartCombat(request);
 
                 if (!started)
                     continue;

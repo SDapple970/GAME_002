@@ -131,18 +131,6 @@ namespace Game.Combat.Core
             Side initiativeSide,
             OpeningEffectSO openingEffectOrNull)
         {
-            if (!CanStartCombatFromField())
-                return false;
-
-            if (allyFieldObjects == null || allyFieldObjects.Count == 0)
-                Debug.LogWarning("[CombatEntryPoint] StartCombatFromField called with no ally field objects.", this);
-
-            if (enemyFieldObjects == null || enemyFieldObjects.Count == 0)
-                Debug.LogWarning("[CombatEntryPoint] StartCombatFromField called with no enemy field objects.", this);
-
-            _endedRaised = false;
-            _startingCombat = true;
-
             CombatStartRequest request = new CombatStartRequest(
                 reason,
                 initiativeSide,
@@ -154,8 +142,45 @@ namespace Game.Combat.Core
             AddFirstFieldObject(request.AllyFieldObjects, allyFieldObjects);
             AddFirstFieldObject(request.EnemyFieldObjects, enemyFieldObjects);
 
+            return StartCombat(request);
+        }
+
+        public bool StartCombat(CombatStartRequest request)
+        {
+            if (!CanStartCombatFromField())
+                return false;
+
+            if (request == null)
+            {
+                Debug.LogWarning("[CombatEntryPoint] StartCombat called with a null request.", this);
+                return false;
+            }
+
+            if (request.AllyFieldObjects == null || request.AllyFieldObjects.Count == 0)
+                Debug.LogWarning("[CombatEntryPoint] StartCombat called with no ally field objects.", this);
+
+            if (request.EnemyFieldObjects == null || request.EnemyFieldObjects.Count == 0)
+                Debug.LogWarning("[CombatEntryPoint] StartCombat called with no enemy field objects.", this);
+
+            _endedRaised = false;
+            _startingCombat = true;
+
+            int resolvedInspirationMax = request.InspirationMax > 0 ? request.InspirationMax : inspirationMax;
+            int resolvedInspirationStart = request.InspirationStart >= 0 ? request.InspirationStart : inspirationStart;
+
+            CombatStartRequest resolvedRequest = new CombatStartRequest(
+                request.Reason,
+                request.InitiativeSide,
+                resolvedInspirationMax,
+                resolvedInspirationStart,
+                request.OpeningEffectOrNull
+            );
+
+            AddFirstFieldObject(resolvedRequest.AllyFieldObjects, request.AllyFieldObjects);
+            AddFirstFieldObject(resolvedRequest.EnemyFieldObjects, request.EnemyFieldObjects);
+
             FieldCombatantFactory factory = new FieldCombatantFactory(_book);
-            (ActiveSession, ActiveStateMachine) = CombatBootstrapper.StartCombat(request, _book, factory);
+            (ActiveSession, ActiveStateMachine) = CombatBootstrapper.StartCombat(resolvedRequest, _book, factory);
 
             if (ActiveSession == null)
             {
@@ -192,7 +217,7 @@ namespace Game.Combat.Core
                 ActiveStateMachine.OnRequireResolutionPlay += director.PlayResolution;
 
             Debug.Log(
-                $"[CombatEntryPoint] Combat started. Reason={reason}, Initiative={initiativeSide}, " +
+                $"[CombatEntryPoint] Combat started. Reason={resolvedRequest.Reason}, Initiative={resolvedRequest.InitiativeSide}, " +
                 $"Allies={ActiveSession.Allies.Count}, Enemies={ActiveSession.Enemies.Count}",
                 this
             );

@@ -110,13 +110,8 @@ namespace Game.Combat.Integration
 
             _armed = false;
 
-            bool started = entryPoint.StartCombatFromField(
-                allies,
-                enemies,
-                startReason,
-                initiativeSide,
-                openingEffectOrNull
-            );
+            CombatStartRequest request = CreateEncounterRequest(allies, enemies);
+            bool started = entryPoint.StartCombat(request);
 
             if (started)
             {
@@ -144,6 +139,34 @@ namespace Game.Combat.Integration
 
             if (entryPoint != null && entryPoint.ActiveStateMachine == null)
                 _armed = true;
+        }
+
+        private CombatStartRequest CreateEncounterRequest(List<GameObject> allies, List<GameObject> enemies)
+        {
+            CombatStartRequest request = new CombatStartRequest(
+                startReason,
+                initiativeSide,
+                0,
+                -1,
+                openingEffectOrNull
+            );
+
+            AddValidObjects(request.AllyFieldObjects, allies);
+            AddValidObjects(request.EnemyFieldObjects, enemies);
+            return request;
+        }
+
+        private static void AddValidObjects(List<GameObject> destination, List<GameObject> source)
+        {
+            if (destination == null || source == null)
+                return;
+
+            for (int i = 0; i < source.Count; i++)
+            {
+                GameObject candidate = source[i];
+                if (candidate != null && candidate.activeInHierarchy && !destination.Contains(candidate))
+                    destination.Add(candidate);
+            }
         }
 
         private bool HasPlayerTag(Collider2D other)

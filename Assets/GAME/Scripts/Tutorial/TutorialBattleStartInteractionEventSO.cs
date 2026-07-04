@@ -49,13 +49,17 @@ namespace Game.Tutorial
                 return;
             }
 
-            bool started = resolvedEntryPoint.StartCombatFromField(
-                resolvedAllies,
-                resolvedEnemies,
+            CombatStartRequest request = new CombatStartRequest(
                 startReason,
                 initiativeSide,
+                0,
+                -1,
                 openingEffectOrNull
             );
+            request.AllyFieldObjects.AddRange(resolvedAllies);
+            request.EnemyFieldObjects.AddRange(resolvedEnemies);
+
+            bool started = resolvedEntryPoint.StartCombat(request);
 
             if (!started)
                 return;

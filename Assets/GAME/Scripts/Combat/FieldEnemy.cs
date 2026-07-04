@@ -1,6 +1,5 @@
 ﻿// GAME/Scripts/Battle/FieldEnemy.cs
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
 using Game.Core;
@@ -14,6 +13,7 @@ namespace Game.Battle
     [RequireComponent(typeof(Collider2D))]
     public sealed class FieldEnemy : MonoBehaviour, Game.Common.IDamageable
     {
+        [Obsolete("Legacy only. Production field enemies now start combat through CombatStartRequest and CombatEntryPoint.")]
         public static event Action<BattleTransitionRequest> OnBattleRequested;
 
         [Header("Combat Entry")]
@@ -38,6 +38,7 @@ namespace Game.Battle
 
         private bool _isEncounterTriggered;
         private bool _demoMissionDefeatRegistered;
+        private bool _duplicateEncounterWarned;
 
         private void Awake()
         {
@@ -56,17 +57,6 @@ namespace Game.Battle
         {
             if (combatEntryPoint == null)
                 combatEntryPoint = FindFirstObjectByType<CombatEntryPoint>();
-
-            if (combatEntryPoint != null)
-                combatEntryPoint.OnCombatEnded += HandleCombatEnded;
-        }
-
-        private void OnDisable()
-        {
-            TryRegisterDemoMissionDefeatFromDisable();
-
-            if (combatEntryPoint != null)
-                combatEntryPoint.OnCombatEnded -= HandleCombatEnded;
         }
 
         private void Reset()
@@ -95,7 +85,10 @@ namespace Game.Battle
         private void OnTriggerEnter2D(Collider2D other)
         {
             if (_isEncounterTriggered)
+            {
+                WarnDuplicateEncounterBlocked();
                 return;
+            }
 
             if (!other.CompareTag(playerTag))
                 return;
@@ -105,7 +98,13 @@ namespace Game.Battle
 
         public void TakeDamage(int amount)
         {
-            if (_isEncounterTriggered || !CanStartFieldEncounter())
+            if (_isEncounterTriggered)
+            {
+                WarnDuplicateEncounterBlocked();
+                return;
+            }
+
+            if (!CanStartFieldEncounter())
                 return;
 
             GameObject player = GameObject.FindGameObjectWithTag(playerTag);
@@ -118,43 +117,47 @@ namespace Game.Battle
         private void StartCombat(GameObject playerObject, Side initiativeSide, StartReason reason)
         {
             if (_isEncounterTriggered)
+            {
+                WarnDuplicateEncounterBlocked();
                 return;
+            }
 
             if (!CanStartFieldEncounter())
                 return;
 
-            if (combatEntryPoint == null || playerObject == null)
+            if (combatEntryPoint == null)
+                combatEntryPoint = FindFirstObjectByType<CombatEntryPoint>();
+
+            if (combatEntryPoint == null)
             {
-                Debug.LogError("[FieldEnemy] CombatEntryPoint or Player is missing.");
+                Debug.LogError("[FieldEnemy] CombatEntryPoint is missing.", this);
                 return;
             }
 
-            if (combatEntryPoint.ActiveStateMachine != null)
+            if (combatEntryPoint.ActiveSession != null || combatEntryPoint.ActiveStateMachine != null)
+            {
+                WarnDuplicateEncounterBlocked();
+                return;
+            }
+
+            if (!TryCreateEncounterRequest(playerObject, initiativeSide, reason, out CombatStartRequest request))
                 return;
 
             _isEncounterTriggered = true;
 
-            List<GameObject> allies = new List<GameObject>(1) { playerObject };
-            List<GameObject> enemies = new List<GameObject>(1) { gameObject };
-
-            bool started = combatEntryPoint.StartCombatFromField(
-                allyFieldObjects: allies,
-                enemyFieldObjects: enemies,
-                reason: reason,
-                initiativeSide: initiativeSide,
-                openingEffectOrNull: openingEffectOrNull
-            );
+            bool started = combatEntryPoint.StartCombat(request);
 
             if (started)
             {
                 Debug.Log($"[FieldEnemy] Combat started. reason={reason}, initiative={initiativeSide}");
-                OnBattleRequested?.Invoke(new BattleTransitionRequest(transform.position, battleSceneName, ToEncounterAdvantage(initiativeSide)));
             }
             else
             {
                 _isEncounterTriggered = false;
             }
         }
+
+        public bool CountsForDemoMission => countForDemoMission;
 
         public void RegisterDemoMissionDefeat()
         {
@@ -174,32 +177,47 @@ namespace Game.Battle
                    GameStateMachine.Instance.Is(GameState.Exploration);
         }
 
+        private bool TryCreateEncounterRequest(GameObject playerObject, Side initiativeSide, StartReason reason, out CombatStartRequest request)
+        {
+            request = null;
+
+            if (playerObject == null)
+            {
+                Debug.LogWarning("[FieldEnemy] Encounter request missing player object.", this);
+                return false;
+            }
+
+            request = new CombatStartRequest(
+                reason,
+                initiativeSide,
+                0,
+                -1,
+                openingEffectOrNull
+            );
+
+            request.AllyFieldObjects.Add(playerObject);
+            request.EnemyFieldObjects.Add(gameObject);
+            return true;
+        }
+
+        private void WarnDuplicateEncounterBlocked()
+        {
+            if (_duplicateEncounterWarned)
+                return;
+
+            _duplicateEncounterWarned = true;
+            Debug.LogWarning("[FieldEnemy] Duplicate encounter start blocked.", this);
+        }
+
+        [Obsolete("Legacy only. Production field enemies no longer publish BattleTransitionRequest.")]
+        public BattleTransitionRequest CreateLegacyBattleTransitionRequest(Side initiativeSide)
+        {
+            return new BattleTransitionRequest(transform.position, battleSceneName, ToEncounterAdvantage(initiativeSide));
+        }
+
         private static EncounterAdvantage ToEncounterAdvantage(Side initiativeSide)
         {
             return initiativeSide == Side.Allies ? EncounterAdvantage.PlayerFirst : EncounterAdvantage.EnemyFirst;
-        }
-
-        private void HandleCombatEnded(CombatResult result)
-        {
-            if (!countForDemoMission || _demoMissionDefeatRegistered)
-                return;
-
-            if (!_isEncounterTriggered || result == null || !result.IsWin)
-                return;
-
-            RegisterDemoMissionDefeat();
-        }
-
-        private void TryRegisterDemoMissionDefeatFromDisable()
-        {
-            if (!countForDemoMission || _demoMissionDefeatRegistered || !_isEncounterTriggered)
-                return;
-
-            HpAccessor hpAccessor = HpAccessor.TryCreate(gameObject);
-            if (hpAccessor == null || !hpAccessor.IsValid || hpAccessor.GetHp() > 0)
-                return;
-
-            RegisterDemoMissionDefeat();
         }
     }
 }
