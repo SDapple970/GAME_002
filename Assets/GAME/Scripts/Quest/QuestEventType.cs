@@ -8,6 +8,7 @@ namespace Game.Quest
         Talk = 30,
         Rescue = 40,
         Inspect = 50,
-        Interact = 60
+        Interact = 60,
+        MissionCompleted = 70
     }
 }
