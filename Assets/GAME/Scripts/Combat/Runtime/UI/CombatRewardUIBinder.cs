@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Runtime.CompilerServices;
 using Game.Combat.Core;
 using Game.Combat.Model;
 using Game.Core;
@@ -20,6 +21,8 @@ namespace Game.Combat.UI
         private bool _rewardSubscribed;
         private bool _missingEntryPointWarned;
         private bool _missingRewardPanelWarned;
+        private bool _missingRewardServiceWarned;
+        private bool _invalidCombatRewardWarned;
 
         private void Awake()
         {
@@ -111,10 +114,16 @@ namespace Game.Combat.UI
             if (countEnemyDefeatOnVictory && result.IsWin)
                 DemoMissionRuntime.GetOrCreate().RegisterEnemyDefeated();
 
+            RewardGrantResult grantResult = RewardGrantResult.Empty;
             if (rewardService != null)
-                rewardService.GrantCombatResult(result);
+            {
+                RewardGrantRequest request = BuildCombatRewardRequest(result);
+                grantResult = rewardService.GrantReward(request);
+            }
             else
-                Debug.LogWarning("[CombatRewardUIBinder] RewardService is missing. Combat result reward was not granted.", this);
+            {
+                WarnMissingRewardService();
+            }
 
             if (GameFlowController.Instance != null)
                 GameFlowController.Instance.HandleCombatResult(result);
@@ -123,12 +132,28 @@ namespace Game.Combat.UI
 
             if (rewardPanel != null)
             {
-                rewardPanel.Show(result);
+                rewardPanel.Show(result, grantResult);
             }
             else
             {
                 WarnIfMissingRewardPanel();
             }
+        }
+
+        private RewardGrantRequest BuildCombatRewardRequest(CombatResult result)
+        {
+            if (result == null)
+                return new RewardGrantRequest(RewardSourceType.Combat, "combat:null");
+
+            if (result.TotalGold < 0 || result.TotalExp < 0)
+                WarnInvalidCombatRewardData(result);
+
+            string sourceId = $"combat:{RuntimeHelpers.GetHashCode(result)}";
+            return new RewardGrantRequest(
+                RewardSourceType.Combat,
+                sourceId,
+                Mathf.Max(0, result.TotalGold),
+                Mathf.Max(0, result.TotalExp));
         }
 
         private void HandleRewardClosed()
@@ -164,6 +189,24 @@ namespace Game.Combat.UI
 
             _missingRewardPanelWarned = true;
             Debug.LogWarning("[CombatRewardUIBinder] RewardUIPanel is missing. Combat rewards cannot be shown.", this);
+        }
+
+        private void WarnMissingRewardService()
+        {
+            if (_missingRewardServiceWarned)
+                return;
+
+            _missingRewardServiceWarned = true;
+            Debug.LogWarning("[CombatRewardUIBinder] RewardService is missing. Combat result reward was not granted.", this);
+        }
+
+        private void WarnInvalidCombatRewardData(CombatResult result)
+        {
+            if (_invalidCombatRewardWarned)
+                return;
+
+            _invalidCombatRewardWarned = true;
+            Debug.LogWarning($"[CombatRewardUIBinder] CombatResult reward values were negative and were clamped. gold={result.TotalGold}, exp={result.TotalExp}", this);
         }
     }
 }

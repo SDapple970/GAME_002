@@ -1,5 +1,4 @@
 using Game.Combat.Model;
-using Game.NonCombat.Inventory;
 using Game.Reward;
 using UnityEngine;
 
@@ -9,7 +8,7 @@ namespace Game.NonCombat.Reward
     {
         public static RewardApplier Instance { get; private set; }
 
-        [SerializeField] private CurrencyWallet currencyWallet;
+        private bool _missingRewardServiceWarned;
 
         private void Awake()
         {
@@ -31,11 +30,11 @@ namespace Game.NonCombat.Reward
                 return;
             }
 
-            if (result == null || !result.IsWin) return;
+            if (_missingRewardServiceWarned)
+                return;
 
-            CurrencyWallet wallet = currencyWallet != null ? currencyWallet : CurrencyWallet.Instance;
-            if (wallet != null)
-                wallet.AddGold(result.TotalGold);
+            _missingRewardServiceWarned = true;
+            Debug.LogWarning("[RewardApplier] RewardService is missing. Combat reward was not granted.", this);
         }
     }
 }

@@ -7,6 +7,7 @@ using UnityEngine.Serialization;
 using UnityEngine.UI;
 using Game.Combat.Model;
 using Game.NonCombat.Reward;
+using Game.Reward;
 
 namespace Game.UI
 {
@@ -64,6 +65,16 @@ namespace Game.UI
 
         public void Show(CombatResult result)
         {
+            Show(result, RewardGrantResult.Empty, false);
+        }
+
+        public void Show(CombatResult result, RewardGrantResult grantResult)
+        {
+            Show(result, grantResult, true);
+        }
+
+        private void Show(CombatResult result, RewardGrantResult grantResult, bool preferGrantResult)
+        {
             BindCloseButton();
             _pendingResult = result;
             ClearRewardRows();
@@ -72,10 +83,10 @@ namespace Game.UI
             SetText(titleText, titleLegacyText, isWin ? victoryTitle : defeatTitle);
             SetText(resultText, resultLegacyText, showResultText ? BuildResultText(isWin) : string.Empty);
 
-            string[] rewardLines = isWin ? victoryRewardLines : defeatRewardLines;
-            if (rewardLines != null)
-                for (int i = 0; i < rewardLines.Length; i++)
-                    AddRewardRow(rewardLines[i]);
+            if (preferGrantResult)
+                AddGrantResultRows(isWin, grantResult);
+            else
+                AddConfiguredRewardRows(isWin);
 
             if (root != null)
                 root.SetActive(true);
@@ -159,6 +170,46 @@ namespace Game.UI
             rowText.raycastTarget = false;
 
             _spawnedRows.Add(row);
+        }
+
+        private void AddConfiguredRewardRows(bool isWin)
+        {
+            string[] rewardLines = isWin ? victoryRewardLines : defeatRewardLines;
+            if (rewardLines == null)
+                return;
+
+            for (int i = 0; i < rewardLines.Length; i++)
+                AddRewardRow(rewardLines[i]);
+        }
+
+        private void AddGrantResultRows(bool isWin, RewardGrantResult grantResult)
+        {
+            if (!isWin)
+            {
+                AddConfiguredRewardRows(false);
+                return;
+            }
+
+            if (grantResult.DuplicateBlocked)
+            {
+                AddRewardRow("Reward already granted.");
+                return;
+            }
+
+            if (!grantResult.HasAnyReward)
+            {
+                AddRewardRow("No rewards granted.");
+                return;
+            }
+
+            if (grantResult.Gold > 0)
+                AddRewardRow($"Gold {grantResult.Gold}");
+
+            if (grantResult.Exp > 0)
+                AddRewardRow($"EXP {grantResult.Exp}");
+
+            if (!string.IsNullOrEmpty(grantResult.ItemId) && grantResult.ItemCount > 0)
+                AddRewardRow($"{grantResult.ItemId} x{grantResult.ItemCount}");
         }
 
         private void ClearRewardRows()

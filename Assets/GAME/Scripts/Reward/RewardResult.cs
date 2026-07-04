@@ -21,5 +21,10 @@ namespace Game.Reward
             ItemId = itemId;
             ItemCount = itemCount;
         }
+
+        public RewardResult(RewardGrantResult result)
+            : this(result.Gold, result.Exp, result.ItemId, result.ItemCount)
+        {
+        }
     }
 }
