@@ -1,4 +1,5 @@
 using Game.NonCombat.Inventory;
+using Game.Reward;
 using Game.UI;
 using UnityEngine;
 
@@ -22,8 +23,14 @@ namespace Game.Interaction
 
             Debug.Log($"[RewardInteractionEvent] {message}", context.Target);
 
-            if (addToInventoryIfAvailable && InventoryService.Instance != null)
-                InventoryService.Instance.AddItem(itemId, safeAmount);
+            if (addToInventoryIfAvailable)
+            {
+                RewardService rewardService = RewardService.Instance;
+                if (rewardService != null)
+                    rewardService.Grant(new RewardGrantRequest(RewardSourceType.Interaction, name, itemId: itemId, itemCount: safeAmount));
+                else if (InventoryService.Instance != null)
+                    InventoryService.Instance.AddItem(itemId, safeAmount);
+            }
 
             RewardUIPanel rewardPanel = Object.FindFirstObjectByType<RewardUIPanel>();
             if (rewardPanel != null && rewardPanel.TryShowFieldRewardMessage(message))

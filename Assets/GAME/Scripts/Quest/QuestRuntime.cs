@@ -164,6 +164,29 @@ namespace Game.Quest
             return !string.IsNullOrWhiteSpace(questId) && _runtimeByQuestId.ContainsKey(questId);
         }
 
+        public bool TryGetQuestReward(string questId, out int gold, out int exp)
+        {
+            gold = 0;
+            exp = 0;
+
+            if (string.IsNullOrWhiteSpace(questId))
+                return false;
+
+            QuestDefinitionSO definition = FindDefinition(questId);
+            if (definition == null &&
+                _runtimeByQuestId.TryGetValue(questId, out RuntimeQuestState state))
+            {
+                definition = state.Definition;
+            }
+
+            if (definition == null)
+                return false;
+
+            gold = definition.RewardGold;
+            exp = definition.RewardExp;
+            return gold > 0 || exp > 0;
+        }
+
         private void ResolveMissionManager()
         {
             if (missionManager == null)

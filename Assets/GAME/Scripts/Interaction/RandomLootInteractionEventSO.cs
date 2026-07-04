@@ -1,4 +1,5 @@
 using Game.NonCombat.Inventory;
+using Game.Reward;
 using Game.UI;
 using UnityEngine;
 
@@ -22,8 +23,15 @@ namespace Game.Interaction
 
             string message = BuildMessage(entry);
 
-            if (!entry.isNothing && addToInventoryIfAvailable && InventoryService.Instance != null)
-                InventoryService.Instance.AddItem(entry.itemId, Mathf.Max(1, entry.amount));
+            if (!entry.isNothing && addToInventoryIfAvailable)
+            {
+                int amount = Mathf.Max(1, entry.amount);
+                RewardService rewardService = RewardService.Instance;
+                if (rewardService != null)
+                    rewardService.Grant(new RewardGrantRequest(RewardSourceType.Interaction, name, itemId: entry.itemId, itemCount: amount));
+                else if (InventoryService.Instance != null)
+                    InventoryService.Instance.AddItem(entry.itemId, amount);
+            }
 
             Debug.Log($"[RandomLootInteractionEventSO] {message}", context.Target);
 

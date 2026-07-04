@@ -10,11 +10,15 @@ namespace Game.Quest
         [TextArea(3, 8)]
         [SerializeField] private string description;
         [SerializeField] private QuestObjectiveDefinition[] objectives;
+        [SerializeField] private int rewardGold;
+        [SerializeField] private int rewardExp;
 
         public string QuestId => questId;
         public string QuestTitle => questTitle;
         public string Description => description;
         public QuestObjectiveDefinition[] Objectives => objectives;
+        public int RewardGold => rewardGold;
+        public int RewardExp => rewardExp;
 
         public QuestObjectiveDefinition FindObjective(QuestEvent questEvent)
         {

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Game.Reward;
 using UnityEngine;
 
 namespace Game.Quest
@@ -12,6 +13,9 @@ namespace Game.Quest
         [SerializeField] private QuestProgress activeQuest;
 
         private readonly Dictionary<QuestId, QuestProgress> _progressByQuest = new();
+        private readonly HashSet<QuestId> _rewardedQuestIds = new();
+        private bool _missingRewardServiceWarned;
+        private bool _duplicateRewardWarned;
 
         public event Action<QuestProgress> OnQuestChanged;
 
@@ -109,6 +113,7 @@ namespace Game.Quest
 
             int gold = progress.quest != null ? progress.quest.RewardGold : 0;
             int exp = progress.quest != null ? progress.quest.RewardExp : 0;
+            TryGrantCompletionReward(id, gold, exp);
             Debug.Log($"[QuestManager] CompleteQuest: {id}, rewardGold={gold}, rewardExp={exp}", this);
             RaiseChanged();
         }
@@ -136,6 +141,44 @@ namespace Game.Quest
         private void RaiseChanged()
         {
             OnQuestChanged?.Invoke(GetActiveQuest());
+        }
+
+        private void TryGrantCompletionReward(QuestId id, int gold, int exp)
+        {
+            gold = Mathf.Max(0, gold);
+            exp = Mathf.Max(0, exp);
+            if (gold <= 0 && exp <= 0)
+                return;
+
+            if (!_rewardedQuestIds.Add(id))
+            {
+                WarnDuplicateRewardBlocked(id);
+                return;
+            }
+
+            RewardService rewardService = RewardService.Instance != null
+                ? RewardService.Instance
+                : FindFirstObjectByType<RewardService>();
+            if (rewardService != null)
+            {
+                rewardService.GrantQuestCompletion(id.ToString(), gold, exp);
+                return;
+            }
+
+            if (_missingRewardServiceWarned)
+                return;
+
+            _missingRewardServiceWarned = true;
+            Debug.LogWarning($"[QuestManager] RewardService is missing. Quest reward was not granted. questId={id}", this);
+        }
+
+        private void WarnDuplicateRewardBlocked(QuestId id)
+        {
+            if (_duplicateRewardWarned)
+                return;
+
+            _duplicateRewardWarned = true;
+            Debug.LogWarning($"[QuestManager] Duplicate quest reward blocked. questId={id}", this);
         }
     }
 }
