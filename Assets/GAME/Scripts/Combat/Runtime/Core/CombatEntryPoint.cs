@@ -36,6 +36,8 @@ namespace Game.Combat.Core
         private SkillBook _book;
         private bool _endedRaised;
         private bool _startingCombat;
+        private bool _missingGameStateMachineWarned;
+        private bool _duplicateStartWarned;
 
         private void Awake()
         {
@@ -148,7 +150,10 @@ namespace Game.Combat.Core
         public bool StartCombat(CombatStartRequest request)
         {
             if (!CanStartCombatFromField())
+            {
+                WarnDuplicateStartBlocked();
                 return false;
+            }
 
             if (request == null)
             {
@@ -216,6 +221,8 @@ namespace Game.Combat.Core
             if (director != null)
                 ActiveStateMachine.OnRequireResolutionPlay += director.PlayResolution;
 
+            SetCombatPlanningState();
+
             Debug.Log(
                 $"[CombatEntryPoint] Combat started. Reason={resolvedRequest.Reason}, Initiative={resolvedRequest.InitiativeSide}, " +
                 $"Allies={ActiveSession.Allies.Count}, Enemies={ActiveSession.Enemies.Count}",
@@ -225,6 +232,7 @@ namespace Game.Combat.Core
             OnCombatStarted?.Invoke(ActiveSession);
 
             _startingCombat = false;
+            _duplicateStartWarned = false;
             return true;
         }
 
@@ -251,6 +259,38 @@ namespace Game.Combat.Core
 
             return GameStateMachine.Instance == null ||
                    GameStateMachine.Instance.Is(GameState.Exploration);
+        }
+
+        private void SetCombatPlanningState()
+        {
+            if (GameStateMachine.Instance == null)
+            {
+                if (!_missingGameStateMachineWarned)
+                {
+                    _missingGameStateMachineWarned = true;
+                    Debug.LogWarning("[CombatEntryPoint] GameStateMachine is missing. Combat started, but exploration input/UI state cannot be locked through GameState.", this);
+                }
+
+                return;
+            }
+
+            if (!GameStateMachine.Instance.Is(GameState.CombatPlanning))
+                GameStateMachine.Instance.SetState(GameState.CombatPlanning);
+        }
+
+        private void WarnDuplicateStartBlocked()
+        {
+            if (_duplicateStartWarned)
+                return;
+
+            _duplicateStartWarned = true;
+            Debug.LogWarning(
+                $"[CombatEntryPoint] Duplicate or invalid combat start blocked. " +
+                $"starting={_startingCombat}, activeSession={ActiveSession != null}, " +
+                $"activeStateMachine={ActiveStateMachine != null}, " +
+                $"gameState={(GameStateMachine.Instance != null ? GameStateMachine.Instance.Current.ToString() : "<missing>")}",
+                this
+            );
         }
 
         private void FinishCombat(CombatEndReason reason)
