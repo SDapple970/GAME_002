@@ -1,4 +1,5 @@
 using Game.Core;
+using Game.Daily;
 using Game.Reward;
 using System.Collections.Generic;
 using UnityEngine;
@@ -9,8 +10,10 @@ namespace Game.Quest
     {
         [SerializeField] private QuestRuntime questRuntime;
         [SerializeField] private RewardService rewardService;
+        [SerializeField] private DaySettlementFlow daySettlementFlow;
         [SerializeField] private bool enterRewardStateOnCompletion;
         [SerializeField] private bool grantRewardOnCompletion = true;
+        [SerializeField] private bool notifyDaySettlementOnQuestCompletion;
         [SerializeField] private int fallbackRewardGold;
         [SerializeField] private int fallbackRewardExp;
 
@@ -18,6 +21,7 @@ namespace Game.Quest
         private bool _missingRewardServiceWarned;
         private bool _missingRewardDefinitionWarned;
         private bool _duplicateRewardWarned;
+        private bool _missingDaySettlementFlowWarned;
 
         private void Awake()
         {
@@ -44,7 +48,8 @@ namespace Game.Quest
                 questRuntime = FindFirstObjectByType<QuestRuntime>();
 
             questRuntime?.CompleteQuest(questId);
-            TryGrantQuestReward(questId);
+            RewardGrantResult rewardResult = TryGrantQuestReward(questId);
+            TryNotifyDaySettlement(questId, rewardResult);
 
             if (enterRewardStateOnCompletion && GameStateMachine.Instance != null)
                 GameStateMachine.Instance.SetState(GameState.Reward);
@@ -53,7 +58,8 @@ namespace Game.Quest
         private void HandleQuestCompleted(string questId)
         {
             Debug.Log($"[QuestCompletionFlow] Quest completed. questId={questId}", this);
-            TryGrantQuestReward(questId);
+            RewardGrantResult rewardResult = TryGrantQuestReward(questId);
+            TryNotifyDaySettlement(questId, rewardResult);
 
             if (enterRewardStateOnCompletion && GameStateMachine.Instance != null)
                 GameStateMachine.Instance.SetState(GameState.Reward);
@@ -68,27 +74,32 @@ namespace Game.Quest
                 rewardService = RewardService.Instance != null
                     ? RewardService.Instance
                     : FindFirstObjectByType<RewardService>();
+
+            if (daySettlementFlow == null)
+                daySettlementFlow = DaySettlementFlow.Instance != null
+                    ? DaySettlementFlow.Instance
+                    : FindFirstObjectByType<DaySettlementFlow>();
         }
 
-        private void TryGrantQuestReward(string questId)
+        private RewardGrantResult TryGrantQuestReward(string questId)
         {
             if (!grantRewardOnCompletion)
-                return;
+                return RewardGrantResult.Empty;
 
             if (string.IsNullOrWhiteSpace(questId))
-                return;
+                return RewardGrantResult.Empty;
 
             if (!_rewardedQuestIds.Add(questId))
             {
                 WarnDuplicateRewardBlocked(questId);
-                return;
+                return RewardGrantResult.Empty;
             }
 
             ResolveReferences();
             if (rewardService == null)
             {
                 WarnMissingRewardService(questId);
-                return;
+                return RewardGrantResult.Empty;
             }
 
             int gold = Mathf.Max(0, fallbackRewardGold);
@@ -103,10 +114,29 @@ namespace Game.Quest
             else if (gold <= 0 && exp <= 0)
             {
                 WarnMissingRewardDefinition(questId);
+                return RewardGrantResult.Empty;
+            }
+
+            return rewardService.GrantReward(new RewardGrantRequest(
+                RewardSourceType.QuestCompletion,
+                questId,
+                gold,
+                exp));
+        }
+
+        private void TryNotifyDaySettlement(string questId, RewardGrantResult rewardResult)
+        {
+            if (!notifyDaySettlementOnQuestCompletion || string.IsNullOrWhiteSpace(questId))
+                return;
+
+            ResolveReferences();
+            if (daySettlementFlow == null)
+            {
+                WarnMissingDaySettlementFlow(questId);
                 return;
             }
 
-            rewardService.GrantQuestCompletion(questId, gold, exp);
+            daySettlementFlow.PrepareSettlement(DaySettlementRequest.ForQuest(questId, rewardResult));
         }
 
         private void WarnMissingRewardService(string questId)
@@ -134,6 +164,15 @@ namespace Game.Quest
 
             _duplicateRewardWarned = true;
             Debug.LogWarning($"[QuestCompletionFlow] Duplicate quest reward blocked. questId={questId}", this);
+        }
+
+        private void WarnMissingDaySettlementFlow(string questId)
+        {
+            if (_missingDaySettlementFlowWarned)
+                return;
+
+            _missingDaySettlementFlowWarned = true;
+            Debug.LogWarning($"[QuestCompletionFlow] DaySettlementFlow is missing. Quest completion settlement notification skipped. questId={questId}", this);
         }
     }
 }

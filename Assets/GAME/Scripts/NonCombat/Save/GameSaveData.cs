@@ -94,8 +94,12 @@ namespace Game.NonCombat.Save
     public sealed class FutureDailySaveData
     {
         public int dayIndex;
+        public int weekIndex;
+        public string currentChapterId;
+        public string currentDayPhase;
         public string calendarDateId;
         public List<string> completedDailyActionIds = new();
+        public List<string> completedSettlementIds = new();
     }
 
     [Serializable]
