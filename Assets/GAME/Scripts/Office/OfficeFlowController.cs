@@ -1,6 +1,7 @@
 using Game.Core;
 using Game.Daily;
 using Game.NonCombat.Save;
+using Game.Supply;
 using Game.UI;
 using UnityEngine;
 
@@ -11,6 +12,7 @@ namespace Game.Office
         [SerializeField] private DailyFlowController dailyFlowController;
         [SerializeField] private MissionSelectFlow missionSelectFlow;
         [SerializeField] private MissionSelectPanel missionSelectPanel;
+        [SerializeField] private PreMissionSupplyFlow preMissionSupplyFlow;
         [SerializeField] private SceneFlowController sceneFlowController;
         [SerializeField] private bool enterOfficeOnEnable;
         [SerializeField] private bool loadMissionSceneOnSelection = true;
@@ -26,6 +28,7 @@ namespace Game.Office
         private bool _missingTargetFieldSceneWarned;
         private bool _missingSceneFlowControllerWarned;
         private bool _unsupportedSpawnPointWarned;
+        private bool _missingPreMissionSupplyFlowWarned;
 
         private void Awake()
         {
@@ -42,6 +45,9 @@ namespace Game.Office
             if (missionSelectPanel != null)
                 missionSelectPanel.OnMissionSelected += SelectMission;
 
+            if (preMissionSupplyFlow != null)
+                preMissionSupplyFlow.OnSupplyCompleted += HandleSupplyCompleted;
+
             if (enterOfficeOnEnable)
                 EnterOffice();
         }
@@ -53,6 +59,9 @@ namespace Game.Office
 
             if (missionSelectPanel != null)
                 missionSelectPanel.OnMissionSelected -= SelectMission;
+
+            if (preMissionSupplyFlow != null)
+                preMissionSupplyFlow.OnSupplyCompleted -= HandleSupplyCompleted;
         }
 
         public void EnterOffice()
@@ -124,6 +133,14 @@ namespace Game.Office
 
             ResolveReferences();
 
+            if (waitForSupplyBeforeFieldLoad)
+            {
+                if (preMissionSupplyFlow != null)
+                    preMissionSupplyFlow.SetSelectedMission(result);
+                else
+                    WarnMissingPreMissionSupplyFlow(result.missionId);
+            }
+
             if (loadMissionSceneOnSelection && !waitForSupplyBeforeFieldLoad)
                 EnterSelectedMissionField();
         }
@@ -155,6 +172,12 @@ namespace Game.Office
             dailyFlowController?.EnterMission();
             _selectedMissionFieldLoadStarted = true;
             sceneFlowController.LoadScene(_selectedMission.targetFieldSceneName);
+        }
+
+        private void HandleSupplyCompleted()
+        {
+            if (loadMissionSceneOnSelection && waitForSupplyBeforeFieldLoad)
+                EnterSelectedMissionField();
         }
 
         public void CaptureSaveData(GameSaveData saveData)
@@ -202,6 +225,9 @@ namespace Game.Office
 
             if (missionSelectPanel == null)
                 missionSelectPanel = FindFirstObjectByType<MissionSelectPanel>(FindObjectsInactive.Include);
+
+            if (preMissionSupplyFlow == null)
+                preMissionSupplyFlow = FindFirstObjectByType<PreMissionSupplyFlow>(FindObjectsInactive.Include);
 
             if (sceneFlowController == null)
                 sceneFlowController = SceneFlowController.Instance != null
@@ -252,6 +278,15 @@ namespace Game.Office
 
             _unsupportedSpawnPointWarned = true;
             Debug.LogWarning($"[OfficeFlowController] Selected mission has a spawn point id, but SceneFlowController does not support spawn routing yet. spawnPointId={spawnPointId}", this);
+        }
+
+        private void WarnMissingPreMissionSupplyFlow(string missionId)
+        {
+            if (_missingPreMissionSupplyFlowWarned)
+                return;
+
+            _missingPreMissionSupplyFlowWarned = true;
+            Debug.LogWarning($"[OfficeFlowController] PreMissionSupplyFlow is missing while supply wait is enabled. Mission remains selected and field load is delayed. missionId={missionId}", this);
         }
     }
 }

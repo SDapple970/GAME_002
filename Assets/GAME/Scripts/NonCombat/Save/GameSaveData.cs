@@ -101,6 +101,8 @@ namespace Game.NonCombat.Save
         public string selectedMissionId;
         public string selectedMissionTargetFieldSceneName;
         public string selectedMissionTargetSpawnPointId;
+        public List<string> selectedSupplyItemIds = new();
+        public List<int> selectedSupplyItemCounts = new();
         public List<string> completedDailyActionIds = new();
         public List<string> completedSettlementIds = new();
     }
