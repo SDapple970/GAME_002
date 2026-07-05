@@ -172,7 +172,10 @@ namespace Game.DemoMission.Runtime
             }
 
             string missionId = missionRuntime != null ? missionRuntime.CurrentQuestId : string.Empty;
-            daySettlementFlow.PrepareSettlement(DaySettlementRequest.ForMission(missionId));
+            string displayTitle = missionRuntime != null && missionRuntime.CurrentMission != null
+                ? missionRuntime.CurrentMission.missionTitle
+                : null;
+            daySettlementFlow.PrepareSettlement(DaySettlementRequest.ForMission(missionId, displayTitle));
         }
 
         private void WarnMissingDaySettlementFlow()

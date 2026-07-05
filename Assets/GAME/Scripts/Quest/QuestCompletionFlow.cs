@@ -136,7 +136,11 @@ namespace Game.Quest
                 return;
             }
 
-            daySettlementFlow.PrepareSettlement(DaySettlementRequest.ForQuest(questId, rewardResult));
+            string displayTitle = null;
+            if (questRuntime != null)
+                questRuntime.TryGetQuestTitle(questId, out displayTitle);
+
+            daySettlementFlow.PrepareSettlement(DaySettlementRequest.ForQuest(questId, rewardResult, displayTitle));
         }
 
         private void WarnMissingRewardService(string questId)

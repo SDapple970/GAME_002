@@ -188,6 +188,27 @@ namespace Game.Quest
             return gold > 0 || exp > 0;
         }
 
+        public bool TryGetQuestTitle(string questId, out string questTitle)
+        {
+            questTitle = null;
+
+            if (string.IsNullOrWhiteSpace(questId))
+                return false;
+
+            QuestDefinitionSO definition = FindDefinition(questId);
+            if (definition == null &&
+                _runtimeByQuestId.TryGetValue(questId, out RuntimeQuestState state))
+            {
+                definition = state.Definition;
+            }
+
+            if (definition == null || string.IsNullOrWhiteSpace(definition.QuestTitle))
+                return false;
+
+            questTitle = definition.QuestTitle;
+            return true;
+        }
+
         public void CaptureSaveData(GameSaveData saveData)
         {
             if (saveData == null)

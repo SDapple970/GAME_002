@@ -14,7 +14,9 @@ namespace Game.Daily
         [SerializeField] private bool enterSettlementPhaseOnRequest;
 
         private readonly HashSet<string> _completedSettlementIds = new();
+        private readonly HashSet<string> _completedSettlementKeys = new();
         private DaySettlementRequest _activeRequest;
+        private string _activeSettlementKey;
         private bool _duplicateSettlementWarned;
         private bool _invalidRequestWarned;
 
@@ -42,7 +44,8 @@ namespace Game.Daily
             }
 
             string settlementId = ResolveSettlementId(request);
-            if (_activeRequest != null || _completedSettlementIds.Contains(settlementId))
+            string settlementKey = ResolveSettlementKey(request, settlementId);
+            if (_activeRequest != null || _completedSettlementIds.Contains(settlementId) || _completedSettlementKeys.Contains(settlementKey))
             {
                 WarnDuplicateSettlementBlocked(settlementId);
                 return false;
@@ -50,7 +53,12 @@ namespace Game.Daily
 
             ResolveReferences();
             request.settlementId = settlementId;
+            request.day = calendarService != null ? calendarService.CurrentDay : request.day;
+            request.week = calendarService != null ? calendarService.CurrentWeek : request.week;
+            request.chapterId = calendarService != null ? calendarService.CurrentChapterId : request.chapterId;
+            request.phase = calendarService != null ? calendarService.CurrentPhase : request.phase;
             _activeRequest = request;
+            _activeSettlementKey = settlementKey;
 
             if (enterSettlementPhaseOnRequest)
                 dailyFlowController?.EnterSettlement();
@@ -69,16 +77,34 @@ namespace Game.Daily
             DaySettlementResult result = new()
             {
                 settlementId = _activeRequest.settlementId,
+                sourceType = _activeRequest.sourceType,
                 questId = _activeRequest.questId,
                 missionId = _activeRequest.missionId,
+                completedQuestOrMissionId = ResolveCompletedQuestOrMissionId(_activeRequest),
+                displayTitle = _activeRequest.displayTitle,
+                rewardSourceType = _activeRequest.rewardSourceType,
+                rewardSourceId = _activeRequest.rewardSourceId,
+                rewardGold = _activeRequest.rewardGold,
+                rewardExp = _activeRequest.rewardExp,
+                rewardItemId = _activeRequest.rewardItemId,
+                rewardItemCount = _activeRequest.rewardItemCount,
+                rewardDuplicateBlocked = _activeRequest.rewardDuplicateBlocked,
+                completed = true,
                 completedDay = calendarService != null ? calendarService.CurrentDay : 0,
-                completedPhase = calendarService != null ? calendarService.CurrentPhase : DayPhase.None
+                completedWeek = calendarService != null ? calendarService.CurrentWeek : 0,
+                completedChapterId = calendarService != null ? calendarService.CurrentChapterId : null,
+                completedPhase = calendarService != null ? calendarService.CurrentPhase : DayPhase.None,
+                nextRecommendedPhase = DayPhase.Rest
             };
 
             if (!string.IsNullOrWhiteSpace(result.settlementId))
                 _completedSettlementIds.Add(result.settlementId);
 
+            if (!string.IsNullOrWhiteSpace(_activeSettlementKey))
+                _completedSettlementKeys.Add(_activeSettlementKey);
+
             _activeRequest = null;
+            _activeSettlementKey = null;
             dailyFlowController?.CompleteSettlement();
             OnSettlementCompleted?.Invoke(result);
             return true;
@@ -101,6 +127,7 @@ namespace Game.Daily
         public void RestoreSaveData(GameSaveData saveData)
         {
             _completedSettlementIds.Clear();
+            _completedSettlementKeys.Clear();
             if (saveData?.futureDaily?.completedSettlementIds == null)
                 return;
 
@@ -108,7 +135,10 @@ namespace Game.Daily
             {
                 string settlementId = saveData.futureDaily.completedSettlementIds[i];
                 if (!string.IsNullOrWhiteSpace(settlementId))
+                {
                     _completedSettlementIds.Add(settlementId);
+                    _completedSettlementKeys.Add(ResolveSettlementKeyFromSettlementId(settlementId));
+                }
             }
         }
 
@@ -140,6 +170,38 @@ namespace Game.Daily
                 return $"quest:{request.questId}";
 
             return $"mission:{request.missionId}";
+        }
+
+        private static string ResolveSettlementKey(DaySettlementRequest request, string settlementId)
+        {
+            string completedId = ResolveCompletedQuestOrMissionId(request);
+            if (!string.IsNullOrWhiteSpace(completedId))
+                return $"completion:{completedId}";
+
+            return ResolveSettlementKeyFromSettlementId(settlementId);
+        }
+
+        private static string ResolveSettlementKeyFromSettlementId(string settlementId)
+        {
+            if (string.IsNullOrWhiteSpace(settlementId))
+                return string.Empty;
+
+            int separatorIndex = settlementId.IndexOf(':');
+            if (separatorIndex >= 0 && separatorIndex + 1 < settlementId.Length)
+                return $"completion:{settlementId.Substring(separatorIndex + 1)}";
+
+            return $"settlement:{settlementId}";
+        }
+
+        private static string ResolveCompletedQuestOrMissionId(DaySettlementRequest request)
+        {
+            if (request == null)
+                return null;
+
+            if (!string.IsNullOrWhiteSpace(request.questId))
+                return request.questId;
+
+            return request.missionId;
         }
 
         private void WarnInvalidRequest()
