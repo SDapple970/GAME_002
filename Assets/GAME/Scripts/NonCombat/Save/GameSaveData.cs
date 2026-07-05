@@ -98,6 +98,7 @@ namespace Game.NonCombat.Save
         public string currentChapterId;
         public string currentDayPhase;
         public string calendarDateId;
+        public string selectedMissionId;
         public List<string> completedDailyActionIds = new();
         public List<string> completedSettlementIds = new();
     }

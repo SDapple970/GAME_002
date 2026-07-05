@@ -46,6 +46,11 @@ namespace Game.Daily
             SetPhase(DayPhase.Office);
         }
 
+        public void EnterMissionSelect()
+        {
+            SetPhase(DayPhase.MissionSelect);
+        }
+
         public void EnterMission()
         {
             SetPhase(DayPhase.FieldExploration);
