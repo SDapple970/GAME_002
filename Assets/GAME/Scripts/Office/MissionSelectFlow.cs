@@ -10,6 +10,7 @@ namespace Game.Office
         [SerializeField] private List<MissionEntry> missionEntries = new();
 
         private bool _invalidMissionWarned;
+        private bool _duplicateMissionIdWarned;
 
         public event Action<IReadOnlyList<MissionEntry>> OnMissionListReady;
         public event Action<MissionSelectResult> OnMissionSelected;
@@ -17,8 +18,9 @@ namespace Game.Office
         public IReadOnlyList<MissionEntry> GetAvailableMissions(bool includeLockedMissions = false)
         {
             List<MissionEntry> available = new();
-            AppendEntries(available, missionBoard != null ? missionBoard.Missions : null, includeLockedMissions);
-            AppendEntries(available, missionEntries, includeLockedMissions);
+            HashSet<string> seenMissionIds = new();
+            AppendEntries(available, seenMissionIds, missionBoard != null ? missionBoard.Missions : null, includeLockedMissions);
+            AppendEntries(available, seenMissionIds, missionEntries, includeLockedMissions);
             return available;
         }
 
@@ -67,9 +69,13 @@ namespace Game.Office
             return null;
         }
 
-        private static void AppendEntries(List<MissionEntry> target, IReadOnlyList<MissionEntry> source, bool includeLockedMissions)
+        private void AppendEntries(
+            List<MissionEntry> target,
+            HashSet<string> seenMissionIds,
+            IReadOnlyList<MissionEntry> source,
+            bool includeLockedMissions)
         {
-            if (target == null || source == null)
+            if (target == null || seenMissionIds == null || source == null)
                 return;
 
             for (int i = 0; i < source.Count; i++)
@@ -84,6 +90,12 @@ namespace Game.Office
                 if (string.IsNullOrWhiteSpace(entry.MissionId))
                     continue;
 
+                if (!seenMissionIds.Add(entry.MissionId))
+                {
+                    WarnDuplicateMissionId(entry.MissionId);
+                    continue;
+                }
+
                 target.Add(entry);
             }
         }
@@ -95,6 +107,15 @@ namespace Game.Office
 
             _invalidMissionWarned = true;
             Debug.LogWarning($"[MissionSelectFlow] Invalid mission id selected. missionId={missionId}", this);
+        }
+
+        private void WarnDuplicateMissionId(string missionId)
+        {
+            if (_duplicateMissionIdWarned)
+                return;
+
+            _duplicateMissionIdWarned = true;
+            Debug.LogWarning($"[MissionSelectFlow] Duplicate mission id ignored. Keeping first valid mission entry. missionId={missionId}", this);
         }
     }
 }

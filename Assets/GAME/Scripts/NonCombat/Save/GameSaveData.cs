@@ -99,6 +99,8 @@ namespace Game.NonCombat.Save
         public string currentDayPhase;
         public string calendarDateId;
         public string selectedMissionId;
+        public string selectedMissionTargetFieldSceneName;
+        public string selectedMissionTargetSpawnPointId;
         public List<string> completedDailyActionIds = new();
         public List<string> completedSettlementIds = new();
     }

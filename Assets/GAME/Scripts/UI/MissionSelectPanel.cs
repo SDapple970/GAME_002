@@ -31,6 +31,7 @@ namespace Game.UI
 
         private readonly List<GameObject> _spawnedRows = new();
         private bool _closeButtonBound;
+        private bool _missingRootWarned;
 
         private void Awake()
         {
@@ -42,6 +43,7 @@ namespace Game.UI
         {
             BindCloseButton();
             ResolveReferences();
+            WarnMissingRootIfConfiguredForFlow();
 
             if (subscribeToMissionSelectFlow && missionSelectFlow != null)
                 missionSelectFlow.OnMissionListReady += Show;
@@ -90,8 +92,6 @@ namespace Game.UI
 
             if (root != null)
                 root.SetActive(false);
-            else
-                gameObject.SetActive(false);
         }
 
         private void AddMissionRow(MissionEntry mission)
@@ -166,6 +166,15 @@ namespace Game.UI
         {
             if (missionSelectFlow == null)
                 missionSelectFlow = FindFirstObjectByType<MissionSelectFlow>(FindObjectsInactive.Include);
+        }
+
+        private void WarnMissingRootIfConfiguredForFlow()
+        {
+            if (root != null || !subscribeToMissionSelectFlow || _missingRootWarned)
+                return;
+
+            _missingRootWarned = true;
+            Debug.LogWarning("[MissionSelectPanel] Root is not assigned while MissionSelectFlow subscription is enabled. Assign a child root so the panel can hide visuals without disabling the subscriber GameObject.", this);
         }
 
         private void BindCloseButton()
