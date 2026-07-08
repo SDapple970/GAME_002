@@ -104,8 +104,10 @@ namespace Game.Quest
 
             int gold = Mathf.Max(0, fallbackRewardGold);
             int exp = Mathf.Max(0, fallbackRewardExp);
+            int definitionGold = 0;
+            int definitionExp = 0;
             bool hasDefinitionReward = questRuntime != null &&
-                                       questRuntime.TryGetQuestReward(questId, out int definitionGold, out int definitionExp);
+                                       questRuntime.TryGetQuestReward(questId, out definitionGold, out definitionExp);
             if (hasDefinitionReward)
             {
                 gold = definitionGold;
