@@ -2004,10 +2004,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.DemoMission.Runtime.MissionCompletionController
   missionRuntime: {fileID: 1407302019}
+  questRuntime: {fileID: 0}
+  daySettlementFlow: {fileID: 0}
   objectiveTracker: {fileID: 810412911}
   completePanel: {fileID: 0}
   lockPlayerInputOnComplete: 1
   setGameStateToUIOnly: 1
+  notifyDaySettlementOnMissionComplete: 0
   behavioursToDisableOnComplete: []
 --- !u!4 &268619595
 Transform:
@@ -3439,7 +3442,7 @@ Transform:
   m_GameObject: {fileID: 382624916}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -2.83}
+  m_LocalPosition: {x: 0.9, y: 0.5, z: -2.83}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -7613,8 +7616,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.DemoMission.Runtime.MissionObjectiveTracker
   missionRuntime: {fileID: 1407302019}
+  questRuntime: {fileID: 0}
   completionController: {fileID: 268619594}
   objectiveText: {fileID: 0}
+  preferQuestRuntime: 1
 --- !u!4 &810412912
 Transform:
   m_ObjectHideFlags: 0
@@ -9605,6 +9610,74 @@ Transform:
   m_Children:
   - {fileID: 2104340161}
   m_Father: {fileID: 1061914873}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1006413140
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1006413142}
+  - component: {fileID: 1006413141}
+  m_Layer: 0
+  m_Name: Video Player
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!328 &1006413141
+VideoPlayer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1006413140}
+  m_Enabled: 1
+  m_VideoClip: {fileID: 0}
+  m_TargetCameraAlpha: 1
+  m_TargetCamera3DLayout: 0
+  m_TargetCamera: {fileID: 0}
+  m_TargetTexture: {fileID: 0}
+  m_TimeReference: 0
+  m_TargetMaterialRenderer: {fileID: 0}
+  m_TargetMaterialProperty: <noninit>
+  m_RenderMode: 2
+  m_AspectRatio: 2
+  m_DataSource: 0
+  m_TimeUpdateMode: 2
+  m_PlaybackSpeed: 1
+  m_AudioOutputMode: 2
+  m_TargetAudioSources:
+  - {fileID: 0}
+  m_DirectAudioVolumes:
+  - 1
+  m_Url: 
+  m_EnabledAudioTracks: 01
+  m_DirectAudioMutes: 00
+  m_ControlledAudioTrackCount: 1
+  m_PlayOnAwake: 1
+  m_SkipOnDrop: 1
+  m_Looping: 0
+  m_WaitForFirstFrame: 1
+  m_FrameReadyEventEnabled: 0
+  m_VideoShaders: []
+--- !u!4 &1006413142
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1006413140}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.43358, y: 5.05373, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1015114323
 GameObject:
@@ -13568,7 +13641,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 2
   m_Sprite: {fileID: 5825230674806114018, guid: 3201b6e6cfcdaac4b87e46753640296f, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -14362,6 +14435,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Game.DemoMission.Runtime.DemoMissionRuntime
   dontDestroyOnLoad: 1
   currentMission: {fileID: 11400000, guid: f3b854ab5de8ffc4f814758e52f8f784, type: 2}
+  questRuntime: {fileID: 0}
+  bridgeToQuestRuntime: 1
+  requireNpcTalkForQuestCompletion: 0
+  requireNpcRescueForQuestCompletion: 1
 --- !u!1 &1422305975
 GameObject:
   m_ObjectHideFlags: 0
@@ -18783,7 +18860,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 5
+  orthographic size: 7
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -18873,7 +18950,7 @@ MonoBehaviour:
   target: {fileID: 2023473702}
   offset: {x: 0, y: 1.5, z: -10}
   smoothTime: 0.15
-  defaultOrthoSize: 5
+  defaultOrthoSize: 9
   zoomSmoothTime: 0.2
 --- !u!1 &1787546719
 GameObject:
@@ -22288,6 +22365,108 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!114 &2105100001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1263257820}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 086acb337b80af442bfdd36ee449c223, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Core.RuntimeBootstrapper
+  initialStateMode: 0
+  initialState: 2
+  applyInitialStateOnStart: 1
+  createMissingCoreServices: 1
+  logWarnings: 1
+--- !u!114 &2105100002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1263257820}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8136816787b093b4dbc5b4ace60370d6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Core.GameFlowController
+--- !u!114 &2105100003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1263257820}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 88b78f3320df30544808225c6526a5a9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Core.SceneFlowController
+--- !u!114 &2105100004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1263257820}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 245983546c4fbae4299cb85b87600f29, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Core.SaveLoadService
+  saveManager: {fileID: 0}
+--- !u!114 &2105100005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1263257820}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a3b8f897e985e74ba9301312fa697fa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Reward.RewardService
+  currencyWallet: {fileID: 0}
+  inventoryService: {fileID: 0}
+--- !u!114 &2105100006
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1263257820}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3396634ae0288df418d4861ab190ffcb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.UI.GameUIRootController
+  titleRoot: {fileID: 0}
+  fieldRoot: {fileID: 0}
+  dialogueRoot: {fileID: 1845038874}
+  choiceRoot: {fileID: 480822629}
+  combatRoot: {fileID: 1269336596}
+  rewardRoot: {fileID: 1644438668}
+  pauseRoot: {fileID: 0}
+  loadingRoot: {fileID: 0}
+--- !u!114 &2105100007
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1263257820}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b277751722a95f45883da229094a2ce, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.UI.UIScreenRouter
+  uiRoot: {fileID: 2105100006}
+  stateMachine: {fileID: 1263257827}
 --- !u!1 &2113037573
 GameObject:
   m_ObjectHideFlags: 0
@@ -22922,107 +23101,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2138087184}
   m_CullTransparentMesh: 1
---- !u!114 &2105100001
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1263257820}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 086acb337b80af442bfdd36ee449c223, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Core.RuntimeBootstrapper
-  initialStateMode: 0
-  initialState: 2
-  applyInitialStateOnStart: 1
-  createMissingCoreServices: 1
-  logWarnings: 1
---- !u!114 &2105100002
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1263257820}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8136816787b093b4dbc5b4ace60370d6, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Core.GameFlowController
---- !u!114 &2105100003
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1263257820}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 88b78f3320df30544808225c6526a5a9, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Core.SceneFlowController
---- !u!114 &2105100004
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1263257820}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 245983546c4fbae4299cb85b87600f29, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Core.SaveLoadService
-  saveManager: {fileID: 0}
---- !u!114 &2105100005
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1263257820}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4a3b8f897e985e74ba9301312fa697fa, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Reward.RewardService
-  currencyWallet: {fileID: 0}
---- !u!114 &2105100006
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1263257820}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3396634ae0288df418d4861ab190ffcb, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Game.UI.GameUIRootController
-  titleRoot: {fileID: 0}
-  fieldRoot: {fileID: 0}
-  dialogueRoot: {fileID: 1845038874}
-  choiceRoot: {fileID: 480822629}
-  combatRoot: {fileID: 1269336596}
-  rewardRoot: {fileID: 1644438668}
-  pauseRoot: {fileID: 0}
-  loadingRoot: {fileID: 0}
---- !u!114 &2105100007
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1263257820}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5b277751722a95f45883da229094a2ce, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Game.UI.UIScreenRouter
-  uiRoot: {fileID: 2105100006}
-  stateMachine: {fileID: 1263257827}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -23052,3 +23130,4 @@ SceneRoots:
   - {fileID: 909825594}
   - {fileID: 640552769}
   - {fileID: 1422305978}
+  - {fileID: 1006413142}
