@@ -51,8 +51,8 @@ namespace Game.Quest
             RewardGrantResult rewardResult = TryGrantQuestReward(questId);
             TryNotifyDaySettlement(questId, rewardResult);
 
-            if (enterRewardStateOnCompletion && GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(GameState.Reward);
+            if (enterRewardStateOnCompletion)
+                EnterRewardState();
         }
 
         private void HandleQuestCompleted(string questId)
@@ -61,8 +61,16 @@ namespace Game.Quest
             RewardGrantResult rewardResult = TryGrantQuestReward(questId);
             TryNotifyDaySettlement(questId, rewardResult);
 
-            if (enterRewardStateOnCompletion && GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(GameState.Reward);
+            if (enterRewardStateOnCompletion)
+                EnterRewardState();
+        }
+
+        private void EnterRewardState()
+        {
+            if (GameFlowController.Instance != null)
+                GameFlowController.Instance.EnterReward();
+            else
+                GameStateMachine.Instance?.TrySetState(GameState.Reward, nameof(QuestCompletionFlow));
         }
 
         private void ResolveReferences()

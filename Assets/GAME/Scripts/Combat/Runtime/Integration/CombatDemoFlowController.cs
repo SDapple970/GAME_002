@@ -68,17 +68,13 @@ namespace Game.Combat.Integration
                 planningHUD.Show();
             }
 
-            if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(GameState.CombatPlanning);
+            // CombatEntryPoint owns global combat state synchronization.
         }
 
         private void OnCombatEnded(CombatResult result)
         {
             planningHUD?.Hide();
             cameraController?.HoldResultFrame();
-
-            if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(GameState.UIOnly);
 
             if (rewardPanel != null)
                 rewardPanel.Show(result);
@@ -95,8 +91,7 @@ namespace Game.Combat.Integration
             if (combatCanvasRoot != null)
                 combatCanvasRoot.SetActive(false);
 
-            if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(GameState.Exploration);
+            // Reward flow owns the return to Exploration.
         }
     }
 }

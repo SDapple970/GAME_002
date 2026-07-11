@@ -36,6 +36,7 @@ namespace Game.Story.Core
             }
 
             Instance = this;
+            _ = useCutsceneState; // Serialized compatibility only; dialogue now always uses GameState.Dialogue.
             dialogueUIPanel?.Bind(this);
         }
 
@@ -95,6 +96,8 @@ namespace Game.Story.Core
             IReadOnlyList<ChoiceDefinition> choices = _currentDialogue?.Choices;
             if (choices != null && choices.Count > 0)
             {
+                EnterChoiceState();
+
                 if (choiceUIPanel != null)
                 {
                     choiceUIPanel.ShowChoices(choices, this);
@@ -145,10 +148,8 @@ namespace Game.Story.Core
             choiceUIPanel?.Hide();
             OnDialogueEnded?.Invoke(endedDialogue);
 
-            if (endedDialogue != null && endedDialogue.ReturnToExplorationWhenFinished && GameStateMachine.Instance != null)
-            {
-                GameStateMachine.Instance.SetState(GameState.Exploration);
-            }
+            if (endedDialogue != null && endedDialogue.ReturnToExplorationWhenFinished)
+                EnterExplorationState();
 
             _currentDialogue = null;
             _lineIndex = -1;
@@ -161,10 +162,7 @@ namespace Game.Story.Core
             _lineIndex = -1;
             _isRunning = true;
 
-            if (changeState && GameStateMachine.Instance != null)
-            {
-                GameStateMachine.Instance.SetState(useCutsceneState ? GameState.Cutscene : GameState.UIOnly);
-            }
+            EnterDialogueState();
 
             if (dialogueUIPanel != null)
             {
@@ -179,6 +177,30 @@ namespace Game.Story.Core
             choiceUIPanel?.Hide();
             OnDialogueStarted?.Invoke(dialogue);
             Advance();
+        }
+
+        private static void EnterDialogueState()
+        {
+            if (GameFlowController.Instance != null)
+                GameFlowController.Instance.BeginDialogue();
+            else
+                GameStateMachine.Instance?.TrySetState(GameState.Dialogue, nameof(DialogueRunner));
+        }
+
+        private static void EnterChoiceState()
+        {
+            if (GameFlowController.Instance != null)
+                GameFlowController.Instance.BeginChoice();
+            else
+                GameStateMachine.Instance?.TrySetState(GameState.Choice, nameof(DialogueRunner));
+        }
+
+        private static void EnterExplorationState()
+        {
+            if (GameFlowController.Instance != null)
+                GameFlowController.Instance.EnterExploration();
+            else
+                GameStateMachine.Instance?.TrySetState(GameState.Exploration, nameof(DialogueRunner));
         }
     }
 }

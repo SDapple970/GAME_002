@@ -212,6 +212,8 @@ namespace Game.Combat.Core
             if (flowOrchestrator != null)
                 flowOrchestrator.BindSession(ActiveSession);
 
+            ActiveStateMachine.OnPhaseChanged += HandleCombatPhaseChanged;
+
             if (ActiveStateMachine.Phase == Phase.EnterCombat)
             {
                 ActiveStateMachine.Tick();
@@ -221,7 +223,7 @@ namespace Game.Combat.Core
             if (director != null)
                 ActiveStateMachine.OnRequireResolutionPlay += director.PlayResolution;
 
-            SetCombatPlanningState();
+            SynchronizeGlobalCombatState(ActiveStateMachine.Phase);
 
             Debug.Log(
                 $"[CombatEntryPoint] Combat started. Reason={resolvedRequest.Reason}, Initiative={resolvedRequest.InitiativeSide}, " +
@@ -261,7 +263,12 @@ namespace Game.Combat.Core
                    GameStateMachine.Instance.Is(GameState.Exploration);
         }
 
-        private void SetCombatPlanningState()
+        private void HandleCombatPhaseChanged(Phase previous, Phase next)
+        {
+            SynchronizeGlobalCombatState(next);
+        }
+
+        private void SynchronizeGlobalCombatState(Phase phase)
         {
             if (GameStateMachine.Instance == null)
             {
@@ -274,8 +281,22 @@ namespace Game.Combat.Core
                 return;
             }
 
-            if (!GameStateMachine.Instance.Is(GameState.CombatPlanning))
-                GameStateMachine.Instance.SetState(GameState.CombatPlanning);
+            GameFlowController flow = GameFlowController.Instance;
+            if (flow == null)
+            {
+                GameState target = phase == Phase.Planning
+                    ? GameState.CombatPlanning
+                    : GameState.CombatResolving;
+
+                if (phase == Phase.Planning || phase == Phase.Resolution || phase == Phase.EndTurn)
+                    GameStateMachine.Instance.TrySetState(target, $"CombatEntryPoint phase={phase}");
+                return;
+            }
+
+            if (phase == Phase.Planning)
+                flow.EnterCombatPlanning();
+            else if (phase == Phase.Resolution || phase == Phase.EndTurn)
+                flow.EnterCombatResolving();
         }
 
         private void WarnDuplicateStartBlocked()
@@ -302,6 +323,9 @@ namespace Game.Combat.Core
 
             CombatSession endingSession = ActiveSession;
             CombatStateMachine endingStateMachine = ActiveStateMachine;
+
+            if (endingStateMachine != null)
+                endingStateMachine.OnPhaseChanged -= HandleCombatPhaseChanged;
 
             if (director != null && endingStateMachine != null)
                 endingStateMachine.OnRequireResolutionPlay -= director.PlayResolution;

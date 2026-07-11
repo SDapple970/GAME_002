@@ -23,6 +23,7 @@ namespace Game.Combat.UI
         private bool _missingRewardPanelWarned;
         private bool _missingRewardServiceWarned;
         private bool _invalidCombatRewardWarned;
+        private bool _awaitingRewardClose;
 
         private void Awake()
         {
@@ -111,6 +112,11 @@ namespace Game.Combat.UI
             if (result == null)
                 return;
 
+            if (_awaitingRewardClose)
+                return;
+
+            _awaitingRewardClose = true;
+
             if (countEnemyDefeatOnVictory && result.IsWin)
                 DemoMissionRuntime.GetOrCreate().RegisterEnemyDefeated();
 
@@ -128,7 +134,7 @@ namespace Game.Combat.UI
             if (GameFlowController.Instance != null)
                 GameFlowController.Instance.HandleCombatResult(result);
             else if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(GameState.Reward);
+                GameStateMachine.Instance.TrySetState(GameState.Reward, nameof(CombatRewardUIBinder));
 
             if (rewardPanel != null)
             {
@@ -158,13 +164,18 @@ namespace Game.Combat.UI
 
         private void HandleRewardClosed()
         {
+            if (!_awaitingRewardClose)
+                return;
+
+            _awaitingRewardClose = false;
+
             if (!restoreExplorationAfterRewardClosed)
                 return;
 
             if (GameFlowController.Instance != null)
                 GameFlowController.Instance.HandleRewardClosed();
             else if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(GameState.Exploration);
+                GameStateMachine.Instance.TrySetState(GameState.Exploration, nameof(CombatRewardUIBinder));
         }
 
         private void WarnIfMissingReferences()

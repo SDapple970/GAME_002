@@ -84,10 +84,7 @@ namespace Game.Story
             _running = true;
             _waitingForChoice = false;
 
-            if (GameStateMachine.Instance != null)
-            {
-                GameStateMachine.Instance.SetState(stateWhileRunning);
-            }
+            EnterStoryState();
 
             timedChoiceDialoguePanel?.Hide();
 
@@ -203,10 +200,9 @@ namespace Game.Story
             if (restoreExplorationOnEnd && GameStateMachine.Instance != null)
             {
                 GameState current = GameStateMachine.Instance.Current;
-                if (current == stateWhileRunning || current == GameState.UIOnly || current == GameState.Cutscene)
-                {
-                    GameStateMachine.Instance.SetState(GameState.Exploration);
-                }
+                if (current == GameState.Dialogue || current == GameState.Choice ||
+                    current == stateWhileRunning || current == GameState.UIOnly || current == GameState.Cutscene)
+                    EnterExplorationState();
             }
         }
 
@@ -276,6 +272,8 @@ namespace Game.Story
             _currentNode = node;
             _waitingForChoice = false;
 
+            EnterDialogueState();
+
             ApplyNodeEffects(node);
 
             if (dialoguePanel != null && storyDialogueHUD == null)
@@ -315,6 +313,7 @@ namespace Game.Story
         private void ShowDialoguePanelChoices(StoryNode node)
         {
             _waitingForChoice = true;
+            EnterChoiceState();
             dialoguePanel?.SetNextVisible(false);
             dialoguePanel?.BuildChoices(node.Choices, SelectChoice);
 
@@ -339,10 +338,49 @@ namespace Game.Story
             }
 
             _waitingForChoice = true;
+            EnterChoiceState();
             dialoguePanel?.SetNextVisible(false);
             dialoguePanel?.ClearChoices();
 
             storyDialogueHUD.ShowTimedChoices(node, availableChoices, SelectChoice, HandleTimedChoiceTimeout);
+        }
+
+        private void EnterStoryState()
+        {
+            if (stateWhileRunning == GameState.Cutscene)
+            {
+                if (GameFlowController.Instance != null)
+                    GameFlowController.Instance.EnterCutscene();
+                else
+                    GameStateMachine.Instance?.TrySetState(GameState.Cutscene, nameof(StoryEventRunner));
+                return;
+            }
+
+            EnterDialogueState();
+        }
+
+        private static void EnterDialogueState()
+        {
+            if (GameFlowController.Instance != null)
+                GameFlowController.Instance.BeginDialogue();
+            else
+                GameStateMachine.Instance?.TrySetState(GameState.Dialogue, nameof(StoryEventRunner));
+        }
+
+        private static void EnterChoiceState()
+        {
+            if (GameFlowController.Instance != null)
+                GameFlowController.Instance.BeginChoice();
+            else
+                GameStateMachine.Instance?.TrySetState(GameState.Choice, nameof(StoryEventRunner));
+        }
+
+        private static void EnterExplorationState()
+        {
+            if (GameFlowController.Instance != null)
+                GameFlowController.Instance.EnterExploration();
+            else
+                GameStateMachine.Instance?.TrySetState(GameState.Exploration, nameof(StoryEventRunner));
         }
 
         private void HandleTimedChoiceTimeout()

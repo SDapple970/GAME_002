@@ -26,8 +26,8 @@ namespace Game.Core
 
         private void Start()
         {
-            if (applyInitialStateOnStart && GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(ResolveInitialState());
+            if (applyInitialStateOnStart)
+                ApplyInitialState(ResolveInitialState());
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -37,8 +37,8 @@ namespace Game.Core
             if (existing != null)
             {
                 existing.BootstrapCoreServices(existing.createMissingCoreServices, existing.logWarnings);
-                if (existing.applyInitialStateOnStart && GameStateMachine.Instance != null)
-                    GameStateMachine.Instance.SetState(existing.ResolveInitialState());
+                if (existing.applyInitialStateOnStart)
+                    ApplyInitialState(existing.ResolveInitialState());
                 return;
             }
 
@@ -46,8 +46,7 @@ namespace Game.Core
             RuntimeBootstrapper bootstrapper = go.AddComponent<RuntimeBootstrapper>();
             bootstrapper.BootstrapCoreServices(true, true);
 
-            if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(ResolveInitialStateForScene(SceneManager.GetActiveScene().name));
+            ApplyInitialState(ResolveInitialStateForScene(SceneManager.GetActiveScene().name));
         }
 
         private void BootstrapCoreServices(bool createMissing, bool warn)
@@ -108,6 +107,14 @@ namespace Game.Core
 
             GameObject go = new GameObject(objectName);
             return go.AddComponent<T>();
+        }
+
+        private static void ApplyInitialState(GameState state)
+        {
+            if (GameFlowController.Instance != null)
+                GameFlowController.Instance.RequestState(state, nameof(RuntimeBootstrapper));
+            else
+                GameStateMachine.Instance?.TrySetState(state, nameof(RuntimeBootstrapper));
         }
     }
 }

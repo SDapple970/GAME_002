@@ -247,7 +247,10 @@ namespace Game.Dialogue
             if (GameStateMachine.Instance == null || !GameStateMachine.Instance.Is(GameState.Exploration))
                 return;
 
-            GameStateMachine.Instance.SetState(GameState.UIOnly);
+            if (GameFlowController.Instance != null)
+                GameFlowController.Instance.EnterUIOnly();
+            else
+                GameStateMachine.Instance.TrySetState(GameState.UIOnly, nameof(TimedChoiceDialoguePanel));
             _ownsUiOnlyState = true;
         }
 
@@ -257,7 +260,12 @@ namespace Game.Dialogue
                 return;
 
             if (GameStateMachine.Instance != null && GameStateMachine.Instance.Is(GameState.UIOnly))
-                GameStateMachine.Instance.SetState(GameState.Exploration);
+            {
+                if (GameFlowController.Instance != null)
+                    GameFlowController.Instance.EnterExploration();
+                else
+                    GameStateMachine.Instance.TrySetState(GameState.Exploration, nameof(TimedChoiceDialoguePanel));
+            }
 
             _ownsUiOnlyState = false;
         }

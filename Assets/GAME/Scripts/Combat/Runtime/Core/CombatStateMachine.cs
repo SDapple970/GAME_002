@@ -13,6 +13,7 @@ namespace Game.Combat.Core
         private readonly CombatSession _session;
 
         public event Action<CombatSession, Action> OnRequireResolutionPlay;
+        public event Action<Phase, Phase> OnPhaseChanged;
 
         private bool _isResolving = false;
 
@@ -31,7 +32,7 @@ namespace Game.Combat.Core
             if (Phase == Phase.Planning)
             {
                 Debug.Log("[CombatStateMachine] Planning -> Resolution");
-                Phase = Phase.Resolution;
+                SetPhase(Phase.Resolution);
                 _isResolving = false;
             }
         }
@@ -39,7 +40,7 @@ namespace Game.Combat.Core
         public void ForceExit(CombatEndReason reason)
         {
             EndReason = reason;
-            Phase = Phase.ExitCombat;
+            SetPhase(Phase.ExitCombat);
         }
 
         public void Tick()
@@ -52,7 +53,7 @@ namespace Game.Combat.Core
                         break;
 
                     _session.BeginNewTurn();
-                    Phase = Phase.Planning;
+                    SetPhase(Phase.Planning);
                     Debug.Log($"[CombatStateMachine] EnterCombat -> Planning. Turn={_session.TurnIndex}");
                     break;
 
@@ -82,7 +83,7 @@ namespace Game.Combat.Core
 
         private void OnResolutionFinished()
         {
-            Phase = Phase.EndTurn;
+            SetPhase(Phase.EndTurn);
         }
 
         private void EndTurn()
@@ -94,7 +95,7 @@ namespace Game.Combat.Core
             ClearStunsAtTurnEnd();
             _session.BeginNewTurn();
             _isResolving = false;
-            Phase = Phase.Planning;
+            SetPhase(Phase.Planning);
             Debug.Log($"[CombatStateMachine] EndTurn -> Planning. Turn={_session.TurnIndex}");
         }
 
@@ -122,7 +123,17 @@ namespace Game.Combat.Core
                 return;
 
             EndReason = evaluated;
-            Phase = Phase.ExitCombat;
+            SetPhase(Phase.ExitCombat);
+        }
+
+        private void SetPhase(Phase next)
+        {
+            if (Phase == next)
+                return;
+
+            Phase previous = Phase;
+            Phase = next;
+            OnPhaseChanged?.Invoke(previous, next);
         }
     }
 }

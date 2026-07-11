@@ -33,20 +33,29 @@ namespace Game.Core
 
         private IEnumerator Co_LoadScene(string sceneName)
         {
-            GameStateMachine.Instance?.SetState(GameState.Loading);
+            if (GameFlowController.Instance != null)
+                GameFlowController.Instance.BeginLoading();
+            else
+                GameStateMachine.Instance?.TrySetState(GameState.Loading, nameof(SceneFlowController));
 
             AsyncOperation operation = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
             if (operation == null)
             {
                 Debug.LogError($"[SceneFlowController] Failed to load scene: {sceneName}", this);
-                GameStateMachine.Instance?.SetState(GameState.Exploration);
+                if (GameFlowController.Instance != null)
+                    GameFlowController.Instance.EnterExploration();
+                else
+                    GameStateMachine.Instance?.TrySetState(GameState.Exploration, nameof(SceneFlowController));
                 yield break;
             }
 
             while (!operation.isDone)
                 yield return null;
 
-            GameStateMachine.Instance?.SetState(GameState.Exploration);
+            if (GameFlowController.Instance != null)
+                GameFlowController.Instance.EnterExploration();
+            else
+                GameStateMachine.Instance?.TrySetState(GameState.Exploration, nameof(SceneFlowController));
         }
     }
 }
