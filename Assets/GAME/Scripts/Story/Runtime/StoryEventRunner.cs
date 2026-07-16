@@ -1,6 +1,7 @@
 // Assets/GAME/Scripts/Story/Runtime/StoryEventRunner.cs
 using Game.Core;
 using Game.Dialogue;
+using Game.Input;
 using Game.Story.Data;
 using Game.Story.UI;
 using System.Collections.Generic;
@@ -22,7 +23,8 @@ namespace Game.Story
         private StorySpeakerAnchor _currentSpeakerAnchor;
         private bool _running;
         private bool _waitingForChoice;
-        private GameInputInstaller _input;
+        private GameInputInstaller _inputInstaller;
+        private InputService _inputService;
         private bool _inputSubscribed;
 
         public bool IsRunning => _running;
@@ -56,8 +58,7 @@ namespace Game.Story
 
         private void Update()
         {
-            if (!_inputSubscribed)
-                TrySubscribeInput();
+            EnsureInputSubscription();
         }
 
         public void StartEvent(StoryEventDefinitionSO eventDefinition)
@@ -214,34 +215,52 @@ namespace Game.Story
 
         private void TrySubscribeInput()
         {
-            if (_inputSubscribed)
+            EnsureInputSubscription();
+        }
+
+        private void EnsureInputSubscription()
+        {
+            GameInputInstaller installer = global::GameInputInstaller.Instance;
+            InputService service = installer != null ? installer.Service : null;
+
+            if (_inputSubscribed && _inputInstaller == installer && _inputService == service)
                 return;
 
-            _input = global::GameInputInstaller.Instance;
-            if (_input == null)
+            UnsubscribeInput();
+
+            if (installer == null || service == null)
                 return;
 
-            _input.Interact += HandleAdvanceInput;
+            _inputInstaller = installer;
+            _inputService = service;
+            _inputService.DialogueAdvance += HandleAdvanceInput;
             _inputSubscribed = true;
         }
 
         private void UnsubscribeInput()
         {
-            if (!_inputSubscribed || _input == null)
+            if (!_inputSubscribed || _inputService == null)
             {
                 _inputSubscribed = false;
-                _input = null;
+                _inputInstaller = null;
+                _inputService = null;
                 return;
             }
 
-            _input.Interact -= HandleAdvanceInput;
+            _inputService.DialogueAdvance -= HandleAdvanceInput;
             _inputSubscribed = false;
-            _input = null;
+            _inputInstaller = null;
+            _inputService = null;
         }
 
         private void HandleAdvanceInput()
         {
-            if (!_running || _waitingForChoice || storyDialogueHUD == null)
+            if (!_running || _waitingForChoice)
+                return;
+
+            if (GameStateMachine.Instance != null &&
+                GameStateMachine.Instance.Current != GameState.Dialogue &&
+                GameStateMachine.Instance.Current != GameState.Cutscene)
                 return;
 
             Advance();

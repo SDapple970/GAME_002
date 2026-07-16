@@ -1,4 +1,5 @@
 using Game.Core;
+using Game.Input;
 using UnityEngine;
 
 namespace Game.Player
@@ -8,7 +9,8 @@ namespace Game.Player
         [SerializeField] private PlayerMotor2D_New motor;
         [SerializeField] private PlayerFieldAttackController fieldAttackController;
 
-        private GameInputInstaller _input;
+        private GameInputInstaller _inputInstaller;
+        private InputService _inputService;
         private bool _subscribed;
 
         private void Awake()
@@ -29,8 +31,7 @@ namespace Game.Player
 
         private void Update()
         {
-            if (!_subscribed)
-                TrySubscribe();
+            EnsureInputSubscription();
 
             if (!CanControl())
                 motor?.ForceStopHorizontal();
@@ -80,33 +81,46 @@ namespace Game.Player
 
         private void TrySubscribe()
         {
-            if (_subscribed)
+            EnsureInputSubscription();
+        }
+
+        private void EnsureInputSubscription()
+        {
+            GameInputInstaller installer = GameInputInstaller.Instance;
+            InputService service = installer != null ? installer.Service : null;
+
+            if (_subscribed && _inputInstaller == installer && _inputService == service)
                 return;
 
-            _input = GameInputInstaller.Instance;
-            if (_input == null)
+            Unsubscribe();
+
+            if (installer == null || service == null)
                 return;
 
-            _input.Move += HandleMove;
-            _input.Jump += HandleJump;
-            _input.Attack += HandleAttack;
+            _inputInstaller = installer;
+            _inputService = service;
+            _inputService.Move += HandleMove;
+            _inputService.Jump += HandleJump;
+            _inputService.Attack += HandleAttack;
             _subscribed = true;
         }
 
         private void Unsubscribe()
         {
-            if (!_subscribed || _input == null)
+            if (!_subscribed || _inputService == null)
             {
                 _subscribed = false;
-                _input = null;
+                _inputInstaller = null;
+                _inputService = null;
                 return;
             }
 
-            _input.Move -= HandleMove;
-            _input.Jump -= HandleJump;
-            _input.Attack -= HandleAttack;
+            _inputService.Move -= HandleMove;
+            _inputService.Jump -= HandleJump;
+            _inputService.Attack -= HandleAttack;
             _subscribed = false;
-            _input = null;
+            _inputInstaller = null;
+            _inputService = null;
         }
 
         private static bool CanControl()

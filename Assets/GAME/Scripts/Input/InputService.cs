@@ -11,8 +11,9 @@ namespace Game.Input
         public event Action Jump;
         public event Action Attack;
         public event Action Parry;
-        public event Action Interact;
-        public event Action Pause;
+        public event Action ExplorationInteract;
+        public event Action DialogueAdvance;
+        public event Action PauseRequested;
 
         internal void EmitMove(Vector2 value)
         {
@@ -20,10 +21,19 @@ namespace Game.Input
             Move?.Invoke(value);
         }
 
+        internal void ClearMove(bool emitEvenIfAlreadyZero)
+        {
+            if (!emitEvenIfAlreadyZero && CurrentMove == Vector2.zero)
+                return;
+
+            EmitMove(Vector2.zero);
+        }
+
         internal void EmitJump() => Jump?.Invoke();
         internal void EmitAttack() => Attack?.Invoke();
         internal void EmitParry() => Parry?.Invoke();
-        internal void EmitInteract() => Interact?.Invoke();
-        internal void EmitPause() => Pause?.Invoke();
+        internal void EmitExplorationInteract() => ExplorationInteract?.Invoke();
+        internal void EmitDialogueAdvance() => DialogueAdvance?.Invoke();
+        internal void EmitPauseRequested() => PauseRequested?.Invoke();
     }
 }

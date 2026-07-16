@@ -1,5 +1,6 @@
 // Assets/GAME/Scripts/Story/Runtime/Interaction/StoryInteractionController.cs
 using Game.Core;
+using Game.Input;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -17,7 +18,8 @@ namespace Game.Story.Interaction
         [SerializeField] private bool debugLogs = false;
 
         private StoryInteractable2D _current;
-        private GameInputInstaller _input;
+        private GameInputInstaller _inputInstaller;
+        private InputService _inputService;
         private bool _inputSubscribed;
 
         private void Awake()
@@ -52,8 +54,7 @@ namespace Game.Story.Interaction
 
         private void Update()
         {
-            if (!_inputSubscribed)
-                TrySubscribeInput();
+            EnsureInputSubscription();
 
             ResolveRunner();
 
@@ -78,15 +79,6 @@ namespace Game.Story.Interaction
                 promptUI?.Hide();
             }
 
-            if (useLegacyFallbackKey && !_inputSubscribed && UnityEngine.Input.GetKeyDown(fallbackInteractKey))
-            {
-                if (debugLogs)
-                {
-                    Debug.Log($"[StoryInteractionController] Interact key pressed. key={fallbackInteractKey}, current={GetCurrentName()}");
-                }
-
-                TryInteract();
-            }
         }
 
         public void Register(StoryInteractable2D interactable)
@@ -212,33 +204,49 @@ namespace Game.Story.Interaction
 
         private void TrySubscribeInput()
         {
-            if (_inputSubscribed)
+            EnsureInputSubscription();
+        }
+
+        private void EnsureInputSubscription()
+        {
+            GameInputInstaller installer = global::GameInputInstaller.Instance;
+            InputService service = installer != null ? installer.Service : null;
+
+            if (_inputSubscribed && _inputInstaller == installer && _inputService == service)
                 return;
 
-            _input = global::GameInputInstaller.Instance;
-            if (_input == null)
+            UnsubscribeInput();
+
+            if (installer == null || service == null)
                 return;
 
-            _input.Interact += HandleInteractInput;
+            _inputInstaller = installer;
+            _inputService = service;
+            _inputService.ExplorationInteract += HandleInteractInput;
             _inputSubscribed = true;
         }
 
         private void UnsubscribeInput()
         {
-            if (!_inputSubscribed || _input == null)
+            if (!_inputSubscribed || _inputService == null)
             {
                 _inputSubscribed = false;
-                _input = null;
+                _inputInstaller = null;
+                _inputService = null;
                 return;
             }
 
-            _input.Interact -= HandleInteractInput;
+            _inputService.ExplorationInteract -= HandleInteractInput;
             _inputSubscribed = false;
-            _input = null;
+            _inputInstaller = null;
+            _inputService = null;
         }
 
         private void HandleInteractInput()
         {
+            if (GameStateMachine.Instance != null && !GameStateMachine.Instance.Is(GameState.Exploration))
+                return;
+
             TryInteract();
         }
     }

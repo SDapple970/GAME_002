@@ -1,4 +1,5 @@
 using Game.Core;
+using Game.Input;
 using Game.Mission;
 using Game.Mission.Data;
 using UnityEngine;
@@ -43,7 +44,9 @@ namespace Game.Cutscene
         private CutscenePlaybackRequest _activeRequest;
         private bool _isPlaying;
         private bool _isPrepared;
-        private bool _skipActionEnabledByController;
+        private GameInputInstaller _inputInstaller;
+        private InputService _inputService;
+        private bool _inputSubscribed;
 
         public bool IsPlaying => _isPlaying;
 
@@ -68,18 +71,7 @@ namespace Game.Cutscene
             }
 
             SubscribeMissionManager();
-
-#if ENABLE_INPUT_SYSTEM
-            if (skipAction != null && skipAction.action != null)
-            {
-                skipAction.action.performed += HandleSkipActionPerformed;
-                if (!skipAction.action.enabled)
-                {
-                    skipAction.action.Enable();
-                    _skipActionEnabledByController = true;
-                }
-            }
-#endif
+            EnsureInputSubscription();
         }
 
         private void OnDisable()
@@ -91,34 +83,14 @@ namespace Game.Cutscene
                 videoPlayer.errorReceived -= HandleVideoErrorReceived;
             }
 
-#if ENABLE_INPUT_SYSTEM
-            if (skipAction != null && skipAction.action != null)
-            {
-                skipAction.action.performed -= HandleSkipActionPerformed;
-                if (_skipActionEnabledByController)
-                    skipAction.action.Disable();
-            }
-
-            _skipActionEnabledByController = false;
-#endif
-
+            UnsubscribeInput();
             UnsubscribeMissionManager();
             StopPlayback(invokeFinished: false);
         }
 
         private void Update()
         {
-            if (!_isPlaying || !allowSkip)
-                return;
-
-#if ENABLE_INPUT_SYSTEM
-            Keyboard keyboard = Keyboard.current;
-            if (keyboard != null && keyboard[skipKey].wasPressedThisFrame)
-                FinishPlayback();
-#else
-            if (UnityEngine.Input.GetKeyDown(skipKey))
-                FinishPlayback();
-#endif
+            EnsureInputSubscription();
         }
 
         public void Play(CutscenePlaybackRequest request)
@@ -200,13 +172,16 @@ namespace Game.Cutscene
             Play(request);
         }
 
-#if ENABLE_INPUT_SYSTEM
-        private void HandleSkipActionPerformed(InputAction.CallbackContext context)
+        private void HandleDialogueAdvance()
         {
-            if (_isPlaying && allowSkip)
-                FinishPlayback();
+            if (!_isPlaying || !allowSkip)
+                return;
+
+            if (GameStateMachine.Instance != null && !GameStateMachine.Instance.Is(GameState.Cutscene))
+                return;
+
+            FinishPlayback();
         }
-#endif
 
         private void FinishPlayback()
         {
@@ -352,6 +327,34 @@ namespace Game.Cutscene
         {
             if (missionManager != null)
                 missionManager.OnMissionCompleted -= HandleMissionCompleted;
+        }
+
+        private void EnsureInputSubscription()
+        {
+            GameInputInstaller installer = global::GameInputInstaller.Instance;
+            InputService service = installer != null ? installer.Service : null;
+
+            if (_inputSubscribed && _inputInstaller == installer && _inputService == service)
+                return;
+
+            UnsubscribeInput();
+            if (installer == null || service == null)
+                return;
+
+            _inputInstaller = installer;
+            _inputService = service;
+            _inputService.DialogueAdvance += HandleDialogueAdvance;
+            _inputSubscribed = true;
+        }
+
+        private void UnsubscribeInput()
+        {
+            if (_inputSubscribed && _inputService != null)
+                _inputService.DialogueAdvance -= HandleDialogueAdvance;
+
+            _inputSubscribed = false;
+            _inputInstaller = null;
+            _inputService = null;
         }
     }
 }

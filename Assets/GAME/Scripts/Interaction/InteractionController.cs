@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using Game.Core;
+using Game.Input;
 using UnityEngine;
 
 namespace Game.Interaction
@@ -14,7 +15,8 @@ namespace Game.Interaction
 
         private readonly List<InteractableObject> _candidates = new();
         private InteractableObject _current;
-        private GameInputInstaller _input;
+        private GameInputInstaller _inputInstaller;
+        private InputService _inputService;
         private bool _subscribedToInput;
         private Coroutine _messageRoutine;
 
@@ -60,8 +62,7 @@ namespace Game.Interaction
 
         private void Update()
         {
-            if (!_subscribedToInput)
-                SubscribeInput();
+            EnsureInputSubscription();
 
             RefreshCurrentTarget();
         }
@@ -151,29 +152,42 @@ namespace Game.Interaction
 
         private void SubscribeInput()
         {
-            if (_subscribedToInput)
+            EnsureInputSubscription();
+        }
+
+        private void EnsureInputSubscription()
+        {
+            GameInputInstaller installer = GameInputInstaller.Instance;
+            InputService service = installer != null ? installer.Service : null;
+
+            if (_subscribedToInput && _inputInstaller == installer && _inputService == service)
                 return;
 
-            _input = GameInputInstaller.Instance;
-            if (_input == null)
+            UnsubscribeInput();
+
+            if (installer == null || service == null)
                 return;
 
-            _input.Interact += HandleInteractInput;
+            _inputInstaller = installer;
+            _inputService = service;
+            _inputService.ExplorationInteract += HandleInteractInput;
             _subscribedToInput = true;
         }
 
         private void UnsubscribeInput()
         {
-            if (!_subscribedToInput || _input == null)
+            if (!_subscribedToInput || _inputService == null)
             {
                 _subscribedToInput = false;
-                _input = null;
+                _inputInstaller = null;
+                _inputService = null;
                 return;
             }
 
-            _input.Interact -= HandleInteractInput;
+            _inputService.ExplorationInteract -= HandleInteractInput;
             _subscribedToInput = false;
-            _input = null;
+            _inputInstaller = null;
+            _inputService = null;
         }
 
         private void HandleInteractInput()
