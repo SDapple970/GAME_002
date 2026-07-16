@@ -34,6 +34,11 @@ namespace Game.Combat.Core
             return true;
         }
 
+        public bool CanSpend(int amount)
+        {
+            return amount <= 0 || Current >= amount;
+        }
+
         private int Clamp(int v)
         {
             if (v < 0) return 0;

@@ -21,9 +21,44 @@ namespace Game.Combat.Effects
         [SerializeField] private float fallbackApproachDuration = 0.2f;
         [SerializeField] private float fallbackActionDelay = 0.15f;
 
+        private Coroutine _activeResolutionRoutine;
+        private CombatSession _activeResolutionSession;
+        private CombatTurn _activeResolutionTurn;
+        private CombatTurn _lastCompletedTurn;
+        private Action _activeCompletion;
+        private bool _completionRaised;
+
         public void PlayResolution(CombatSession session, Action onComplete)
         {
-            StartCoroutine(Co_PlayTurnAnimation(session, onComplete));
+            CombatTurn turn = session?.CurrentTurn;
+            if (turn == null)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+
+            if (ReferenceEquals(_lastCompletedTurn, turn))
+                return;
+
+            if (ReferenceEquals(_activeResolutionSession, session) && ReferenceEquals(_activeResolutionTurn, turn))
+                return;
+
+            CancelActiveResolutionWithoutCompletion();
+
+            if (!isActiveAndEnabled)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+
+            _activeResolutionSession = session;
+            _activeResolutionTurn = turn;
+            _activeCompletion = onComplete;
+            _completionRaised = false;
+
+            Coroutine routine = StartCoroutine(Co_PlayTurnAnimation(turn));
+            if (_activeResolutionTurn != null)
+                _activeResolutionRoutine = routine;
         }
 
         private void Awake()
@@ -35,17 +70,28 @@ namespace Game.Combat.Effects
                 cameraController = FindFirstObjectByType<CombatCameraController>();
         }
 
-        private IEnumerator Co_PlayTurnAnimation(CombatSession session, Action onComplete)
+        private void OnDisable()
         {
-            if (session == null || session.CurrentTurn == null || session.CurrentTurn.Playbook.Count == 0)
+            if (_activeResolutionRoutine != null)
+                StopCoroutine(_activeResolutionRoutine);
+
+            CompleteActiveResolution();
+        }
+
+        private IEnumerator Co_PlayTurnAnimation(CombatTurn turn)
+        {
+            if (turn == null || turn.Playbook.Count == 0)
             {
-                onComplete?.Invoke();
+                CompleteActiveResolution();
                 yield break;
             }
 
-            for (int i = 0; i < session.CurrentTurn.Playbook.Count; i++)
+            for (int i = 0; i < turn.Playbook.Count; i++)
             {
-                PlaybookEvent playbookEvent = session.CurrentTurn.Playbook[i];
+                if (!ReferenceEquals(_activeResolutionTurn, turn))
+                    yield break;
+
+                PlaybookEvent playbookEvent = turn.Playbook[i];
 
                 if (playbookEvent is Event_Unopposed unopposed)
                     yield return PlayUnopposed(unopposed);
@@ -53,11 +99,13 @@ namespace Game.Combat.Effects
                     yield return PlayClash(clash);
                 else if (playbookEvent is Event_Utility utility)
                     yield return PlayUtility(utility);
+                else if (playbookEvent is Event_Area area)
+                    yield return PlayArea(area);
 
                 yield return new WaitForSeconds(0.2f);
             }
 
-            onComplete?.Invoke();
+            CompleteActiveResolution();
         }
 
         private IEnumerator PlayUnopposed(Event_Unopposed ev)
@@ -104,6 +152,12 @@ namespace Game.Combat.Effects
         {
             if (ev == null)
                 yield break;
+
+            if (ev.IsCancelled || ev.LackOfInspiration)
+            {
+                yield return new WaitForSeconds(0.3f);
+                yield break;
+            }
 
             GameObject objA = GetFieldObject(ev.ActorA);
             GameObject objB = GetFieldObject(ev.ActorB);
@@ -161,6 +215,71 @@ namespace Game.Combat.Effects
             PlayImpactPresentation(actorObj, ev.Skill);
             StartCoroutine(FlashColor(actorObj, Color.yellow, 0.3f));
             yield return WaitAfterMove(ev.Skill);
+        }
+
+        private IEnumerator PlayArea(Event_Area ev)
+        {
+            if (ev == null || ev.IsCancelled || ev.LackOfInspiration)
+                yield break;
+
+            GameObject actorObj = GetFieldObject(ev.Actor);
+            if (actorObj == null)
+                yield break;
+
+            ICombatant firstTarget = ev.Targets.Count > 0 ? ev.Targets[0] : null;
+            GameObject firstTargetObj = GetFieldObject(firstTarget);
+            if (firstTargetObj != null)
+            {
+                cameraController?.FocusAction(ev.Actor, firstTarget);
+                yield return MoveActorForSkill(actorObj.transform, firstTargetObj.transform, ev.Skill);
+            }
+
+            PlayCastPresentation(actorObj, ev.Skill);
+            PlayAttackTrigger(actorObj, ev.Skill);
+            yield return WaitAfterMove(ev.Skill);
+
+            for (int i = 0; i < ev.Targets.Count; i++)
+            {
+                ICombatant target = ev.Targets[i];
+                GameObject targetObj = GetFieldObject(target);
+                if (targetObj == null)
+                    continue;
+
+                int damage = i < ev.DamageDealt.Count ? ev.DamageDealt[i] : 0;
+                int stagger = i < ev.StaggerDealt.Count ? ev.StaggerDealt[i] : 0;
+                PlayImpactPresentation(targetObj, ev.Skill);
+                PlayTargetReaction(target, targetObj, damage, stagger);
+                StartCoroutine(FlashColor(targetObj, Color.red, 0.2f));
+            }
+
+            yield return new WaitForSeconds(0.3f);
+        }
+
+        private void CompleteActiveResolution()
+        {
+            if (_activeResolutionTurn == null || _completionRaised)
+                return;
+
+            _completionRaised = true;
+            Action completion = _activeCompletion;
+            _lastCompletedTurn = _activeResolutionTurn;
+            _activeResolutionRoutine = null;
+            _activeResolutionSession = null;
+            _activeResolutionTurn = null;
+            _activeCompletion = null;
+            completion?.Invoke();
+        }
+
+        private void CancelActiveResolutionWithoutCompletion()
+        {
+            if (_activeResolutionRoutine != null)
+                StopCoroutine(_activeResolutionRoutine);
+
+            _activeResolutionRoutine = null;
+            _activeResolutionSession = null;
+            _activeResolutionTurn = null;
+            _activeCompletion = null;
+            _completionRaised = false;
         }
 
         private IEnumerator MoveActorForSkill(Transform actor, Transform target, ISkill skill)

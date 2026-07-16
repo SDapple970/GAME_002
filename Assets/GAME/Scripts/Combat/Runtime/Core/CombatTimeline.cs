@@ -12,41 +12,37 @@ namespace Game.Combat.Core
 
         public void Add(ICombatant actor, PlannedAction action)
         {
-            if (action.IsNone) return;
+            if (action.IsNone)
+                return;
 
-            _items.Add(new TimelineItem(
-                actor,
-                action,
-                action.PlannedSpeed
-            ));
+            _items.Add(new TimelineItem(actor, action, action.PlannedSpeed));
         }
 
         public void ResolveAll(CombatSession session, SkillBook skillBook)
         {
-            // 정렬: Speed desc → 선공측 우선 → 안정 정렬
-            _items.Sort((a, b) =>
+            // Compatibility ordering only. Production ordering belongs to CombatTurnResolver.
+            _items.Sort((left, right) =>
             {
-                int c = b.Speed.CompareTo(a.Speed);
-                if (c != 0) return c;
+                int comparison = right.Speed.CompareTo(left.Speed);
+                if (comparison != 0)
+                    return comparison;
 
-                // 선공 측 우선
-                int aPri = (a.Actor.Side == session.InitiativeSide) ? 0 : 1;
-                int bPri = (b.Actor.Side == session.InitiativeSide) ? 0 : 1;
-                c = aPri.CompareTo(bPri);
-                if (c != 0) return c;
-
-                return a.OrderIndex.CompareTo(b.OrderIndex);
+                int leftPriority = left.Actor.Side == session.InitiativeSide ? 0 : 1;
+                int rightPriority = right.Actor.Side == session.InitiativeSide ? 0 : 1;
+                comparison = leftPriority.CompareTo(rightPriority);
+                return comparison != 0
+                    ? comparison
+                    : left.OrderIndex.CompareTo(right.OrderIndex);
             });
 
-            // MVP: Clash는 다음 단계에서 붙인다(지금은 순차 해결)
             for (int i = 0; i < _items.Count; i++)
             {
-                var item = _items[i];
-                var skill = skillBook.Get(item.Action.SkillId);
-
+                TimelineItem item = _items[i];
+                ISkill skill = skillBook.Get(item.Action.SkillId);
                 if (skill == null)
                 {
-                    session.CurrentTurn.Events.Add(new ResolvedEvent($"[{item.Actor.Id}] missing skill id={item.Action.SkillId.Value}."));
+                    session.CurrentTurn.AddResolvedEvent(new ResolvedEvent(
+                        $"[{item.Actor.Id}] missing skill id={item.Action.SkillId.Value}."));
                     continue;
                 }
 
@@ -57,19 +53,35 @@ namespace Game.Combat.Core
 
         private static ICombatant ResolveTarget(CombatSession session, ICombatant actor, PlannedAction action)
         {
-            if (action.Targeting == TargetingRule.Self) return actor;
-            if (action.Targeting == TargetingRule.SingleEnemy || action.Targeting == TargetingRule.SingleAlly || action.Targeting == TargetingRule.AnySingle)
+            if (action.Targeting == TargetingRule.Self)
+                return actor;
+
+            if (action.Targeting != TargetingRule.SingleEnemy &&
+                action.Targeting != TargetingRule.SingleAlly &&
+                action.Targeting != TargetingRule.AnySingle)
             {
-                // 단일 타겟은 Id로 찾기
-                foreach (var c in session.Allies) if (c.Id.Value == action.TargetCombatantId.Value) return c;
-                foreach (var c in session.Enemies) if (c.Id.Value == action.TargetCombatantId.Value) return c;
+                return null;
             }
+
+            foreach (ICombatant ally in session.Allies)
+            {
+                if (ally.Id.Value == action.TargetCombatantId.Value)
+                    return ally;
+            }
+
+            foreach (ICombatant enemy in session.Enemies)
+            {
+                if (enemy.Id.Value == action.TargetCombatantId.Value)
+                    return enemy;
+            }
+
             return null;
         }
 
         private readonly struct TimelineItem
         {
             private static int _counter;
+
             public readonly int OrderIndex;
             public readonly ICombatant Actor;
             public readonly PlannedAction Action;

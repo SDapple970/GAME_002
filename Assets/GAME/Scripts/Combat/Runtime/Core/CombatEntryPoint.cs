@@ -84,8 +84,7 @@ namespace Game.Combat.Core
 
         public void ConfirmPlanningFromUI()
         {
-            Debug.Log($"[CombatEntryPoint] ConfirmPlanningFromUI | stateMachineNull={ActiveStateMachine == null}");
-            ActiveStateMachine?.ConfirmPlanning();
+            SubmitCurrentTurn();
         }
 
         public bool SubmitCurrentTurn()
@@ -114,8 +113,50 @@ namespace Game.Combat.Core
                 return false;
             }
 
-            CombatTurnResolver.ResolveTurn(ActiveSession);
-            ActiveStateMachine.ConfirmPlanning();
+            CombatTurn turn = ActiveSession.CurrentTurn;
+            if (turn.Lifecycle != CombatTurnLifecycle.Planning)
+            {
+                Debug.LogWarning(
+                    $"[CombatEntryPoint] SubmitCurrentTurn ignored. Turn {ActiveSession.TurnIndex} is {turn.Lifecycle}.",
+                    this);
+                return false;
+            }
+
+            Dictionary<CombatantId, ActionPlan> committedPlans = new(turn.Plans);
+            if (!AddExplicitNonePlansForActorsUnableToAct(ActiveSession.Allies, committedPlans) ||
+                !AddExplicitNonePlansForActorsUnableToAct(ActiveSession.Enemies, committedPlans))
+            {
+                Debug.LogWarning("[CombatEntryPoint] SubmitCurrentTurn rejected. A living actor with usable skills has no committed plan.", this);
+                return false;
+            }
+
+            if (!CombatPlanValidator.TryNormalizeCommittedPlans(
+                    ActiveSession,
+                    committedPlans,
+                    out Dictionary<CombatantId, ActionPlan> normalizedPlans,
+                    out string validationError))
+            {
+                Debug.LogWarning($"[CombatEntryPoint] SubmitCurrentTurn rejected. {validationError}", this);
+                return false;
+            }
+
+            if (!turn.TryReplacePlans(normalizedPlans) || !turn.TrySubmit())
+            {
+                Debug.LogWarning("[CombatEntryPoint] SubmitCurrentTurn lost the Planning lifecycle race.", this);
+                return false;
+            }
+
+            if (!CombatTurnResolver.ResolveTurn(ActiveSession))
+            {
+                Debug.LogError($"[CombatEntryPoint] Turn {ActiveSession.TurnIndex} calculation failed. Resolution was not entered.", this);
+                return false;
+            }
+
+            if (!ActiveStateMachine.ConfirmPlanning())
+            {
+                Debug.LogError($"[CombatEntryPoint] Turn {ActiveSession.TurnIndex} resolved but the state machine rejected Resolution entry.", this);
+                return false;
+            }
 
             Debug.Log(
                 $"[CombatEntryPoint] Turn submitted. Turn={ActiveSession.TurnIndex}, " +
@@ -123,6 +164,41 @@ namespace Game.Combat.Core
                 $"Playbook={ActiveSession.CurrentTurn.Playbook.Count}",
                 this
             );
+
+            return true;
+        }
+
+        private static bool AddExplicitNonePlansForActorsUnableToAct(
+            IReadOnlyList<ICombatant> actors,
+            Dictionary<CombatantId, ActionPlan> plans)
+        {
+            for (int i = 0; i < actors.Count; i++)
+            {
+                ICombatant actor = actors[i];
+                if (actor == null)
+                    return false;
+
+                if (plans.ContainsKey(actor.Id))
+                    continue;
+
+                bool hasUsableSkill = false;
+                if (actor.Skills != null)
+                {
+                    for (int skillIndex = 0; skillIndex < actor.Skills.Count; skillIndex++)
+                    {
+                        if (actor.Skills[skillIndex] != null)
+                        {
+                            hasUsableSkill = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (actor.HP > 0 && !actor.IsStunned && hasUsableSkill)
+                    return false;
+
+                plans.Add(actor.Id, new ActionPlan(PlannedAction.None, PlannedAction.None));
+            }
 
             return true;
         }

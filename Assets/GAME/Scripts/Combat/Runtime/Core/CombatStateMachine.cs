@@ -1,7 +1,6 @@
-﻿// GAME_002/Assets/GAME/Scripts/Combat/Core/CombatStateMachine.cs
 using System;
-using UnityEngine;
 using Game.Combat.Model;
+using UnityEngine;
 
 namespace Game.Combat.Core
 {
@@ -11,11 +10,14 @@ namespace Game.Combat.Core
         public CombatEndReason EndReason { get; private set; } = CombatEndReason.None;
 
         private readonly CombatSession _session;
+        private CombatTurn _presentingTurn;
+        private int _presentingTurnIndex = -1;
+        private bool _presentationRequested;
+        private bool _endTurnProcessed;
+        private bool _exited;
 
         public event Action<CombatSession, Action> OnRequireResolutionPlay;
         public event Action<Phase, Phase> OnPhaseChanged;
-
-        private bool _isResolving = false;
 
         public CombatStateMachine(CombatSession session)
         {
@@ -27,102 +29,197 @@ namespace Game.Combat.Core
             _session = session;
         }
 
-        public void ConfirmPlanning()
+        public bool ConfirmPlanning()
         {
-            if (Phase == Phase.Planning)
+            if (_exited || Phase != Phase.Planning || _session?.CurrentTurn == null)
+                return false;
+
+            if (_session.CurrentTurn.Lifecycle != CombatTurnLifecycle.Resolved)
             {
-                Debug.Log("[CombatStateMachine] Planning -> Resolution");
-                SetPhase(Phase.Resolution);
-                _isResolving = false;
+                Debug.LogWarning(
+                    $"[CombatStateMachine] Resolution entry rejected. Turn={_session.TurnIndex}, " +
+                    $"Lifecycle={_session.CurrentTurn.Lifecycle}.");
+                return false;
             }
+
+            _presentationRequested = false;
+            _endTurnProcessed = false;
+            _presentingTurn = null;
+            _presentingTurnIndex = -1;
+            SetPhase(Phase.Resolution);
+            return true;
         }
 
         public void ForceExit(CombatEndReason reason)
         {
-            EndReason = reason;
-            SetPhase(Phase.ExitCombat);
+            if (_exited)
+                return;
+
+            EnterExit(reason == CombatEndReason.None ? CombatEndReason.Abort : reason);
         }
 
         public void Tick()
         {
+            if (_exited)
+                return;
+
             switch (Phase)
             {
                 case Phase.EnterCombat:
-                    CheckCombatEndConditions();
-                    if (Phase == Phase.ExitCombat)
+                    CombatEndReason initialEnd = CombatEndEvaluator.Evaluate(_session);
+                    if (initialEnd != CombatEndReason.None)
+                    {
+                        EnterExit(initialEnd);
                         break;
+                    }
 
-                    _session.BeginNewTurn();
+                    if (_session == null || !_session.TryBeginNewTurn())
+                    {
+                        EnterExit(CombatEndReason.Abort);
+                        break;
+                    }
+
                     SetPhase(Phase.Planning);
                     Debug.Log($"[CombatStateMachine] EnterCombat -> Planning. Turn={_session.TurnIndex}");
                     break;
 
                 case Phase.Resolution:
-                    if (!_isResolving)
-                    {
-                        _isResolving = true;
-
-                        if (OnRequireResolutionPlay != null)
-                        {
-                            Debug.Log("[CombatStateMachine] Requesting resolution play.");
-                            OnRequireResolutionPlay.Invoke(_session, OnResolutionFinished);
-                        }
-                        else
-                        {
-                            Debug.LogWarning("[CombatStateMachine] No CombatDirector bound. Skipping resolution animation.");
-                            OnResolutionFinished();
-                        }
-                    }
+                    BeginPresentationOnce();
                     break;
 
                 case Phase.EndTurn:
-                    EndTurn();
+                    EndTurnOnce();
                     break;
             }
         }
 
-        private void OnResolutionFinished()
+        private void BeginPresentationOnce()
         {
+            if (_presentationRequested || _session?.CurrentTurn == null)
+                return;
+
+            CombatTurn turn = _session.CurrentTurn;
+            if (!turn.TryBeginPresentation())
+            {
+                Debug.LogError(
+                    $"[CombatStateMachine] Presentation rejected. Turn={_session.TurnIndex}, Lifecycle={turn.Lifecycle}.");
+                return;
+            }
+
+            _presentationRequested = true;
+            _presentingTurn = turn;
+            _presentingTurnIndex = _session.TurnIndex;
+            int turnIndex = _presentingTurnIndex;
+            Action completion = () => OnResolutionFinished(_session, turn, turnIndex);
+
+            Action<CombatSession, Action> handler = GetSinglePresentationHandler();
+            if (handler == null)
+            {
+                Debug.LogWarning("[CombatStateMachine] No CombatDirector bound. Completing resolution immediately.");
+                completion();
+                return;
+            }
+
+            try
+            {
+                handler.Invoke(_session, completion);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                completion();
+            }
+        }
+
+        private Action<CombatSession, Action> GetSinglePresentationHandler()
+        {
+            if (OnRequireResolutionPlay == null)
+                return null;
+
+            Delegate[] handlers = OnRequireResolutionPlay.GetInvocationList();
+            if (handlers.Length > 1)
+                Debug.LogWarning("[CombatStateMachine] Multiple resolution presenters are bound. Only the first will run.");
+
+            return handlers[0] as Action<CombatSession, Action>;
+        }
+
+        private void OnResolutionFinished(CombatSession expectedSession, CombatTurn expectedTurn, int expectedTurnIndex)
+        {
+            if (_exited || Phase != Phase.Resolution)
+                return;
+
+            if (!ReferenceEquals(_session, expectedSession) ||
+                !ReferenceEquals(_session.CurrentTurn, expectedTurn) ||
+                !ReferenceEquals(_presentingTurn, expectedTurn) ||
+                _session.TurnIndex != expectedTurnIndex ||
+                _presentingTurnIndex != expectedTurnIndex)
+            {
+                return;
+            }
+
+            if (!expectedTurn.TryMarkPresented())
+                return;
+
             SetPhase(Phase.EndTurn);
         }
 
-        private void EndTurn()
+        private void EndTurnOnce()
         {
-            CheckCombatEndConditions();
-            if (Phase == Phase.ExitCombat)
+            if (_endTurnProcessed || _session?.CurrentTurn == null)
                 return;
 
+            CombatTurn completedTurn = _session.CurrentTurn;
+            if (!completedTurn.TryComplete())
+                return;
+
+            _endTurnProcessed = true;
+
+            CombatEndReason evaluated = CombatEndEvaluator.Evaluate(_session);
+            if (evaluated != CombatEndReason.None)
+            {
+                EnterExit(evaluated);
+                return;
+            }
+
             ClearStunsAtTurnEnd();
-            _session.BeginNewTurn();
-            _isResolving = false;
+            if (!_session.TryBeginNewTurn())
+            {
+                EnterExit(CombatEndReason.Abort);
+                return;
+            }
+
+            _presentationRequested = false;
+            _endTurnProcessed = false;
+            _presentingTurn = null;
+            _presentingTurnIndex = -1;
             SetPhase(Phase.Planning);
             Debug.Log($"[CombatStateMachine] EndTurn -> Planning. Turn={_session.TurnIndex}");
         }
 
         private void ClearStunsAtTurnEnd()
         {
-            for (int i = 0; i < _session.Allies.Count; i++)
-            {
-                var combatant = _session.Allies[i];
-                if (combatant != null && combatant.IsStunned)
-                    StaggerSystem.ClearStunAtTurnEnd(combatant);
-            }
+            ClearStuns(_session.Allies);
+            ClearStuns(_session.Enemies);
+        }
 
-            for (int i = 0; i < _session.Enemies.Count; i++)
+        private static void ClearStuns(System.Collections.Generic.IReadOnlyList<ICombatant> combatants)
+        {
+            for (int i = 0; i < combatants.Count; i++)
             {
-                var combatant = _session.Enemies[i];
+                ICombatant combatant = combatants[i];
                 if (combatant != null && combatant.IsStunned)
                     StaggerSystem.ClearStunAtTurnEnd(combatant);
             }
         }
 
-        private void CheckCombatEndConditions()
+        private void EnterExit(CombatEndReason reason)
         {
-            var evaluated = CombatEndEvaluator.Evaluate(_session);
-            if (evaluated == CombatEndReason.None)
+            if (_exited)
                 return;
 
-            EndReason = evaluated;
+            _exited = true;
+            EndReason = reason;
+            _session?.CurrentTurn?.CompleteForExit();
             SetPhase(Phase.ExitCombat);
         }
 
@@ -133,7 +230,21 @@ namespace Game.Combat.Core
 
             Phase previous = Phase;
             Phase = next;
-            OnPhaseChanged?.Invoke(previous, next);
+            if (OnPhaseChanged == null)
+                return;
+
+            Delegate[] handlers = OnPhaseChanged.GetInvocationList();
+            for (int i = 0; i < handlers.Length; i++)
+            {
+                try
+                {
+                    ((Action<Phase, Phase>)handlers[i]).Invoke(previous, next);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception);
+                }
+            }
         }
     }
 }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Game.Combat.Model;
 using UnityEngine;
 
@@ -27,101 +28,192 @@ namespace Game.Combat.Core
         {
             errorMessage = null;
 
-            if (_session == null)
+            if (_session == null || entryPoint == null)
+                return Fail("Combat flow is not bound to an entry point and session.", out errorMessage);
+
+            if (!ReferenceEquals(_session, entryPoint.ActiveSession))
+                return Fail("The bound combat session is stale.", out errorMessage);
+
+            if (entryPoint.ActiveStateMachine == null || entryPoint.ActiveStateMachine.Phase != Phase.Planning)
+                return Fail("Combat is not accepting plans outside Planning.", out errorMessage);
+
+            CombatTurn turn = _session.CurrentTurn;
+            if (turn == null || turn.Lifecycle != CombatTurnLifecycle.Planning)
+                return Fail("The active turn has already been submitted.", out errorMessage);
+
+            if (!CombatPlanValidator.TryNormalizePlayerDraft(
+                    _session,
+                    draft,
+                    playerActor,
+                    out ActionPlan playerPlan,
+                    out errorMessage))
             {
-                errorMessage = "전투 세션이 연결되지 않았습니다.";
                 return false;
             }
 
-            if (entryPoint == null)
+            foreach (KeyValuePair<CombatantId, ActionPlan> pair in turn.Plans)
             {
-                errorMessage = "CombatEntryPoint 참조가 없습니다.";
+                if (CombatPlanValidator.FindCombatant(_session, pair.Key) == null)
+                    return Fail($"Existing plan actor {pair.Key.Value} is not in the active session.", out errorMessage);
+            }
+
+            Dictionary<CombatantId, ActionPlan> plans = new();
+            plans.Add(playerActor.Id, playerPlan);
+
+            if (!BuildAdditionalAllyPlans(turn, plans, out errorMessage) ||
+                !BuildEnemyPlans(turn, plans, out errorMessage))
+            {
                 return false;
             }
 
-            if (!CombatPlanValidator.ValidatePlayerDraft(_session, draft, playerActor, out errorMessage))
-                return false;
+            if (!turn.TryReplacePlans(plans))
+                return Fail("The active turn stopped accepting plans before commitment.", out errorMessage);
 
-            CommitDraftToSession(draft);
-            FillEnemyPlansFallbackIfMissing();
-            CombatTurnResolver.ResolveTurn(_session);
-            entryPoint.ConfirmPlanningFromUI();
+            if (!entryPoint.SubmitCurrentTurn())
+                return Fail("CombatEntryPoint rejected the committed turn.", out errorMessage);
 
             return true;
         }
 
-        private void CommitDraftToSession(CombatPlanDraft draft)
+        private bool BuildAdditionalAllyPlans(
+            CombatTurn turn,
+            Dictionary<CombatantId, ActionPlan> plans,
+            out string errorMessage)
         {
-            if (draft == null || _session == null || _session.CurrentTurn == null)
-                return;
+            errorMessage = null;
 
-            foreach (var pair in draft.Plans)
-                _session.CurrentTurn.SetPlan(pair.Key, pair.Value);
+            for (int i = 1; i < _session.Allies.Count; i++)
+            {
+                ICombatant ally = _session.Allies[i];
+                if (ally == null)
+                    return Fail("An additional ally is null.", out errorMessage);
+
+                ActionPlan source = turn.TryGetPlan(ally.Id, out ActionPlan existing)
+                    ? existing
+                    : new ActionPlan(PlannedAction.None, PlannedAction.None);
+
+                if (!CombatPlanValidator.TryNormalizePlan(_session, ally, source, out ActionPlan normalized, out errorMessage))
+                    return false;
+
+                plans.Add(ally.Id, normalized);
+            }
+
+            return true;
         }
 
-        private void FillEnemyPlansFallbackIfMissing()
+        private bool BuildEnemyPlans(
+            CombatTurn turn,
+            Dictionary<CombatantId, ActionPlan> plans,
+            out string errorMessage)
         {
-            if (_session == null || _session.CurrentTurn == null || _session.Allies.Count == 0)
-                return;
-
-            ICombatant player = _session.Allies[0];
-            if (player == null || player.HP <= 0)
-            {
-                FillEnemiesWithNone();
-                return;
-            }
+            errorMessage = null;
 
             for (int i = 0; i < _session.Enemies.Count; i++)
             {
                 ICombatant enemy = _session.Enemies[i];
                 if (enemy == null)
-                    continue;
+                    return Fail("An enemy combatant is null.", out errorMessage);
 
-                if (_session.CurrentTurn.TryGetPlan(enemy.Id, out _))
-                    continue;
-
-                if (enemy.HP <= 0 || enemy.IsStunned || enemy.Skills == null || enemy.Skills.Count == 0)
+                ActionPlan source;
+                if (turn.TryGetPlan(enemy.Id, out ActionPlan existing))
                 {
-                    _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(PlannedAction.None, PlannedAction.None));
-                    continue;
+                    source = existing;
+                }
+                else
+                {
+                    source = BuildDeterministicEnemyPlan(enemy);
                 }
 
-                int skillIndex = _session.TurnIndex % enemy.Skills.Count;
-                ISkill selectedSkill = enemy.Skills[skillIndex];
+                if (!CombatPlanValidator.TryNormalizePlan(_session, enemy, source, out ActionPlan normalized, out errorMessage))
+                    return false;
 
-                if (selectedSkill == null)
-                {
-                    _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(PlannedAction.None, PlannedAction.None));
+                plans.Add(enemy.Id, normalized);
+            }
+
+            return true;
+        }
+
+        private ActionPlan BuildDeterministicEnemyPlan(ICombatant enemy)
+        {
+            if (enemy.HP <= 0 || enemy.IsStunned || enemy.Skills == null || enemy.Skills.Count == 0)
+                return NonePlan();
+
+            int startIndex = _session.TurnIndex % enemy.Skills.Count;
+            for (int offset = 0; offset < enemy.Skills.Count; offset++)
+            {
+                ISkill skill = enemy.Skills[(startIndex + offset) % enemy.Skills.Count];
+                if (skill == null || !TryChooseEnemyTarget(enemy, skill, out CombatantId targetId))
                     continue;
-                }
 
-                PlannedAction enemyAction = new PlannedAction(
-                    skillId: selectedSkill.Id,
-                    tag: selectedSkill.Tag,
-                    targeting: selectedSkill.Targeting,
-                    targetCombatantId: player.Id,
-                    plannedSpeed: selectedSkill.Speed,
-                    consumesTurn: selectedSkill.ConsumesTurn
-                );
+                PlannedAction action = new PlannedAction(
+                    skill.Id,
+                    skill.Tag,
+                    skill.Targeting,
+                    targetId,
+                    skill.Speed,
+                    skill.ConsumesTurn);
+                return new ActionPlan(action, PlannedAction.None);
+            }
 
-                _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(enemyAction, PlannedAction.None));
+            return NonePlan();
+        }
+
+        private bool TryChooseEnemyTarget(ICombatant enemy, ISkill skill, out CombatantId targetId)
+        {
+            targetId = default;
+
+            switch (skill.Targeting)
+            {
+                case TargetingRule.None:
+                case TargetingRule.Environment:
+                case TargetingRule.AllEnemies:
+                case TargetingRule.AllAllies:
+                    return true;
+
+                case TargetingRule.Self:
+                    targetId = enemy.Id;
+                    return true;
+
+                case TargetingRule.SingleAlly:
+                    return TryFindFirstLiving(_session.Allies, out targetId);
+
+                case TargetingRule.SingleEnemy:
+                    return TryFindFirstLiving(_session.Enemies, out targetId);
+
+                case TargetingRule.AnySingle:
+                    return TryFindFirstLiving(_session.Allies, out targetId) ||
+                           TryFindFirstLiving(_session.Enemies, out targetId);
+
+                default:
+                    return false;
             }
         }
 
-        private void FillEnemiesWithNone()
+        private static bool TryFindFirstLiving(IReadOnlyList<ICombatant> actors, out CombatantId id)
         {
-            if (_session == null || _session.CurrentTurn == null)
-                return;
-
-            for (int i = 0; i < _session.Enemies.Count; i++)
+            for (int i = 0; i < actors.Count; i++)
             {
-                ICombatant enemy = _session.Enemies[i];
-                if (enemy == null)
-                    continue;
-
-                if (!_session.CurrentTurn.TryGetPlan(enemy.Id, out _))
-                    _session.CurrentTurn.SetPlan(enemy.Id, new ActionPlan(PlannedAction.None, PlannedAction.None));
+                ICombatant actor = actors[i];
+                if (actor != null && actor.HP > 0)
+                {
+                    id = actor.Id;
+                    return true;
+                }
             }
+
+            id = default;
+            return false;
+        }
+
+        private static ActionPlan NonePlan()
+        {
+            return new ActionPlan(PlannedAction.None, PlannedAction.None);
+        }
+
+        private static bool Fail(string message, out string errorMessage)
+        {
+            errorMessage = message;
+            return false;
         }
     }
 }
