@@ -79,6 +79,7 @@ namespace Game.Player
 
             Vector2 center = (Vector2)attackOrigin.position + hitBoxOffset;
             Collider2D[] hits = Physics2D.OverlapBoxAll(center, hitBoxSize, 0f, targetMask);
+            HashSet<GameObject> resolvedEncounterRoots = new HashSet<GameObject>();
 
             for (int i = 0; i < hits.Length; i++)
             {
@@ -87,11 +88,11 @@ namespace Game.Player
                     continue;
 
                 GameObject enemyRoot = ResolveEnemyRoot(hit);
-                if (enemyRoot == null)
+                if (enemyRoot == null || !resolvedEncounterRoots.Add(enemyRoot))
                     continue;
 
                 List<GameObject> enemies = ResolveEnemies(enemyRoot);
-                enemies.RemoveAll(enemy => enemy == null || !enemy.activeInHierarchy);
+                enemies = CreateActiveUniqueSnapshot(enemies);
 
                 if (enemies.Count == 0)
                     continue;
@@ -111,12 +112,30 @@ namespace Game.Player
                 bool started = entryPoint.StartCombat(request);
 
                 if (!started)
-                    continue;
+                    return;
 
                 _combatStarted = true;
                 Debug.Log($"[PlayerFieldAttackController] Combat started by field attack. Reason={startReason}, Initiative={initiativeSide}", this);
                 return;
             }
+        }
+
+        private static List<GameObject> CreateActiveUniqueSnapshot(List<GameObject> source)
+        {
+            int capacity = source != null ? source.Count : 0;
+            List<GameObject> result = new List<GameObject>(capacity);
+            HashSet<GameObject> seen = new HashSet<GameObject>();
+            if (source == null)
+                return result;
+
+            for (int i = 0; i < source.Count; i++)
+            {
+                GameObject candidate = source[i];
+                if (candidate != null && candidate.activeInHierarchy && seen.Add(candidate))
+                    result.Add(candidate);
+            }
+
+            return result;
         }
 
         private GameObject ResolveEnemyRoot(Collider2D hit)

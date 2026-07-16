@@ -110,9 +110,15 @@ namespace Game.Core
                 case GameState.CombatTransition:
                     return to == GameState.CombatPlanning || to == GameState.Reward || to == GameState.Loading;
                 case GameState.CombatPlanning:
-                    return to == GameState.CombatResolving || to == GameState.Reward || to == GameState.UIOnly;
+                    return to == GameState.CombatResolving ||
+                           to == GameState.Reward ||
+                           to == GameState.UIOnly ||
+                           to == GameState.Exploration;
                 case GameState.CombatResolving:
-                    return to == GameState.CombatPlanning || to == GameState.Reward || to == GameState.UIOnly;
+                    return to == GameState.CombatPlanning ||
+                           to == GameState.Reward ||
+                           to == GameState.UIOnly ||
+                           to == GameState.Exploration;
                 case GameState.Reward:
                     return to == GameState.Exploration || to == GameState.Loading || to == GameState.UIOnly;
                 case GameState.Cutscene:

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Game.Combat.Actions;
@@ -26,7 +27,7 @@ namespace Game.Combat.Adapters
             int id = 1;
             CreateSide(session, req.AllyFieldObjects, Side.Allies, _defaultStaggerMaxAllies, ref id);
 
-            int eid = 100;
+            int eid = Math.Max(100, id);
             CreateSide(session, req.EnemyFieldObjects, Side.Enemies, _defaultStaggerMaxEnemies, ref eid);
         }
 

@@ -32,6 +32,8 @@ namespace Game.Combat.Integration
 
         private Collider2D _trigger;
         private bool _armed = true;
+        private bool _requestInProgress;
+        private int _lastRequestFrame = -1;
 
         private void Awake()
         {
@@ -47,9 +49,9 @@ namespace Game.Combat.Integration
 
         private void OnTriggerEnter2D(Collider2D other)
         {
-            if (!_armed)
+            if (!_armed || _requestInProgress || _lastRequestFrame == Time.frameCount)
             {
-                LogDebug($"Ignored trigger from {GetColliderName(other)} because this encounter is disarmed.");
+                LogDebug($"Ignored trigger from {GetColliderName(other)} because this encounter is already processing or disarmed.");
                 return;
             }
 
@@ -63,21 +65,12 @@ namespace Game.Combat.Integration
                 return;
             }
 
-            if (!CanStartInCurrentGameState())
-                return;
-
             if (entryPoint == null)
                 entryPoint = FindFirstObjectByType<CombatEntryPoint>();
 
             if (entryPoint == null)
             {
                 Debug.LogError("[CombatEncounterTrigger2D] EntryPoint is missing.");
-                return;
-            }
-
-            if (entryPoint.ActiveStateMachine != null)
-            {
-                LogDebug($"Ignored trigger because an active combat state machine already exists. Phase={entryPoint.ActiveStateMachine.Phase}.");
                 return;
             }
 
@@ -108,13 +101,22 @@ namespace Game.Combat.Integration
                 return;
             }
 
-            _armed = false;
-
             CombatStartRequest request = CreateEncounterRequest(allies, enemies);
-            bool started = entryPoint.StartCombat(request);
+            bool started;
+            _requestInProgress = true;
+            _lastRequestFrame = Time.frameCount;
+            try
+            {
+                started = entryPoint.StartCombat(request);
+            }
+            finally
+            {
+                _requestInProgress = false;
+            }
 
             if (started)
             {
+                _armed = false;
                 Debug.Log(
                     $"[CombatEncounterTrigger2D] Combat started. " +
                     $"Allies={allies.Count}, Enemies={enemies.Count}, Reason={startReason}, Initiative={initiativeSide}"
@@ -122,8 +124,9 @@ namespace Game.Combat.Integration
             }
             else
             {
+                _armed = true;
                 LogDebug(
-                    "StartCombatFromField returned false. " +
+                    "StartCombat returned false; encounter remains armed. " +
                     $"GameState={GetCurrentGameStateText()}, " +
                     $"ActiveSessionNull={entryPoint.ActiveSession == null}, " +
                     $"ActiveStateMachineNull={entryPoint.ActiveStateMachine == null}, " +
@@ -238,18 +241,6 @@ namespace Game.Combat.Integration
                 Debug.LogWarning($"[CombatEncounterTrigger2D] PlayerTag '{tagName}' is not defined. Trigger ignored. {exception.Message}", this);
                 return false;
             }
-        }
-
-        private bool CanStartInCurrentGameState()
-        {
-            if (GameStateMachine.Instance == null)
-                return true;
-
-            if (GameStateMachine.Instance.Is(GameState.Exploration))
-                return true;
-
-            LogDebug($"Ignored trigger because GameState is {GameStateMachine.Instance.Current}, not {GameState.Exploration}.");
-            return false;
         }
 
         private string GetCurrentGameStateText()
