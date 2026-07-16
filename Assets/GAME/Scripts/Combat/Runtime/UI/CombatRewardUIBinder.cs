@@ -22,6 +22,7 @@ namespace Game.Combat.UI
         private bool _missingEntryPointWarned;
         private bool _missingRewardPanelWarned;
         private bool _missingRewardServiceWarned;
+        private bool _missingGameFlowControllerWarned;
         private bool _invalidCombatRewardWarned;
         private bool _awaitingRewardClose;
 
@@ -117,8 +118,8 @@ namespace Game.Combat.UI
 
             _awaitingRewardClose = true;
 
-            if (countEnemyDefeatOnVictory && result.IsWin)
-                DemoMissionRuntime.GetOrCreate().RegisterEnemyDefeated();
+            if (countEnemyDefeatOnVictory && result.IsWin && DemoMissionRuntime.Instance != null)
+                DemoMissionRuntime.Instance.RegisterEnemyDefeated();
 
             RewardGrantResult grantResult = RewardGrantResult.Empty;
             if (rewardService != null)
@@ -133,8 +134,8 @@ namespace Game.Combat.UI
 
             if (GameFlowController.Instance != null)
                 GameFlowController.Instance.HandleCombatResult(result);
-            else if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.TrySetState(GameState.Reward, nameof(CombatRewardUIBinder));
+            else
+                WarnMissingGameFlowController();
 
             if (rewardPanel != null)
             {
@@ -174,8 +175,8 @@ namespace Game.Combat.UI
 
             if (GameFlowController.Instance != null)
                 GameFlowController.Instance.HandleRewardClosed();
-            else if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.TrySetState(GameState.Exploration, nameof(CombatRewardUIBinder));
+            else
+                WarnMissingGameFlowController();
         }
 
         private void WarnIfMissingReferences()
@@ -209,6 +210,15 @@ namespace Game.Combat.UI
 
             _missingRewardServiceWarned = true;
             Debug.LogWarning("[CombatRewardUIBinder] RewardService is missing. Combat result reward was not granted.", this);
+        }
+
+        private void WarnMissingGameFlowController()
+        {
+            if (_missingGameFlowControllerWarned)
+                return;
+
+            _missingGameFlowControllerWarned = true;
+            Debug.LogWarning("[CombatRewardUIBinder] GameFlowController is missing. Reward and exploration states cannot be requested.", this);
         }
 
         private void WarnInvalidCombatRewardData(CombatResult result)

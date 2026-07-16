@@ -37,6 +37,7 @@ namespace Game.Combat.Core
         private bool _endedRaised;
         private bool _startingCombat;
         private bool _missingGameStateMachineWarned;
+        private bool _missingGameFlowControllerWarned;
         private bool _duplicateStartWarned;
 
         private void Awake()
@@ -141,8 +142,8 @@ namespace Game.Combat.Core
                 openingEffectOrNull
             );
 
-            AddFirstFieldObject(request.AllyFieldObjects, allyFieldObjects);
-            AddFirstFieldObject(request.EnemyFieldObjects, enemyFieldObjects);
+            AddFieldObjects(request.AllyFieldObjects, allyFieldObjects);
+            AddFieldObjects(request.EnemyFieldObjects, enemyFieldObjects);
 
             return StartCombat(request);
         }
@@ -181,8 +182,8 @@ namespace Game.Combat.Core
                 request.OpeningEffectOrNull
             );
 
-            AddFirstFieldObject(resolvedRequest.AllyFieldObjects, request.AllyFieldObjects);
-            AddFirstFieldObject(resolvedRequest.EnemyFieldObjects, request.EnemyFieldObjects);
+            AddFieldObjects(resolvedRequest.AllyFieldObjects, request.AllyFieldObjects);
+            AddFieldObjects(resolvedRequest.EnemyFieldObjects, request.EnemyFieldObjects);
 
             FieldCombatantFactory factory = new FieldCombatantFactory(_book);
             (ActiveSession, ActiveStateMachine) = CombatBootstrapper.StartCombat(resolvedRequest, _book, factory);
@@ -238,7 +239,7 @@ namespace Game.Combat.Core
             return true;
         }
 
-        private static void AddFirstFieldObject(List<GameObject> destination, List<GameObject> source)
+        private static void AddFieldObjects(List<GameObject> destination, List<GameObject> source)
         {
             if (destination == null || source == null)
                 return;
@@ -246,11 +247,10 @@ namespace Game.Combat.Core
             for (int i = 0; i < source.Count; i++)
             {
                 GameObject fieldObject = source[i];
-                if (fieldObject == null)
+                if (fieldObject == null || destination.Contains(fieldObject))
                     continue;
 
                 destination.Add(fieldObject);
-                return;
             }
         }
 
@@ -284,12 +284,12 @@ namespace Game.Combat.Core
             GameFlowController flow = GameFlowController.Instance;
             if (flow == null)
             {
-                GameState target = phase == Phase.Planning
-                    ? GameState.CombatPlanning
-                    : GameState.CombatResolving;
+                if (!_missingGameFlowControllerWarned)
+                {
+                    _missingGameFlowControllerWarned = true;
+                    Debug.LogWarning("[CombatEntryPoint] GameFlowController is missing. Production global combat state cannot be synchronized.", this);
+                }
 
-                if (phase == Phase.Planning || phase == Phase.Resolution || phase == Phase.EndTurn)
-                    GameStateMachine.Instance.TrySetState(target, $"CombatEntryPoint phase={phase}");
                 return;
             }
 
