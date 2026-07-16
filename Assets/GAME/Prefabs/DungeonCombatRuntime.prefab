@@ -1,0 +1,147 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &5918112884379198687
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 109509693221700281}
+  - component: {fileID: 246033644125321637}
+  - component: {fileID: 1278307799562607215}
+  - component: {fileID: 1225493924471486703}
+  - component: {fileID: 4644229064293023481}
+  - component: {fileID: 5730083793567531782}
+  - component: {fileID: 293310029742235814}
+  m_Layer: 0
+  m_Name: DungeonCombatRuntime
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &109509693221700281
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5918112884379198687}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &246033644125321637
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5918112884379198687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fbf096185b8cd914cb6784548fefb4e0, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatCameraController
+  targetCamera: {fileID: 0}
+  explorationCameraFollow: {fileID: 0}
+  mainCamera: {fileID: 0}
+  transitionDuration: 0.35
+  combatPadding: 2
+  minOrthoSize: 4
+  maxOrthoSize: 8
+  combatOffset: {x: 0, y: 0.8, z: 0}
+--- !u!114 &1278307799562607215
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5918112884379198687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dc947ac013251684cbbcbb8a5acf5cc8, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatFormationManager
+  entryPoint: {fileID: 5730083793567531782}
+  enableFormationPlacement: 0
+  allyStartX: -3
+  enemyStartX: 3
+  spacing: 1.5
+  autoFlipCharacters: 1
+  moveDuration: 0.4
+--- !u!114 &1225493924471486703
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5918112884379198687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 50e0a7a1bfd472446ae887e4c7f7af0b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Effects.CombatDirector
+  entryPoint: {fileID: 5730083793567531782}
+  cameraController: {fileID: 246033644125321637}
+  fallbackApproachDuration: 0.2
+  fallbackActionDelay: 0.15
+--- !u!114 &4644229064293023481
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5918112884379198687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87771121262fd914cbcbb2d789f2deda, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Core.CombatFlowOrchestrator
+  entryPoint: {fileID: 5730083793567531782}
+--- !u!114 &5730083793567531782
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5918112884379198687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87780b0c5573e6345a59272ccf2f5e65, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Core.CombatEntryPoint
+  director: {fileID: 1225493924471486703}
+  flowOrchestrator: {fileID: 4644229064293023481}
+  skillDefinitions:
+  - {fileID: 11400000, guid: 762d0613f18cd424eba3e68f2b4e1bf5, type: 2}
+  - {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}
+  - {fileID: 11400000, guid: 3f33bab0ec4af6c4db0b827917ba147d, type: 2}
+  - {fileID: 11400000, guid: 1f9d7ebdbd0b7fd48ace84c03839d87e, type: 2}
+  inspirationMax: 10
+  inspirationStart: 3
+  deactivateDefeatedEnemies: 1
+  destroyDefeatedEnemies: 0
+--- !u!114 &293310029742235814
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5918112884379198687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0fdb663f890e40e3969dd81405af3da2, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.UI.CombatRewardUIBinder
+  entryPoint: {fileID: 5730083793567531782}
+  rewardPanel: {fileID: 0}
+  rewardService: {fileID: 0}
+  countEnemyDefeatOnVictory: 1
+  restoreExplorationAfterRewardClosed: 1
