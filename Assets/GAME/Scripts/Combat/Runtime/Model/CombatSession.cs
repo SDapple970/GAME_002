@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Game.Combat.Core;
 using Game.Combat.Environment;
@@ -16,6 +17,7 @@ namespace Game.Combat.Model
         public Side InitiativeSide { get; }
         public CombatTurn CurrentTurn { get; private set; } = new();
         public KnowledgeBook Knowledge { get; } = new KnowledgeBook();
+        public string CompletionId { get; }
 
         public CombatSession(
             StartReason reason,
@@ -23,6 +25,7 @@ namespace Game.Combat.Model
             InspirationPool inspiration,
             CombatEnvironment env)
         {
+            CompletionId = Guid.NewGuid().ToString("N");
             StartReason = reason;
             InitiativeSide = initiativeSide;
             Inspiration = inspiration;

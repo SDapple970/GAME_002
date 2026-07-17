@@ -1,5 +1,6 @@
 using Game.Combat.Model;
 using Game.NonCombat.Inventory;
+using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using UnityEngine;
@@ -8,17 +9,21 @@ namespace Game.Reward
 {
     public sealed class RewardService : MonoBehaviour
     {
+        private const string LegacyEmptyCombatSourceId = "combat:legacy-empty";
+
         public static RewardService Instance { get; private set; }
 
         [SerializeField] private CurrencyWallet currencyWallet;
         [SerializeField] private InventoryService inventoryService;
 
-        private readonly HashSet<string> _grantedCombatSourceIds = new();
+        private readonly Dictionary<string, RewardGrantResult> _combatGrantLedger = new();
 
         private bool _missingCurrencyWalletWarned;
         private bool _missingInventoryServiceWarned;
         private bool _missingProgressionWarned;
         private bool _duplicateCombatRewardWarned;
+
+        internal int CombatGrantLedgerCount => _combatGrantLedger.Count;
 
         private void Awake()
         {
@@ -31,12 +36,17 @@ namespace Game.Reward
             Instance = this;
         }
 
+        private void OnDestroy()
+        {
+            if (Instance == this)
+                Instance = null;
+        }
+
         public RewardResult GrantCombatResult(CombatResult result)
         {
-            if (result == null || !result.IsWin)
-                return RewardResult.Empty;
-
-            return Grant(CreateCombatRewardRequest(result, null));
+            return result == null
+                ? RewardResult.Empty
+                : Grant(CreateCombatRewardRequest(result, null));
         }
 
         public RewardResult GrantQuestCompletion(string questId, int gold, int exp)
@@ -64,52 +74,65 @@ namespace Game.Reward
 
         public RewardGrantResult GrantReward(RewardGrantRequest request)
         {
-            if (IsDuplicateCombatReward(request))
+            string sourceId = ResolveRequestSourceId(request);
+            if (request.SourceType == RewardSourceType.Combat &&
+                _combatGrantLedger.TryGetValue(sourceId, out RewardGrantResult recorded))
+            {
+                WarnDuplicateCombatReward(sourceId);
                 return new RewardGrantResult(
-                    request.SourceType,
-                    request.SourceId,
-                    0,
-                    0,
-                    null,
-                    0,
+                    recorded.SourceType,
+                    recorded.SourceId,
+                    recorded.Gold,
+                    recorded.Exp,
+                    recorded.ItemId,
+                    recorded.ItemCount,
                     true);
+            }
 
-            int grantedGold = Mathf.Max(0, request.Gold);
-            int grantedExp = Mathf.Max(0, request.Exp);
-            string grantedItemId = string.IsNullOrWhiteSpace(request.ItemId) ? null : request.ItemId;
-            int grantedItemCount = grantedItemId != null ? Mathf.Max(0, request.ItemCount) : 0;
+            int requestedGold = Mathf.Max(0, request.Gold);
+            int acceptedExp = Mathf.Max(0, request.Exp);
+            string requestedItemId = string.IsNullOrWhiteSpace(request.ItemId) ? null : request.ItemId;
+            int requestedItemCount = requestedItemId != null ? Mathf.Max(0, request.ItemCount) : 0;
 
-            if (grantedGold <= 0 && grantedExp <= 0 && grantedItemCount <= 0)
-                return new RewardGrantResult(request.SourceType, request.SourceId, 0, 0, null, 0, false);
+            int appliedGold = 0;
+            int appliedItemCount = 0;
+            if (requestedGold > 0 && GrantGold(requestedGold, request, sourceId))
+                appliedGold = requestedGold;
 
-            if (grantedGold > 0 && !GrantGold(grantedGold, request))
-                grantedGold = 0;
+            if (requestedItemCount > 0 && GrantItem(requestedItemId, requestedItemCount, request, sourceId))
+                appliedItemCount = requestedItemCount;
 
-            if (grantedItemCount > 0 && !GrantItem(grantedItemId, grantedItemCount, request))
-                grantedItemCount = 0;
+            if (acceptedExp > 0)
+                WarnMissingProgressionOnce(acceptedExp, request, sourceId);
 
-            if (grantedExp > 0)
-                WarnMissingProgressionOnce(grantedExp, request);
-
-            return new RewardGrantResult(
+            RewardGrantResult result = new RewardGrantResult(
                 request.SourceType,
-                request.SourceId,
-                grantedGold,
-                grantedExp,
-                grantedItemId,
-                grantedItemCount,
+                sourceId,
+                appliedGold,
+                acceptedExp,
+                appliedItemCount > 0 ? requestedItemId : null,
+                appliedItemCount,
                 false);
+
+            // A combat request is consumed after its one application attempt. Retrying a
+            // partial attempt could duplicate a channel that already succeeded.
+            if (request.SourceType == RewardSourceType.Combat)
+                _combatGrantLedger[sourceId] = result;
+
+            return result;
         }
 
         public static RewardGrantRequest CreateCombatRewardRequest(CombatResult result, string sourceId)
         {
-            string resolvedSourceId = !string.IsNullOrWhiteSpace(sourceId)
-                ? sourceId
-                : result != null
-                    ? $"combat:{RuntimeHelpers.GetHashCode(result)}"
-                    : "combat:null";
+            string resolvedSourceId = !string.IsNullOrWhiteSpace(result?.CompletionId)
+                ? result.CompletionId
+                : !string.IsNullOrWhiteSpace(sourceId)
+                    ? sourceId
+                    : result != null
+                        ? $"combat:{RuntimeHelpers.GetHashCode(result)}"
+                        : "combat:null";
 
-            if (result == null || !result.IsWin)
+            if (!IsVictory(result))
                 return new RewardGrantRequest(RewardSourceType.Combat, resolvedSourceId);
 
             return new RewardGrantRequest(
@@ -119,69 +142,98 @@ namespace Game.Reward
                 result.TotalExp);
         }
 
-        private bool IsDuplicateCombatReward(RewardGrantRequest request)
+        internal void ResetCombatLedgerForTests()
         {
-            if (request.SourceType != RewardSourceType.Combat ||
-                string.IsNullOrWhiteSpace(request.SourceId))
-            {
-                return false;
-            }
-
-            if (_grantedCombatSourceIds.Add(request.SourceId))
-                return false;
-
-            if (!_duplicateCombatRewardWarned)
-            {
-                _duplicateCombatRewardWarned = true;
-                Debug.LogWarning($"[RewardService] Duplicate combat reward blocked. sourceId={request.SourceId}", this);
-            }
-
-            return true;
+            _combatGrantLedger.Clear();
+            _duplicateCombatRewardWarned = false;
         }
 
-        private bool GrantGold(int amount, RewardGrantRequest request)
+        private static bool IsVictory(CombatResult result)
+        {
+            if (result == null)
+                return false;
+
+            return result.EndReason != CombatEndReason.None
+                ? result.EndReason == CombatEndReason.Victory
+                : result.IsWin;
+        }
+
+        private static string ResolveRequestSourceId(RewardGrantRequest request)
+        {
+            if (request.SourceType == RewardSourceType.Combat && string.IsNullOrWhiteSpace(request.SourceId))
+                return LegacyEmptyCombatSourceId;
+
+            return request.SourceId;
+        }
+
+        private bool GrantGold(int amount, RewardGrantRequest request, string sourceId)
         {
             CurrencyWallet wallet = currencyWallet != null ? currencyWallet : CurrencyWallet.Instance;
             if (wallet != null)
             {
-                wallet.AddGold(amount);
-                return true;
+                try
+                {
+                    wallet.AddGold(amount);
+                    return true;
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogError($"[RewardService] CurrencyWallet failed while applying combat-safe reward. source={request.SourceType}, sourceId={sourceId}, exception={exception}", this);
+                    return false;
+                }
             }
 
             if (!_missingCurrencyWalletWarned)
             {
                 _missingCurrencyWalletWarned = true;
-                Debug.LogWarning($"[RewardService] CurrencyWallet is missing. Gold reward was not granted. source={request.SourceType}, sourceId={request.SourceId}", this);
+                Debug.LogWarning($"[RewardService] CurrencyWallet is missing. Gold reward was not granted. source={request.SourceType}, sourceId={sourceId}", this);
             }
 
             return false;
         }
 
-        private bool GrantItem(string itemId, int count, RewardGrantRequest request)
+        private bool GrantItem(string itemId, int count, RewardGrantRequest request, string sourceId)
         {
             InventoryService inventory = inventoryService != null ? inventoryService : InventoryService.Instance;
             if (inventory != null)
             {
-                inventory.AddItem(itemId, count);
-                return true;
+                try
+                {
+                    inventory.AddItem(itemId, count);
+                    return true;
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogError($"[RewardService] InventoryService failed while applying combat-safe reward. source={request.SourceType}, sourceId={sourceId}, exception={exception}", this);
+                    return false;
+                }
             }
 
             if (!_missingInventoryServiceWarned)
             {
                 _missingInventoryServiceWarned = true;
-                Debug.LogWarning($"[RewardService] InventoryService is missing. Item reward was not granted. source={request.SourceType}, sourceId={request.SourceId}", this);
+                Debug.LogWarning($"[RewardService] InventoryService is missing. Item reward was not granted. source={request.SourceType}, sourceId={sourceId}", this);
             }
 
             return false;
         }
 
-        private void WarnMissingProgressionOnce(int exp, RewardGrantRequest request)
+        private void WarnMissingProgressionOnce(int exp, RewardGrantRequest request, string sourceId)
         {
             if (_missingProgressionWarned)
                 return;
 
             _missingProgressionWarned = true;
-            Debug.Log($"[RewardService] EXP {exp} received from {request.SourceType}. CharacterProgressionService is not implemented yet.", this);
+            Debug.Log($"[RewardService] EXP {exp} received from {request.SourceType} ({sourceId}). CharacterProgressionService is not implemented yet.", this);
+        }
+
+        private void WarnDuplicateCombatReward(string sourceId)
+        {
+            if (_duplicateCombatRewardWarned)
+                return;
+
+            _duplicateCombatRewardWarned = true;
+            Debug.LogWarning($"[RewardService] Duplicate combat reward blocked. sourceId={sourceId}", this);
         }
     }
 }

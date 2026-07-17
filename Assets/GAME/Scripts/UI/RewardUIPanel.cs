@@ -40,10 +40,15 @@ namespace Game.UI
 
         public event Action OnClosed;
 
+        public bool IsOpen => _presentationOpen;
+        public bool HasActiveCombatResult => _presentationOpen && _pendingResult != null;
+
         private readonly List<GameObject> _spawnedRows = new();
         private CombatResult _pendingResult;
         private bool _closeButtonBound;
         private Coroutine _fieldRewardRoutine;
+        private bool _presentationOpen;
+        private bool _closeRaised;
 
         private void Awake()
         {
@@ -61,6 +66,7 @@ namespace Game.UI
         private void OnDisable()
         {
             UnbindCloseButton();
+            StopFieldRewardMessage();
         }
 
         public void Show(CombatResult result)
@@ -76,10 +82,13 @@ namespace Game.UI
         private void Show(CombatResult result, RewardGrantResult grantResult, bool preferGrantResult)
         {
             BindCloseButton();
+            StopFieldRewardMessage();
             _pendingResult = result;
+            _presentationOpen = true;
+            _closeRaised = false;
             ClearRewardRows();
 
-            bool isWin = result != null && result.IsWin;
+            bool isWin = IsVictory(result);
             SetText(titleText, titleLegacyText, isWin ? victoryTitle : defeatTitle);
             SetText(resultText, resultLegacyText, showResultText ? BuildResultText(isWin) : string.Empty);
 
@@ -94,6 +103,10 @@ namespace Game.UI
 
         public void Hide()
         {
+            StopFieldRewardMessage();
+            _pendingResult = null;
+            _presentationOpen = false;
+            _closeRaised = true;
             ClearRewardRows();
 
             if (root != null)
@@ -108,8 +121,10 @@ namespace Game.UI
             if (string.IsNullOrEmpty(message) || simpleMessageText == null)
                 return false;
 
-            if (_fieldRewardRoutine != null)
-                StopCoroutine(_fieldRewardRoutine);
+            if (_presentationOpen)
+                return false;
+
+            StopFieldRewardMessage();
 
             _fieldRewardRoutine = StartCoroutine(Co_ShowFieldRewardMessage(message));
             return true;
@@ -138,10 +153,33 @@ namespace Game.UI
 
         private void CloseRewardPanel()
         {
+            if (!_presentationOpen || _closeRaised)
+                return;
+
+            _closeRaised = true;
+            _presentationOpen = false;
             _pendingResult = null;
 
-            Hide();
+            StopFieldRewardMessage();
+            ClearRewardRows();
+            if (root != null)
+                root.SetActive(false);
+            if (simpleMessageText != null)
+                simpleMessageText.text = string.Empty;
+
             OnClosed?.Invoke();
+        }
+
+        private void StopFieldRewardMessage()
+        {
+            if (_fieldRewardRoutine != null)
+            {
+                StopCoroutine(_fieldRewardRoutine);
+                _fieldRewardRoutine = null;
+            }
+
+            if (simpleMessageText != null)
+                simpleMessageText.text = string.Empty;
         }
 
         private void AddRewardRow(string text)
@@ -217,7 +255,12 @@ namespace Game.UI
             for (int i = 0; i < _spawnedRows.Count; i++)
             {
                 if (_spawnedRows[i] != null)
-                    Destroy(_spawnedRows[i]);
+                {
+                    if (Application.isPlaying)
+                        Destroy(_spawnedRows[i]);
+                    else
+                        DestroyImmediate(_spawnedRows[i]);
+                }
             }
 
             _spawnedRows.Clear();
@@ -231,6 +274,16 @@ namespace Game.UI
         private string BuildResultText(bool isWin)
         {
             return isWin ? victoryResultText : defeatResultText;
+        }
+
+        private static bool IsVictory(CombatResult result)
+        {
+            if (result == null)
+                return false;
+
+            return result.EndReason != CombatEndReason.None
+                ? result.EndReason == CombatEndReason.Victory
+                : result.IsWin;
         }
 
         private static void SetText(TMP_Text tmpText, Text legacyText, string value)

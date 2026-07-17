@@ -17,6 +17,7 @@ namespace Game.Combat.Integration
         [SerializeField] private GameObject combatCanvasRoot;
 
         private bool _canonicalRouting;
+        private bool _canonicalWorldLifecycle;
 
         private void Awake()
         {
@@ -72,8 +73,11 @@ namespace Game.Combat.Integration
             if (!_canonicalRouting && combatCanvasRoot != null)
                 combatCanvasRoot.SetActive(true);
 
-            fieldLock?.Lock();
-            cameraController?.EnterCombat(session);
+            if (!_canonicalWorldLifecycle)
+            {
+                fieldLock?.Lock();
+                cameraController?.EnterCombat(session);
+            }
 
             if (!_canonicalRouting && planningHUD != null)
             {
@@ -86,7 +90,8 @@ namespace Game.Combat.Integration
 
         private void OnCombatEnded(CombatResult result)
         {
-            cameraController?.HoldResultFrame();
+            if (!_canonicalWorldLifecycle)
+                cameraController?.HoldResultFrame();
 
             if (!_canonicalRouting)
                 planningHUD?.Hide();
@@ -102,8 +107,11 @@ namespace Game.Combat.Integration
             if (!_canonicalRouting)
                 rewardPanel?.Hide();
 
-            cameraController?.ExitToExplorationFollow();
-            fieldLock?.Unlock();
+            if (!_canonicalWorldLifecycle)
+            {
+                cameraController?.ExitToExplorationFollow();
+                fieldLock?.Unlock();
+            }
 
             if (!_canonicalRouting && combatCanvasRoot != null)
                 combatCanvasRoot.SetActive(false);
@@ -115,6 +123,7 @@ namespace Game.Combat.Integration
         {
             _canonicalRouting = FindFirstObjectByType<UIScreenRouter>(FindObjectsInactive.Include) != null &&
                                 FindFirstObjectByType<CombatUIRootController>(FindObjectsInactive.Include) != null;
+            _canonicalWorldLifecycle = CombatWorldLifecycleAdapter.FindFor(entryPoint) != null;
         }
     }
 }

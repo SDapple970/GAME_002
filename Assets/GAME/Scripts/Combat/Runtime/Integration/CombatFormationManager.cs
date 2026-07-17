@@ -21,25 +21,42 @@ namespace Game.Combat.Integration
         [SerializeField] private bool autoFlipCharacters = true;
         [SerializeField] private float moveDuration = 0.4f;
 
+        private bool _legacySubscribed;
+        internal int ApplyCount { get; private set; }
+
         private void OnEnable()
         {
-            if (entryPoint != null)
+            if (entryPoint == null)
+                entryPoint = FindFirstObjectByType<CombatEntryPoint>();
+
+            if (entryPoint != null && CombatWorldLifecycleAdapter.FindFor(entryPoint) == null)
+            {
                 entryPoint.OnCombatStarted += HandleCombatStarted;
+                _legacySubscribed = true;
+            }
         }
 
         private void OnDisable()
         {
-            if (entryPoint != null)
+            if (_legacySubscribed && entryPoint != null)
                 entryPoint.OnCombatStarted -= HandleCombatStarted;
+            _legacySubscribed = false;
         }
 
         private void HandleCombatStarted(CombatSession session)
+        {
+            ApplyFormation(session);
+        }
+
+        internal void ApplyFormation(CombatSession session)
         {
             if (!enableFormationPlacement || session == null)
                 return;
 
             if (session.Allies.Count == 0 || session.Enemies.Count == 0)
                 return;
+
+            ApplyCount++;
 
             Vector3 centerPosition = GetCenterPosition(session);
 

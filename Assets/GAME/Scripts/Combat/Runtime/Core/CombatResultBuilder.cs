@@ -9,6 +9,7 @@ namespace Game.Combat.Core
         {
             var result = new CombatResult
             {
+                CompletionId = session != null ? session.CompletionId : null,
                 EndReason = endReason,
                 IsWin = endReason == CombatEndReason.Victory,
                 EscapeSucceeded = endReason == CombatEndReason.Escape,
@@ -19,7 +20,7 @@ namespace Game.Combat.Core
             if (session == null)
                 return result;
 
-            // ÀÓ½Ã º¸»ó ±ÔÄ¢: ½Â¸® ½Ã¿¡¸¸ Áö±Ş
+            // ì„ì‹œ ë³´ìƒ ê·œì¹™: ìŠ¹ë¦¬ ì‹œì—ë§Œ ì§€ê¸‰
             if (endReason == CombatEndReason.Victory)
             {
                 result.TotalExp = 150;

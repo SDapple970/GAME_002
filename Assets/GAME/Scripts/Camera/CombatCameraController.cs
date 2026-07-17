@@ -22,10 +22,29 @@ namespace Game.Combat.Integration
 
         private CombatSession _session;
         private Coroutine _moveRoutine;
+        private bool _inCombat;
+        private bool _previousExplorationFollowEnabled;
+        private Vector3 _previousCameraPosition;
+        private float _previousOrthoSize;
+        private bool _cameraSnapshotCaptured;
+
+        internal bool IsInCombatMode => _inCombat;
 
         public void EnterCombat(CombatSession session)
         {
             EnsureReferences();
+
+            if (!_inCombat)
+            {
+                _previousExplorationFollowEnabled = explorationCameraFollow != null && explorationCameraFollow.enabled;
+                if (targetCamera != null)
+                {
+                    _previousCameraPosition = targetCamera.transform.position;
+                    _previousOrthoSize = targetCamera.orthographicSize;
+                    _cameraSnapshotCaptured = true;
+                }
+                _inCombat = true;
+            }
 
             _session = session;
 
@@ -72,12 +91,22 @@ namespace Game.Combat.Integration
 
         public void ExitToExplorationFollow()
         {
+            if (!_inCombat && _session == null)
+                return;
+
             StopActiveRoutine();
 
             if (explorationCameraFollow != null)
-                explorationCameraFollow.enabled = true;
+                explorationCameraFollow.enabled = _previousExplorationFollowEnabled;
+            else if (targetCamera != null && _cameraSnapshotCaptured)
+            {
+                targetCamera.transform.position = _previousCameraPosition;
+                targetCamera.orthographicSize = _previousOrthoSize;
+            }
 
             _session = null;
+            _inCombat = false;
+            _cameraSnapshotCaptured = false;
         }
 
         private void EnsureReferences()

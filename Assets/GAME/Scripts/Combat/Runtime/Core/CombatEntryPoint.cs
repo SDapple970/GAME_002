@@ -5,6 +5,7 @@ using Game.Combat.Actions;
 using Game.Combat.Adapters;
 using Game.Combat.Data;
 using Game.Combat.Effects;
+using Game.Combat.Integration;
 using Game.Combat.Model;
 using Game.Core;
 
@@ -39,11 +40,15 @@ namespace Game.Combat.Core
         private bool _missingGameStateMachineWarned;
         private bool _missingGameFlowControllerWarned;
         private bool _duplicateStartWarned;
+        internal bool DeactivateDefeatedFieldObjects => deactivateDefeatedEnemies;
+        internal bool DestroyDefeatedFieldObjects => destroyDefeatedEnemies;
 
         private void Awake()
         {
             if (flowOrchestrator == null)
                 flowOrchestrator = FindFirstObjectByType<CombatFlowOrchestrator>();
+
+            CombatWorldLifecycleAdapter.EnsureFor(this);
 
             _book = new SkillBook();
             if (skillDefinitions == null)
@@ -311,6 +316,10 @@ namespace Game.Combat.Core
 
                 ActiveSession = createdSession;
                 ActiveStateMachine = createdStateMachine;
+                CombatWorldLifecycleAdapter.PrepareEncounterOwner(
+                    this,
+                    createdSession,
+                    normalized.EncounterOwnerOrNull);
 
                 if (flowOrchestrator != null)
                 {
@@ -402,6 +411,7 @@ namespace Game.Combat.Core
                 resolvedInspirationMax,
                 resolvedInspirationStart,
                 request.OpeningEffectOrNull,
+                request.EncounterOwnerOrNull,
                 activeAllies,
                 activeEnemies);
 
@@ -635,6 +645,7 @@ namespace Game.Combat.Core
             public readonly int InspirationMax;
             public readonly int InspirationStart;
             public readonly OpeningEffectSO OpeningEffectOrNull;
+            public readonly UnityEngine.Object EncounterOwnerOrNull;
             public readonly GameObject[] Allies;
             public readonly GameObject[] Enemies;
 
@@ -644,6 +655,7 @@ namespace Game.Combat.Core
                 int inspirationMax,
                 int inspirationStart,
                 OpeningEffectSO openingEffectOrNull,
+                UnityEngine.Object encounterOwnerOrNull,
                 GameObject[] allies,
                 GameObject[] enemies)
             {
@@ -652,6 +664,7 @@ namespace Game.Combat.Core
                 InspirationMax = inspirationMax;
                 InspirationStart = inspirationStart;
                 OpeningEffectOrNull = openingEffectOrNull;
+                EncounterOwnerOrNull = encounterOwnerOrNull;
                 Allies = allies;
                 Enemies = enemies;
             }
@@ -666,6 +679,7 @@ namespace Game.Combat.Core
                     OpeningEffectOrNull);
                 request.AllyFieldObjects.AddRange(Allies);
                 request.EnemyFieldObjects.AddRange(Enemies);
+                request.EncounterOwnerOrNull = EncounterOwnerOrNull;
                 return request;
             }
         }
@@ -756,17 +770,52 @@ namespace Game.Combat.Core
             if (flowOrchestrator != null)
                 flowOrchestrator.BindSession(null);
 
-            ApplyCombatOutcomeToField(endingSession);
+            bool canonicalWorldOwner = CombatWorldLifecycleAdapter.OwnsSession(this, endingSession);
+            if (!canonicalWorldOwner)
+                ApplyCombatOutcomeToField(endingSession);
 
             if (reason == CombatEndReason.None)
                 reason = CombatEndEvaluator.Evaluate(endingSession);
 
             CombatResult result = CombatResultBuilder.Build(endingSession, reason);
-            OnCombatEnded?.Invoke(result);
+            if (endingSession != null && result.CompletionId != endingSession.CompletionId)
+            {
+                Debug.LogError(
+                    $"[CombatEntryPoint] CombatResult completion identity mismatch. " +
+                    $"session={endingSession.CompletionId}, result={result.CompletionId ?? "<missing>"}.",
+                    this);
+            }
 
+            // Completion observers receive a finalized snapshot, never an ended session
+            // that still appears active through the production entry boundary.
             ActiveSession = null;
             ActiveStateMachine = null;
             _startingCombat = false;
+
+            RaiseCombatEnded(result);
+        }
+
+        private void RaiseCombatEnded(CombatResult result)
+        {
+            Action<CombatResult> handlers = OnCombatEnded;
+            if (handlers == null)
+                return;
+
+            Delegate[] invocationList = handlers.GetInvocationList();
+            for (int i = 0; i < invocationList.Length; i++)
+            {
+                try
+                {
+                    ((Action<CombatResult>)invocationList[i]).Invoke(result);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogError(
+                        $"[CombatEntryPoint] OnCombatEnded subscriber failed. " +
+                        $"completionId={result?.CompletionId ?? "<missing>"}, subscriber={invocationList[i].Method.DeclaringType?.FullName}.{invocationList[i].Method.Name}, exception={exception}",
+                        this);
+                }
+            }
         }
 
 #if UNITY_EDITOR

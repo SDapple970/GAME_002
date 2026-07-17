@@ -78,13 +78,36 @@ namespace Game.Core
 
         public void HandleCombatResult(CombatResult result)
         {
-            if (result != null)
-                EnterReward();
+            TryHandleCombatResult(result);
         }
 
         public void HandleRewardClosed()
         {
-            EnterExploration();
+            TryHandleRewardClosed();
+        }
+
+        public bool TryHandleCombatResult(CombatResult result)
+        {
+            if (result == null)
+                return false;
+
+            GameStateMachine stateMachine = GameStateMachine.Instance;
+            if (stateMachine == null)
+                return false;
+
+            if (stateMachine.Is(GameState.Reward))
+                return true;
+
+            return RequestState(GameState.Reward, nameof(TryHandleCombatResult));
+        }
+
+        public bool TryHandleRewardClosed()
+        {
+            GameStateMachine stateMachine = GameStateMachine.Instance;
+            if (stateMachine == null || !stateMachine.Is(GameState.Reward))
+                return false;
+
+            return RequestState(GameState.Exploration, nameof(TryHandleRewardClosed));
         }
     }
 }

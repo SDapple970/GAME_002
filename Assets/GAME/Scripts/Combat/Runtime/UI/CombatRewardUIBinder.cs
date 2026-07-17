@@ -1,30 +1,63 @@
-using UnityEngine;
-using System.Runtime.CompilerServices;
+using System.Collections.Generic;
 using Game.Combat.Core;
 using Game.Combat.Model;
 using Game.Core;
 using Game.DemoMission.Runtime;
 using Game.Reward;
 using Game.UI;
+using UnityEngine;
 
 namespace Game.Combat.UI
 {
     public sealed class CombatRewardUIBinder : MonoBehaviour
     {
+        internal enum CompletionLifecycle
+        {
+            Idle,
+            Processing,
+            AwaitingClose,
+            Completed
+        }
+
+        private static readonly Dictionary<int, CombatRewardUIBinder> OwnersByEntryInstanceId = new();
+
         [SerializeField] private CombatEntryPoint entryPoint;
         [SerializeField] private RewardUIPanel rewardPanel;
         [SerializeField] private RewardService rewardService;
         [SerializeField] private bool countEnemyDefeatOnVictory = true;
         [SerializeField] private bool restoreExplorationAfterRewardClosed = true;
 
-        private bool _entrySubscribed;
-        private bool _rewardSubscribed;
+        private CombatEntryPoint _subscribedEntryPoint;
+        private RewardUIPanel _subscribedRewardPanel;
+        private CombatResult _pendingResult;
+        private RewardGrantResult _pendingGrantResult;
+        private string _activeCompletionId;
+        private string _lastCompletedCompletionId;
+        private CompletionLifecycle _lifecycle;
+        private bool _ownsEntryPoint;
+
         private bool _missingEntryPointWarned;
         private bool _missingRewardPanelWarned;
         private bool _missingRewardServiceWarned;
         private bool _missingGameFlowControllerWarned;
-        private bool _invalidCombatRewardWarned;
-        private bool _awaitingRewardClose;
+        private bool _ambiguousEntryPointWarned;
+        private bool _ambiguousRewardPanelWarned;
+        private bool _ambiguousRewardServiceWarned;
+        private bool _duplicateOwnerWarned;
+        private bool _differentCompletionWarned;
+
+        private int _processedCompletionCount;
+        private int _panelShowCount;
+        private int _rewardStateRequestCount;
+        private int _closeCompletionCount;
+
+        internal CompletionLifecycle Lifecycle => _lifecycle;
+        internal string ActiveCompletionId => _activeCompletionId;
+        internal bool OwnsEntryPoint => _ownsEntryPoint;
+        internal int ProcessedCompletionCount => _processedCompletionCount;
+        internal int PanelShowCount => _panelShowCount;
+        internal int RewardStateRequestCount => _rewardStateRequestCount;
+        internal int CloseCompletionCount => _closeCompletionCount;
 
         private void Awake()
         {
@@ -35,8 +68,13 @@ namespace Game.Combat.UI
         private void OnEnable()
         {
             AutoBindReferences();
-            SubscribeToEntryPoint();
-            SubscribeToRewardPanel();
+            if (TryClaimEntryPointOwnership())
+            {
+                SubscribeToEntryPoint();
+                SubscribeToRewardPanel();
+                RecoverAwaitingClose();
+            }
+
             WarnIfMissingReferences();
         }
 
@@ -44,139 +82,279 @@ namespace Game.Combat.UI
         {
             UnsubscribeFromEntryPoint();
             UnsubscribeFromRewardPanel();
+            ReleaseEntryPointOwnership();
+        }
+
+        private void OnDestroy()
+        {
+            UnsubscribeFromEntryPoint();
+            UnsubscribeFromRewardPanel();
+            ReleaseEntryPointOwnership();
         }
 
         private void AutoBindReferences()
         {
             if (entryPoint == null)
-                entryPoint = FindFirstObjectByType<CombatEntryPoint>();
+                entryPoint = FindUnique<CombatEntryPoint>(ref _ambiguousEntryPointWarned);
 
             if (rewardPanel == null)
-                rewardPanel = FindFirstObjectByType<RewardUIPanel>(FindObjectsInactive.Include);
+                rewardPanel = FindUnique<RewardUIPanel>(ref _ambiguousRewardPanelWarned);
 
             if (rewardService == null)
+            {
                 rewardService = RewardService.Instance != null
                     ? RewardService.Instance
-                    : FindFirstObjectByType<RewardService>();
+                    : FindUnique<RewardService>(ref _ambiguousRewardServiceWarned);
+            }
+        }
+
+        private T FindUnique<T>(ref bool ambiguityWarned) where T : Component
+        {
+            T[] candidates = FindObjectsByType<T>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (candidates.Length == 1)
+                return candidates[0];
+
+            if (candidates.Length > 1 && !ambiguityWarned)
+            {
+                ambiguityWarned = true;
+                Debug.LogWarning($"[CombatRewardUIBinder] Multiple {typeof(T).Name} candidates were found. Assign the intended reference in the Inspector.", this);
+            }
+
+            return null;
+        }
+
+        private bool TryClaimEntryPointOwnership()
+        {
+            if (entryPoint == null)
+                return false;
+
+            int key = entryPoint.GetInstanceID();
+            if (OwnersByEntryInstanceId.TryGetValue(key, out CombatRewardUIBinder owner))
+            {
+                if (owner == null)
+                {
+                    OwnersByEntryInstanceId.Remove(key);
+                }
+                else if (owner != this)
+                {
+                    if (!_duplicateOwnerWarned)
+                    {
+                        _duplicateOwnerWarned = true;
+                        Debug.LogWarning(
+                            $"[CombatRewardUIBinder] Duplicate completion owner blocked for entry '{entryPoint.name}'. " +
+                            $"Active='{owner.name}', Duplicate='{name}'.",
+                            this);
+                    }
+
+                    _ownsEntryPoint = false;
+                    return false;
+                }
+            }
+
+            OwnersByEntryInstanceId[key] = this;
+            _ownsEntryPoint = true;
+            return true;
+        }
+
+        private void ReleaseEntryPointOwnership()
+        {
+            if (!_ownsEntryPoint || entryPoint == null)
+            {
+                _ownsEntryPoint = false;
+                return;
+            }
+
+            int key = entryPoint.GetInstanceID();
+            if (OwnersByEntryInstanceId.TryGetValue(key, out CombatRewardUIBinder owner) && owner == this)
+                OwnersByEntryInstanceId.Remove(key);
+
+            _ownsEntryPoint = false;
         }
 
         private void SubscribeToEntryPoint()
         {
-            if (_entrySubscribed)
+            if (_subscribedEntryPoint == entryPoint)
                 return;
 
-            if (entryPoint == null)
-                return;
-
-            entryPoint.OnCombatEnded += HandleCombatEnded;
-            _entrySubscribed = true;
+            UnsubscribeFromEntryPoint();
+            _subscribedEntryPoint = entryPoint;
+            if (_subscribedEntryPoint != null)
+                _subscribedEntryPoint.OnCombatEnded += HandleCombatEnded;
         }
 
         private void UnsubscribeFromEntryPoint()
         {
-            if (!_entrySubscribed || entryPoint == null)
-            {
-                _entrySubscribed = false;
-                return;
-            }
+            if (_subscribedEntryPoint != null)
+                _subscribedEntryPoint.OnCombatEnded -= HandleCombatEnded;
 
-            entryPoint.OnCombatEnded -= HandleCombatEnded;
-            _entrySubscribed = false;
+            _subscribedEntryPoint = null;
         }
 
         private void SubscribeToRewardPanel()
         {
-            if (_rewardSubscribed)
+            if (_subscribedRewardPanel == rewardPanel)
                 return;
 
-            if (rewardPanel == null)
-                return;
-
-            rewardPanel.OnClosed += HandleRewardClosed;
-            _rewardSubscribed = true;
+            UnsubscribeFromRewardPanel();
+            _subscribedRewardPanel = rewardPanel;
+            if (_subscribedRewardPanel != null)
+                _subscribedRewardPanel.OnClosed += HandleRewardClosed;
         }
 
         private void UnsubscribeFromRewardPanel()
         {
-            if (!_rewardSubscribed || rewardPanel == null)
-            {
-                _rewardSubscribed = false;
-                return;
-            }
+            if (_subscribedRewardPanel != null)
+                _subscribedRewardPanel.OnClosed -= HandleRewardClosed;
 
-            rewardPanel.OnClosed -= HandleRewardClosed;
-            _rewardSubscribed = false;
+            _subscribedRewardPanel = null;
         }
 
         private void HandleCombatEnded(CombatResult result)
         {
-            if (result == null)
+            if (!_ownsEntryPoint || result == null)
                 return;
 
-            if (_awaitingRewardClose)
+            RewardGrantRequest request = RewardService.CreateCombatRewardRequest(result, null);
+            string completionId = request.SourceId;
+
+            if (_lifecycle == CompletionLifecycle.Processing)
                 return;
 
-            _awaitingRewardClose = true;
+            if (_lifecycle == CompletionLifecycle.AwaitingClose)
+            {
+                if (_activeCompletionId != completionId)
+                    WarnDifferentCompletionRejected(completionId);
+                return;
+            }
 
-            if (countEnemyDefeatOnVictory && result.IsWin && DemoMissionRuntime.Instance != null)
-                DemoMissionRuntime.Instance.RegisterEnemyDefeated();
+            if (_lastCompletedCompletionId == completionId)
+                return;
 
-            RewardGrantResult grantResult = RewardGrantResult.Empty;
+            _lifecycle = CompletionLifecycle.Processing;
+            _activeCompletionId = completionId;
+            _pendingResult = result;
+            _pendingGrantResult = RewardGrantResult.Empty;
+            _processedCompletionCount++;
+
+            NotifyDemoMissionCompatibility(result);
+
             if (rewardService != null)
-            {
-                RewardGrantRequest request = BuildCombatRewardRequest(result);
-                grantResult = rewardService.GrantReward(request);
-            }
+                _pendingGrantResult = rewardService.GrantReward(request);
             else
-            {
                 WarnMissingRewardService();
-            }
 
-            if (GameFlowController.Instance != null)
-                GameFlowController.Instance.HandleCombatResult(result);
-            else
-                WarnMissingGameFlowController();
-
+            // Bind local content before the state router exposes the global Reward root.
             if (rewardPanel != null)
             {
-                rewardPanel.Show(result, grantResult);
+                SubscribeToRewardPanel();
+                rewardPanel.Show(result, _pendingGrantResult);
+                _panelShowCount++;
             }
             else
             {
                 WarnIfMissingRewardPanel();
             }
-        }
 
-        private RewardGrantRequest BuildCombatRewardRequest(CombatResult result)
-        {
-            if (result == null)
-                return new RewardGrantRequest(RewardSourceType.Combat, "combat:null");
+            TryEnterRewardState(result);
+            _lifecycle = CompletionLifecycle.AwaitingClose;
 
-            if (result.TotalGold < 0 || result.TotalExp < 0)
-                WarnInvalidCombatRewardData(result);
-
-            string sourceId = $"combat:{RuntimeHelpers.GetHashCode(result)}";
-            return new RewardGrantRequest(
-                RewardSourceType.Combat,
-                sourceId,
-                Mathf.Max(0, result.TotalGold),
-                Mathf.Max(0, result.TotalExp));
+            if (rewardPanel == null)
+                CompleteRewardFlow();
         }
 
         private void HandleRewardClosed()
         {
-            if (!_awaitingRewardClose)
+            if (!_ownsEntryPoint || _lifecycle != CompletionLifecycle.AwaitingClose)
                 return;
 
-            _awaitingRewardClose = false;
+            CompleteRewardFlow();
+        }
+
+        private void CompleteRewardFlow()
+        {
+            if (_lifecycle != CompletionLifecycle.AwaitingClose)
+                return;
+
+            _lifecycle = CompletionLifecycle.Completed;
+            _lastCompletedCompletionId = _activeCompletionId;
+            _activeCompletionId = null;
+            _pendingResult = null;
+            _pendingGrantResult = RewardGrantResult.Empty;
+            _closeCompletionCount++;
 
             if (!restoreExplorationAfterRewardClosed)
                 return;
 
-            if (GameFlowController.Instance != null)
-                GameFlowController.Instance.HandleRewardClosed();
+            GameFlowController flow = GameFlowController.Instance;
+            if (flow != null)
+                flow.TryHandleRewardClosed();
             else
                 WarnMissingGameFlowController();
+        }
+
+        private void TryEnterRewardState(CombatResult result)
+        {
+            GameFlowController flow = GameFlowController.Instance;
+            if (flow == null)
+            {
+                WarnMissingGameFlowController();
+                return;
+            }
+
+            _rewardStateRequestCount++;
+            flow.TryHandleCombatResult(result);
+        }
+
+        private void RecoverAwaitingClose()
+        {
+            if (_lifecycle != CompletionLifecycle.AwaitingClose)
+                return;
+
+            if (rewardService == null)
+            {
+                rewardService = RewardService.Instance != null
+                    ? RewardService.Instance
+                    : FindUnique<RewardService>(ref _ambiguousRewardServiceWarned);
+            }
+
+            if (rewardPanel == null)
+            {
+                rewardPanel = FindUnique<RewardUIPanel>(ref _ambiguousRewardPanelWarned);
+                if (rewardPanel == null)
+                {
+                    WarnIfMissingRewardPanel();
+                    CompleteRewardFlow();
+                    return;
+                }
+            }
+
+            SubscribeToRewardPanel();
+            if (!rewardPanel.IsOpen && _pendingResult != null)
+            {
+                rewardPanel.Show(_pendingResult, _pendingGrantResult);
+                _panelShowCount++;
+            }
+        }
+
+        private void NotifyDemoMissionCompatibility(CombatResult result)
+        {
+            if (!countEnemyDefeatOnVictory || !IsVictory(result) || DemoMissionRuntime.Instance == null)
+                return;
+
+            HashSet<int> uniqueEnemyIds = new HashSet<int>();
+            for (int i = 0; i < result.DefeatedEnemyIds.Count; i++)
+            {
+                if (uniqueEnemyIds.Add(result.DefeatedEnemyIds[i]))
+                    DemoMissionRuntime.Instance.RegisterEnemyDefeated();
+            }
+        }
+
+        private static bool IsVictory(CombatResult result)
+        {
+            return result != null &&
+                   (result.EndReason != CombatEndReason.None
+                       ? result.EndReason == CombatEndReason.Victory
+                       : result.IsWin);
         }
 
         private void WarnIfMissingReferences()
@@ -200,7 +378,7 @@ namespace Game.Combat.UI
                 return;
 
             _missingRewardPanelWarned = true;
-            Debug.LogWarning("[CombatRewardUIBinder] RewardUIPanel is missing. Combat rewards cannot be shown.", this);
+            Debug.LogWarning("[CombatRewardUIBinder] RewardUIPanel is missing. The completion will use the immediate close fallback.", this);
         }
 
         private void WarnMissingRewardService()
@@ -209,7 +387,7 @@ namespace Game.Combat.UI
                 return;
 
             _missingRewardServiceWarned = true;
-            Debug.LogWarning("[CombatRewardUIBinder] RewardService is missing. Combat result reward was not granted.", this);
+            Debug.LogWarning("[CombatRewardUIBinder] RewardService is missing. This completion is consumed without currency or inventory mutation.", this);
         }
 
         private void WarnMissingGameFlowController()
@@ -218,16 +396,23 @@ namespace Game.Combat.UI
                 return;
 
             _missingGameFlowControllerWarned = true;
-            Debug.LogWarning("[CombatRewardUIBinder] GameFlowController is missing. Reward and exploration states cannot be requested.", this);
+            Debug.LogWarning("[CombatRewardUIBinder] GameFlowController is missing. Reward presentation remains local and no global state transition can be requested.", this);
         }
 
-        private void WarnInvalidCombatRewardData(CombatResult result)
+        private void WarnDifferentCompletionRejected(string completionId)
         {
-            if (_invalidCombatRewardWarned)
+            if (_differentCompletionWarned)
                 return;
 
-            _invalidCombatRewardWarned = true;
-            Debug.LogWarning($"[CombatRewardUIBinder] CombatResult reward values were negative and were clamped. gold={result.TotalGold}, exp={result.TotalExp}", this);
+            _differentCompletionWarned = true;
+            Debug.LogWarning(
+                $"[CombatRewardUIBinder] Completion rejected while another reward is awaiting close. active={_activeCompletionId}, rejected={completionId}",
+                this);
+        }
+
+        internal static void ResetOwnershipForTests()
+        {
+            OwnersByEntryInstanceId.Clear();
         }
     }
 }
