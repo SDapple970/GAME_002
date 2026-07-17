@@ -547,13 +547,29 @@ namespace Game.Tests.Combat
         {
             Fixture fixture = CreateFixture();
             PrepareAndResolve(fixture.Session, fixture.PlayerNone(), fixture.EnemyNone());
-            fixture.StateMachine.ConfirmPlanning();
+            Assert.That(fixture.StateMachine.ConfirmPlanning(), Is.True);
+            int initialTurnIndex = fixture.Session.TurnIndex;
+            int initialInspiration = fixture.Session.Inspiration.Current;
 
+            LogAssert.Expect(
+                LogType.Warning,
+                "[CombatStateMachine] No CombatDirector bound. Completing resolution immediately.");
             fixture.StateMachine.Tick();
-            fixture.StateMachine.Tick();
-
             Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.EndTurn));
             Assert.That(fixture.Session.CurrentTurn.Lifecycle, Is.EqualTo(CombatTurnLifecycle.Presented));
+
+            CombatTurn previousTurn = fixture.Session.CurrentTurn;
+            fixture.StateMachine.Tick();
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.Planning));
+            Assert.That(fixture.Session.TurnIndex, Is.EqualTo(initialTurnIndex + 1));
+            Assert.That(previousTurn.Lifecycle, Is.EqualTo(CombatTurnLifecycle.Completed));
+            Assert.That(fixture.Session.CurrentTurn.Lifecycle, Is.EqualTo(CombatTurnLifecycle.Planning));
+            Assert.That(fixture.Session.Inspiration.Current, Is.EqualTo(initialInspiration + 1));
+
+            fixture.StateMachine.Tick();
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.Planning));
+            Assert.That(fixture.Session.TurnIndex, Is.EqualTo(initialTurnIndex + 1));
+            Assert.That(fixture.Session.Inspiration.Current, Is.EqualTo(initialInspiration + 1));
         }
 
         [Test]

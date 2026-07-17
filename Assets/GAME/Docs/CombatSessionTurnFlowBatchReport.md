@@ -231,15 +231,25 @@ The two serialized compatibility button callbacks remain untouched. The Demo cal
 
 Unity version used: `6000.2.6f2`.
 
-- Unity-generated runtime compiler response: passed with zero C# errors.
-- Unity-generated Editor/test compiler response: passed with zero C# errors.
-- Full isolated Unity Editor launch: not completed. One launch failed Package Manager IPC; subsequent `-noUpm` launches repeatedly lost the local Unity Licensing Client. This compiler result therefore proves C# assembly compilation but is not reported as a successful full headless Editor initialization.
+- The original Batch 4 Unity-generated runtime and Editor/test compiler responses passed with zero C# errors.
+- During the local validation correction on 2026-07-17, Unity had not produced a new compilation result before the open Editor stalled during asset refresh. A direct batch-mode run was rejected because that Editor held the project lock. An isolated-copy retry first failed Package Manager IPC and then, with `-noUpm`, repeatedly lost the local Unity Licensing Client before compilation/test discovery. No new zero-error compilation result is claimed yet.
 
-Warnings were six existing warnings only: obsolete TMP word wrapping; unused Legacy `FieldEnemy.OnBattleRequested`; retained unused input compatibility fields on `StoryInteractionController` and `MissionCompleteCutsceneController`; and unused DemoMission `RescueNpcActor.interactKey`. No warning points to a Batch 4 file.
+The original six warnings remained unrelated: obsolete TMP word wrapping; unused Legacy `FieldEnemy.OnBattleRequested`; retained unused input compatibility fields on `StoryInteractionController` and `MissionCompleteCutsceneController`; and unused DemoMission `RescueNpcActor.interactKey`. No warning points to a Batch 4 file.
 
-## 34. CombatSessionTurnFlowTests result
+## 34. CombatSessionTurnFlowTests result and validation correction
 
-Not executed. The 44 generated EditMode cases compile, but the isolated Unity Test Runner produced no XML result because the local Licensing Client repeatedly disconnected. Passed/failed/skipped counts are therefore unavailable and are not claimed.
+Initial manual EditMode run on 2026-07-17:
+
+- 105 total
+- 104 passed
+- 1 failed
+- Failing test: `Game.Tests.Combat.CombatSessionTurnFlowTests.MissingPresenter_UsesImmediateFallbackOnce`
+
+Root cause: the test called `Tick()` twice and then expected `Phase.EndTurn`. The intentional missing-presenter fallback completes presentation during the first Resolution tick and enters EndTurn immediately. The second tick processes EndTurn, completes the previous turn, grants the per-turn Inspiration once, creates the next turn, and enters Planning. The old assertion therefore observed the state machine one tick later than the state it expected; runtime behavior was correct.
+
+Exact test correction: the test now asserts that `ConfirmPlanning()` succeeds, records the initial turn index and Inspiration, expects the missing-presenter warning, and verifies `Presented`/EndTurn after the first tick. It keeps the previous `CombatTurn` reference, then verifies that the second tick marks it `Completed`, increments the turn index exactly once, grants Inspiration exactly once, and creates a new Planning turn. A third tick verifies that Planning, turn index, and Inspiration remain unchanged.
+
+Final rerun result: not completed yet and no pass result is claimed. The open Unity Editor held the project lock and stalled during asset refresh. An isolated-project retry produced no test-results XML because Package Manager IPC failed; the `-noUpm` retry then repeatedly disconnected from the local Unity Licensing Client before test discovery. The isolated failing test, all 44 `CombatSessionTurnFlowTests` cases, and the complete 105-test EditMode suite must still be rerun after the Unity Editor/licensing state is recovered.
 
 ## 35. CombatEntryConsolidationTests result
 
