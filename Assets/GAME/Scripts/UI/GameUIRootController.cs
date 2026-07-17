@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Game.UI
@@ -13,60 +14,122 @@ namespace Game.UI
         [SerializeField] private GameObject pauseRoot;
         [SerializeField] private GameObject loadingRoot;
 
+        private readonly HashSet<string> _warnings = new();
+
+        internal bool TitleVisible => IsVisible(titleRoot);
+        internal bool FieldVisible => IsVisible(fieldRoot);
+        internal bool DialogueVisible => IsVisible(dialogueRoot);
+        internal bool ChoiceVisible => IsVisible(choiceRoot);
+        internal bool CombatVisible => IsVisible(combatRoot);
+        internal bool RewardVisible => IsVisible(rewardRoot);
+        internal bool PauseVisible => IsVisible(pauseRoot);
+        internal bool LoadingVisible => IsVisible(loadingRoot);
+
         private void Awake()
         {
             AutoBindMissingReferences();
         }
 
-        public void SetTitleVisible(bool visible) => SetVisible(titleRoot, visible);
-        public void SetFieldVisible(bool visible) => SetVisible(fieldRoot, visible);
-        public void SetDialogueVisible(bool visible) => SetVisible(dialogueRoot, visible);
-        public void SetChoiceVisible(bool visible) => SetVisible(choiceRoot, visible);
-        public void SetCombatVisible(bool visible) => SetVisible(combatRoot, visible);
-        public void SetRewardVisible(bool visible) => SetVisible(rewardRoot, visible);
-        public void SetPauseVisible(bool visible) => SetVisible(pauseRoot, visible);
-        public void SetLoadingVisible(bool visible) => SetVisible(loadingRoot, visible);
+        public void SetTitleVisible(bool visible) => SetVisible(titleRoot, visible, nameof(titleRoot));
+        public void SetFieldVisible(bool visible) => SetVisible(fieldRoot, visible, nameof(fieldRoot));
+        public void SetDialogueVisible(bool visible) => SetVisible(dialogueRoot, visible, nameof(dialogueRoot));
+        public void SetChoiceVisible(bool visible) => SetVisible(choiceRoot, visible, nameof(choiceRoot));
+        public void SetCombatVisible(bool visible) => SetVisible(combatRoot, visible, nameof(combatRoot));
+        public void SetRewardVisible(bool visible) => SetVisible(rewardRoot, visible, nameof(rewardRoot));
+        public void SetPauseVisible(bool visible) => SetVisible(pauseRoot, visible, nameof(pauseRoot));
+        public void SetLoadingVisible(bool visible) => SetVisible(loadingRoot, visible, nameof(loadingRoot));
 
         public void AutoBindMissingReferences()
         {
-            titleRoot ??= FindByName("TitleRoot");
-            titleRoot ??= FindByName("TitleGroup");
-            fieldRoot ??= FindObjectRoot<OverworldHUDRoot>();
-            dialogueRoot ??= FindObjectRoot<Game.Story.UI.DialoguePanel>();
-            dialogueRoot ??= FindObjectRoot<Game.Story.UI.DialogueUIPanel>();
-            dialogueRoot ??= FindObjectRoot<Game.Story.UI.StoryDialogueHUD>();
-            choiceRoot ??= FindObjectRoot<Game.Story.UI.ChoiceUIPanel>();
-            choiceRoot ??= FindObjectRoot<Game.Story.UI.TimedChoicePanel>();
-            combatRoot ??= FindObjectRoot<Game.Combat.UI.CombatUIRootController>();
-            combatRoot ??= FindObjectRoot<Game.Combat.UI.CombatPlanningHUD>();
-            rewardRoot ??= FindObjectRoot<RewardUIPanel>();
-            pauseRoot ??= FindByName("PauseMenu");
-            loadingRoot ??= FindByName("LoadingPanel");
+            titleRoot ??= FindUniqueByName("TitleRoot", "TitleGroup");
+            fieldRoot ??= FindUniqueObjectRoot<OverworldHUDRoot>();
+            dialogueRoot ??= FindUniqueObjectRoot<Game.Story.UI.DialoguePanel>();
+            dialogueRoot ??= FindUniqueObjectRoot<Game.Story.UI.DialogueUIPanel>();
+            dialogueRoot ??= FindUniqueObjectRoot<Game.Story.UI.StoryDialogueHUD>();
+            choiceRoot ??= FindUniqueObjectRoot<Game.Story.UI.ChoiceUIPanel>();
+            choiceRoot ??= FindUniqueObjectRoot<Game.Story.UI.TimedChoicePanel>();
+            combatRoot ??= FindUniqueObjectRoot<Game.Combat.UI.CombatUIRootController>();
+            combatRoot ??= FindUniqueObjectRoot<Game.Combat.UI.CombatPlanningHUD>();
+            rewardRoot ??= FindUniqueObjectRoot<RewardUIPanel>();
+            pauseRoot ??= FindUniqueByName("PauseMenu");
+            loadingRoot ??= FindUniqueByName("LoadingPanel");
         }
 
-        private static void SetVisible(GameObject root, bool visible)
+        private void SetVisible(GameObject root, bool visible, string rootName)
         {
-            if (root != null && root.activeSelf != visible)
+            if (root == null)
+            {
+                if (visible)
+                    WarnOnce(rootName, $"[GameUIRootController] {rootName} is missing. Assign the global UI root in the Inspector.");
+                return;
+            }
+
+            if (transform.IsChildOf(root.transform))
+            {
+                WarnOnce(rootName + ":owner", $"[GameUIRootController] {rootName} contains the routing owner and cannot be toggled safely. Assign a child content root instead.");
+                return;
+            }
+
+            if (root.activeSelf != visible)
                 root.SetActive(visible);
         }
 
-        private static GameObject FindObjectRoot<T>() where T : Component
+        private GameObject FindUniqueObjectRoot<T>() where T : Component
         {
-            T component = FindFirstObjectByType<T>(FindObjectsInactive.Include);
-            return component != null ? component.gameObject : null;
+            T[] candidates = FindObjectsByType<T>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (candidates.Length == 1)
+                return candidates[0] != null ? candidates[0].gameObject : null;
+
+            if (candidates.Length > 1)
+                WarnOnce(typeof(T).FullName, $"[GameUIRootController] Multiple {typeof(T).Name} candidates were found. Assign the intended root in the Inspector.");
+
+            return null;
         }
 
-        private static GameObject FindByName(string objectName)
+        private GameObject FindUniqueByName(params string[] objectNames)
         {
             Transform[] transforms = FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            GameObject match = null;
+            int matchCount = 0;
             for (int i = 0; i < transforms.Length; i++)
             {
                 Transform candidate = transforms[i];
-                if (candidate != null && candidate.name == objectName)
-                    return candidate.gameObject;
+                if (candidate == null || !MatchesAny(candidate.name, objectNames))
+                    continue;
+
+                match = candidate.gameObject;
+                matchCount++;
             }
 
+            if (matchCount == 1)
+                return match;
+
+            if (matchCount > 1)
+                WarnOnce(string.Join("|", objectNames), $"[GameUIRootController] Multiple named root candidates ({string.Join(", ", objectNames)}) were found. Assign the intended root in the Inspector.");
+
             return null;
+        }
+
+        private void WarnOnce(string key, string message)
+        {
+            if (_warnings.Add(key))
+                Debug.LogWarning(message, this);
+        }
+
+        private static bool MatchesAny(string value, string[] candidates)
+        {
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                if (value == candidates[i])
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsVisible(GameObject root)
+        {
+            return root != null && root.activeSelf;
         }
     }
 }

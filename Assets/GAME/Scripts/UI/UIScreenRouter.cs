@@ -1,5 +1,6 @@
 using Game.Core;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Game.UI
 {
@@ -8,9 +9,16 @@ namespace Game.UI
     {
         [SerializeField] private GameUIRootController uiRoot;
         [SerializeField] private GameStateMachine stateMachine;
+        [SerializeField] private bool logRouteChanges;
 
+        private GameStateMachine _subscribedStateMachine;
         private bool _missingUiRootWarned;
         private bool _missingStateMachineWarned;
+        private GameState? _lastState;
+        private GameState? _lastContentState;
+
+        internal GameState? CurrentRoutedState => _lastState;
+        internal GameState? CurrentContentState => _lastContentState;
 
         private void Awake()
         {
@@ -19,18 +27,33 @@ namespace Game.UI
 
         private void OnEnable()
         {
-            ResolveReferences();
-
-            if (stateMachine != null)
-                stateMachine.OnStateChanged += HandleStateChanged;
-
-            Apply(GameStateMachine.Instance != null ? GameStateMachine.Instance.Current : GameState.Exploration);
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
+            SceneManager.sceneLoaded += HandleSceneLoaded;
+            ResolveAndSubscribe();
+            ApplyCurrentRoute();
         }
 
         private void OnDisable()
         {
-            if (stateMachine != null)
-                stateMachine.OnStateChanged -= HandleStateChanged;
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
+            UnsubscribeFromStateMachine();
+        }
+
+        public void ApplyCurrentRoute()
+        {
+            ResolveReferences();
+            Apply(stateMachine != null ? stateMachine.Current : GameState.Exploration);
+        }
+
+        internal void ApplyState(GameState state)
+        {
+            Apply(state);
+        }
+
+        private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            ResolveAndSubscribe();
+            ApplyCurrentRoute();
         }
 
         private void HandleStateChanged(GameState previous, GameState next)
@@ -46,16 +69,72 @@ namespace Game.UI
                 return;
             }
 
-            bool isCombat = GameStateMachine.IsCombatState(state);
+            GameState contentState = state == GameState.Paused
+                ? ResolvePausedContentState()
+                : state;
+
+            ApplyContentRoute(contentState);
+            uiRoot.SetPauseVisible(state == GameState.Paused);
+
+            bool changed = _lastState != state || _lastContentState != contentState;
+            _lastState = state;
+            _lastContentState = contentState;
+
+            if (changed && logRouteChanges)
+                Debug.Log($"[UIScreenRouter] State={state}, Content={contentState}, Route={DescribeRoute(contentState)}", this);
+        }
+
+        private void ApplyContentRoute(GameState state)
+        {
+            bool showDialogue = state == GameState.Dialogue ||
+                                state == GameState.Choice ||
+                                state == GameState.Cutscene;
+
+            // Dungeon 1 presents narrative UI over the field. FieldRoot is the field HUD,
+            // never the field world/camera, so the world remains outside this router.
+            bool showField = state == GameState.Exploration ||
+                             state == GameState.Dialogue ||
+                             state == GameState.Choice;
 
             uiRoot.SetTitleVisible(state == GameState.Title);
-            uiRoot.SetFieldVisible(state == GameState.Exploration);
-            uiRoot.SetDialogueVisible(state == GameState.Dialogue || state == GameState.Cutscene);
+            uiRoot.SetFieldVisible(showField);
+            uiRoot.SetDialogueVisible(showDialogue);
             uiRoot.SetChoiceVisible(state == GameState.Choice);
-            uiRoot.SetCombatVisible(isCombat);
+            uiRoot.SetCombatVisible(GameStateMachine.IsCombatState(state));
             uiRoot.SetRewardVisible(state == GameState.Reward);
-            uiRoot.SetPauseVisible(state == GameState.Paused);
             uiRoot.SetLoadingVisible(state == GameState.Loading || state == GameState.Boot);
+        }
+
+        private GameState ResolvePausedContentState()
+        {
+            if (stateMachine == null)
+                return _lastContentState ?? GameState.Exploration;
+
+            GameState previous = stateMachine.Previous;
+            return previous == GameState.Paused
+                ? _lastContentState ?? GameState.Exploration
+                : previous;
+        }
+
+        private void ResolveAndSubscribe()
+        {
+            ResolveReferences();
+
+            if (_subscribedStateMachine == stateMachine)
+                return;
+
+            UnsubscribeFromStateMachine();
+            _subscribedStateMachine = stateMachine;
+            if (_subscribedStateMachine != null)
+                _subscribedStateMachine.OnStateChanged += HandleStateChanged;
+        }
+
+        private void UnsubscribeFromStateMachine()
+        {
+            if (_subscribedStateMachine != null)
+                _subscribedStateMachine.OnStateChanged -= HandleStateChanged;
+
+            _subscribedStateMachine = null;
         }
 
         private void ResolveReferences()
@@ -63,13 +142,34 @@ namespace Game.UI
             if (uiRoot == null)
                 uiRoot = FindFirstObjectByType<GameUIRootController>(FindObjectsInactive.Include);
 
-            if (stateMachine == null)
-                stateMachine = GameStateMachine.Instance != null
-                    ? GameStateMachine.Instance
-                    : FindFirstObjectByType<GameStateMachine>();
+            GameStateMachine singleton = GameStateMachine.Instance;
+            if (singleton != null && stateMachine != singleton)
+                stateMachine = singleton;
+            else if (stateMachine == null)
+                stateMachine = FindFirstObjectByType<GameStateMachine>(FindObjectsInactive.Include);
 
             WarnIfMissingStateMachine();
             WarnIfMissingUiRoot();
+        }
+
+        private static string DescribeRoute(GameState state)
+        {
+            if (GameStateMachine.IsCombatState(state))
+                return "Combat";
+
+            return state switch
+            {
+                GameState.Boot => "Loading",
+                GameState.Title => "Title",
+                GameState.Exploration => "Field",
+                GameState.Dialogue => "Field+Dialogue",
+                GameState.Choice => "Field+Dialogue+Choice",
+                GameState.Reward => "Reward",
+                GameState.Cutscene => "Dialogue",
+                GameState.Loading => "Loading",
+                GameState.UIOnly => "None (compatibility)",
+                _ => "None"
+            };
         }
 
         private void WarnIfMissingUiRoot()

@@ -231,8 +231,9 @@ The two serialized compatibility button callbacks remain untouched. The Demo cal
 
 Unity version used: `6000.2.6f2`.
 
-- The original Batch 4 Unity-generated runtime and Editor/test compiler responses passed with zero C# errors.
-- During the local validation correction on 2026-07-17, Unity had not produced a new compilation result before the open Editor stalled during asset refresh. A direct batch-mode run was rejected because that Editor held the project lock. An isolated-copy retry first failed Package Manager IPC and then, with `-noUpm`, repeatedly lost the local Unity Licensing Client before compilation/test discovery. No new zero-error compilation result is claimed yet.
+- Final local Unity Test Runner validation completed on 2026-07-17.
+- Unity runtime compilation completed with zero C# errors.
+- Unity Editor/test assembly compilation completed with zero C# errors.
 
 The original six warnings remained unrelated: obsolete TMP word wrapping; unused Legacy `FieldEnemy.OnBattleRequested`; retained unused input compatibility fields on `StoryInteractionController` and `MissionCompleteCutsceneController`; and unused DemoMission `RescueNpcActor.interactKey`. No warning points to a Batch 4 file.
 
@@ -249,23 +250,27 @@ Root cause: the test called `Tick()` twice and then expected `Phase.EndTurn`. Th
 
 Exact test correction: the test now asserts that `ConfirmPlanning()` succeeds, records the initial turn index and Inspiration, expects the missing-presenter warning, and verifies `Presented`/EndTurn after the first tick. It keeps the previous `CombatTurn` reference, then verifies that the second tick marks it `Completed`, increments the turn index exactly once, grants Inspiration exactly once, and creates a new Planning turn. A third tick verifies that Planning, turn index, and Inspiration remain unchanged.
 
-Final rerun result: not completed yet and no pass result is claimed. The open Unity Editor held the project lock and stalled during asset refresh. An isolated-project retry produced no test-results XML because Package Manager IPC failed; the `-noUpm` retry then repeatedly disconnected from the local Unity Licensing Client before test discovery. The isolated failing test, all 44 `CombatSessionTurnFlowTests` cases, and the complete 105-test EditMode suite must still be rerun after the Unity Editor/licensing state is recovered.
+Final rerun result:
+
+- Isolated `MissingPresenter_UsesImmediateFallbackOnce`: 1 passed, 0 failed, 0 skipped.
+- `CombatSessionTurnFlowTests`: 44 passed, 0 failed, 0 skipped.
+- Complete EditMode suite: 105 passed, 0 failed, 0 skipped.
 
 ## 35. CombatEntryConsolidationTests result
 
-Not executed in this batch because the Unity Test Runner was blocked before test discovery. No pass result is claimed.
+35 passed, 0 failed, 0 skipped in the final complete EditMode rerun.
 
 ## 36. CombatFoundationTests result
 
-Not executed in this batch because the Unity Test Runner was blocked before test discovery. No pass result is claimed.
+2 passed, 0 failed, 0 skipped in the final complete EditMode rerun.
 
 ## 37. GameStateOwnershipTests result
 
-Not executed in this batch because the Unity Test Runner was blocked before test discovery. No pass result is claimed.
+6 passed, 0 failed, 0 skipped in the final complete EditMode rerun.
 
 ## 38. InputOwnershipTests result
 
-Not executed in this batch because the Unity Test Runner was blocked before test discovery. No pass result is claimed.
+18 passed, 0 failed, 0 skipped in the final complete EditMode rerun.
 
 ## 39. Manual Play Mode result
 
@@ -287,7 +292,6 @@ Required manual procedure:
 
 ## 40. Unexecuted tests
 
-- All five requested EditMode suites due the Unity Licensing Client blocker.
 - Dungeon 1 interactive Play Mode.
 - Director interruption with live coroutines and field objects.
 - Visual area-action, formation, widget, camera, VFX, and SFX behavior.
@@ -295,7 +299,6 @@ Required manual procedure:
 
 ## 41. Known risks
 
-- Automated behavioral results remain unverified until Unity licensing permits the Test Runner.
 - The shared Inspiration pool funds both sides; ownership was deliberately preserved.
 - `CombatTimeline` retains its legacy static order counter, but production does not call it.
 - The Test-scene direct `CombatTestRunner` remains an isolated bypass and does not represent canonical submission.

@@ -34,7 +34,8 @@ namespace Game.Combat.UI
         private ISkill _selectedSkill;
         private ICombatant _selectedTarget;
         private int _shownTurnIndex = -1;
-        private bool _entrySubscribed;
+        private CombatEntryPoint _subscribedEntryPoint;
+        private CombatStateMachine _activeStateMachine;
         private bool _confirmBound;
         private bool _submittedThisPlanning;
         private bool _missingEntryPointWarned;
@@ -60,23 +61,15 @@ namespace Game.Combat.UI
         private void OnDisable()
         {
             UnsubscribeFromEntryPoint();
+            UnsubscribeFromStateMachine();
             UnbindConfirmButton();
-        }
-
-        private void Update()
-        {
-            if (_session == null || entryPoint == null || entryPoint.ActiveStateMachine == null)
-                return;
-
-            if (entryPoint.ActiveStateMachine.Phase == Phase.Planning &&
-                _session.TurnIndex != _shownTurnIndex)
-            {
-                Show();
-            }
         }
 
         public void Bind(CombatSession session)
         {
+            if (ReferenceEquals(_session, session))
+                return;
+
             _session = session;
             _shownTurnIndex = -1;
             ResetSelection();
@@ -84,8 +77,20 @@ namespace Game.Combat.UI
 
         public void Show()
         {
+            EnterPlanning(_session != null ? _session.CurrentTurn : null);
+        }
+
+        public void EnterPlanning(CombatTurn turn)
+        {
             if (_session == null)
                 return;
+
+            if (_shownTurnIndex == _session.TurnIndex &&
+                panelPlanning != null && panelPlanning.activeSelf)
+            {
+                RefreshConfirmState();
+                return;
+            }
 
             _player = _session.Allies.Count > 0 ? _session.Allies[0] : null;
             _shownTurnIndex = _session.TurnIndex;
@@ -108,6 +113,14 @@ namespace Game.Combat.UI
 
         public void Hide()
         {
+            ExitPlanning();
+        }
+
+        public void ExitPlanning()
+        {
+            if (confirmButton != null)
+                confirmButton.interactable = false;
+
             if (panelPlanning != null)
             {
                 panelPlanning.SetActive(false);
@@ -131,25 +144,46 @@ namespace Game.Combat.UI
 
         private void SubscribeToEntryPoint()
         {
-            if (_entrySubscribed || entryPoint == null)
+            if (_subscribedEntryPoint == entryPoint)
                 return;
 
-            entryPoint.OnCombatStarted += HandleCombatStarted;
-            entryPoint.OnCombatEnded += HandleCombatEnded;
-            _entrySubscribed = true;
+            UnsubscribeFromEntryPoint();
+            _subscribedEntryPoint = entryPoint;
+            if (_subscribedEntryPoint == null)
+                return;
+
+            _subscribedEntryPoint.OnCombatStarted += HandleCombatStarted;
+            _subscribedEntryPoint.OnCombatEnded += HandleCombatEnded;
         }
 
         private void UnsubscribeFromEntryPoint()
         {
-            if (!_entrySubscribed || entryPoint == null)
+            if (_subscribedEntryPoint != null)
             {
-                _entrySubscribed = false;
-                return;
+                _subscribedEntryPoint.OnCombatStarted -= HandleCombatStarted;
+                _subscribedEntryPoint.OnCombatEnded -= HandleCombatEnded;
             }
 
-            entryPoint.OnCombatStarted -= HandleCombatStarted;
-            entryPoint.OnCombatEnded -= HandleCombatEnded;
-            _entrySubscribed = false;
+            _subscribedEntryPoint = null;
+        }
+
+        private void SubscribeToStateMachine(CombatStateMachine stateMachine)
+        {
+            if (_activeStateMachine == stateMachine)
+                return;
+
+            UnsubscribeFromStateMachine();
+            _activeStateMachine = stateMachine;
+            if (_activeStateMachine != null)
+                _activeStateMachine.OnPhaseChanged += HandlePhaseChanged;
+        }
+
+        private void UnsubscribeFromStateMachine()
+        {
+            if (_activeStateMachine != null)
+                _activeStateMachine.OnPhaseChanged -= HandlePhaseChanged;
+
+            _activeStateMachine = null;
         }
 
         private void BindConfirmButton()
@@ -185,21 +219,35 @@ namespace Game.Combat.UI
                 return;
 
             Bind(entryPoint.ActiveSession);
-            if (entryPoint.ActiveStateMachine != null && entryPoint.ActiveStateMachine.Phase == Phase.Planning)
-                Show();
+            SubscribeToStateMachine(entryPoint.ActiveStateMachine);
+            if (entryPoint.ActiveStateMachine != null)
+                ApplyPhase(entryPoint.ActiveStateMachine.Phase);
         }
 
         private void HandleCombatStarted(CombatSession session)
         {
-            Debug.Log("[CombatPlanningHUD] OnCombatStarted received. Show() will be called.", this);
             Bind(session);
-            Show();
+            SubscribeToStateMachine(entryPoint != null ? entryPoint.ActiveStateMachine : null);
+            ApplyPhase(_activeStateMachine != null ? _activeStateMachine.Phase : Phase.EnterCombat);
+        }
+
+        private void HandlePhaseChanged(Phase previous, Phase next)
+        {
+            ApplyPhase(next);
+        }
+
+        private void ApplyPhase(Phase phase)
+        {
+            if (phase == Phase.Planning)
+                EnterPlanning(_session != null ? _session.CurrentTurn : null);
+            else
+                ExitPlanning();
         }
 
         private void HandleCombatEnded(CombatResult result)
         {
-            Debug.Log("[CombatPlanningHUD] OnCombatEnded received. Hide() will be called.", this);
-            Hide();
+            ExitPlanning();
+            UnsubscribeFromStateMachine();
             _session = null;
             _player = null;
             _selectedSkill = null;
