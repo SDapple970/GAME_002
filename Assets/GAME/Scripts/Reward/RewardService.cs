@@ -4,10 +4,11 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using UnityEngine;
+using Game.NonCombat.Save;
 
 namespace Game.Reward
 {
-    public sealed class RewardService : MonoBehaviour
+    public sealed class RewardService : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
     {
         private const string LegacyEmptyCombatSourceId = "combat:legacy-empty";
 
@@ -146,6 +147,40 @@ namespace Game.Reward
         {
             _combatGrantLedger.Clear();
             _duplicateCombatRewardWarned = false;
+        }
+
+        public void CaptureSaveData(GameSaveData saveData)
+        {
+            if (saveData == null) return;
+            saveData.reward ??= new RewardSaveData();
+            saveData.reward.combatLedger.Clear();
+            foreach (KeyValuePair<string, RewardGrantResult> pair in _combatGrantLedger)
+            {
+                RewardGrantResult result = pair.Value;
+                if (string.IsNullOrWhiteSpace(pair.Key)) continue;
+                saveData.reward.combatLedger.Add(new RewardLedgerSaveData
+                {
+                    sourceType = result.SourceType.ToString(), sourceId = pair.Key, gold = result.Gold,
+                    exp = result.Exp, itemId = result.ItemId, itemCount = result.ItemCount
+                });
+            }
+            saveData.reward.combatLedger.Sort((left, right) => string.CompareOrdinal(left.sourceId, right.sourceId));
+        }
+
+        public void RestoreSaveData(GameSaveData saveData)
+        {
+            _combatGrantLedger.Clear();
+            if (saveData?.reward?.combatLedger == null) return;
+            for (int i = 0; i < saveData.reward.combatLedger.Count; i++)
+            {
+                RewardLedgerSaveData entry = saveData.reward.combatLedger[i];
+                if (entry == null || string.IsNullOrWhiteSpace(entry.sourceId) ||
+                    !Enum.TryParse(entry.sourceType, out RewardSourceType sourceType) || sourceType != RewardSourceType.Combat)
+                    continue;
+                _combatGrantLedger[entry.sourceId] = new RewardGrantResult(sourceType, entry.sourceId,
+                    Mathf.Max(0, entry.gold), Mathf.Max(0, entry.exp),
+                    string.IsNullOrWhiteSpace(entry.itemId) ? null : entry.itemId, Mathf.Max(0, entry.itemCount), false);
+            }
         }
 
         private static bool IsVictory(CombatResult result)

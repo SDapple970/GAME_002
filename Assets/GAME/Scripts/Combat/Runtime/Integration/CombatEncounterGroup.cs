@@ -2,13 +2,15 @@ using System.Collections.Generic;
 using Game.Combat.Adapters;
 using Game.Combat.Model;
 using UnityEngine;
+using Game.NonCombat.Save;
 
 namespace Game.Combat.Integration
 {
-    public sealed class CombatEncounterGroup : MonoBehaviour, ICombatEncounterRuntimeOwner
+    public sealed class CombatEncounterGroup : MonoBehaviour, ICombatEncounterRuntimeOwner, ISaveDataProvider, ISaveDataConsumer
     {
         [SerializeField] private bool autoCollectChildren = true;
         [SerializeField] private List<GameObject> enemies = new();
+        [SerializeField] private string encounterId;
 
         private readonly HashSet<int> _warnedInvalidAutoChildren = new();
         private readonly HashSet<int> _warnedInvalidManualMembers = new();
@@ -22,6 +24,24 @@ namespace Game.Combat.Integration
         internal EncounterRuntimeLifecycle Lifecycle => _lifecycle;
         internal string ActiveCompletionId => _activeCompletionId;
         internal bool HasPlayerPresence => _playerColliderIds.Count > 0;
+
+        public string EncounterId => encounterId;
+
+        public void CaptureSaveData(GameSaveData saveData)
+        {
+            if (saveData == null || _lifecycle != EncounterRuntimeLifecycle.Cleared || string.IsNullOrWhiteSpace(encounterId)) return;
+            saveData.world ??= new WorldSaveData();
+            if (!saveData.world.clearedEncounterIds.Contains(encounterId)) saveData.world.clearedEncounterIds.Add(encounterId);
+        }
+
+        public void RestoreSaveData(GameSaveData saveData)
+        {
+            if (string.IsNullOrWhiteSpace(encounterId) || saveData?.world?.clearedEncounterIds == null || !saveData.world.clearedEncounterIds.Contains(encounterId)) return;
+            _lifecycle = EncounterRuntimeLifecycle.Cleared;
+            _reservationOwner = null; _activeCompletionId = null;
+            List<GameObject> activeEnemies = GetActiveEnemies();
+            for (int i = 0; i < activeEnemies.Count; i++) if (activeEnemies[i] != null) activeEnemies[i].SetActive(false);
+        }
 
         public List<GameObject> GetActiveEnemies()
         {

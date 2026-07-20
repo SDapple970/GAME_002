@@ -29,5 +29,22 @@ namespace Game.NonCombat.Save
 
             return JsonUtility.FromJson<GameSaveData>(json) ?? new GameSaveData();
         }
+
+        public static bool TryFromGameSaveJson(string json, out GameSaveData data)
+        {
+            data = null;
+            if (string.IsNullOrWhiteSpace(json))
+                return false;
+
+            try
+            {
+                data = JsonUtility.FromJson<GameSaveData>(json);
+                return data != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
     }
 }

@@ -1,9 +1,10 @@
 using System.Collections.Generic;
 using UnityEngine;
+using Game.NonCombat.Save;
 
 namespace Game.NonCombat.Progress
 {
-    public sealed class StoryFlagDatabase : MonoBehaviour
+    public sealed class StoryFlagDatabase : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
     {
         public static StoryFlagDatabase Instance { get; private set; }
 
@@ -46,6 +47,25 @@ namespace Game.NonCombat.Progress
                 if (!string.IsNullOrEmpty(pair.Key))
                     _flags[pair.Key] = pair.Value;
             }
+        }
+
+        public void CaptureSaveData(GameSaveData saveData)
+        {
+            if (saveData == null) return;
+            saveData.story ??= new StorySaveData();
+            saveData.story.flags.Clear();
+            foreach (KeyValuePair<string, bool> pair in _flags)
+                if (!string.IsNullOrWhiteSpace(pair.Key)) saveData.story.flags.Add(new SaveBoolEntry { id = pair.Key, value = pair.Value });
+            saveData.story.flags.Sort((left, right) => string.CompareOrdinal(left.id, right.id));
+        }
+
+        public void RestoreSaveData(GameSaveData saveData)
+        {
+            Dictionary<string, bool> flags = new();
+            if (saveData?.story?.flags != null)
+                foreach (SaveBoolEntry entry in saveData.story.flags)
+                    if (entry != null && !string.IsNullOrWhiteSpace(entry.id)) flags[entry.id] = entry.value;
+            ImportFlags(flags);
         }
     }
 }

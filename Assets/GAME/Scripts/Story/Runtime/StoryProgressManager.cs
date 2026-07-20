@@ -1,10 +1,11 @@
 // Assets/GAME/Scripts/Story/Runtime/StoryProgressManager.cs
 using System.Collections.Generic;
 using UnityEngine;
+using Game.NonCombat.Save;
 
 namespace Game.Story
 {
-    public sealed class StoryProgressManager : MonoBehaviour
+    public sealed class StoryProgressManager : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
     {
         public static StoryProgressManager Instance { get; private set; }
 
@@ -62,6 +63,29 @@ namespace Game.Story
         {
             if (string.IsNullOrEmpty(eventId)) return;
             completedEventIds.Remove(eventId);
+        }
+
+        public void CaptureSaveData(GameSaveData saveData)
+        {
+            if (saveData == null) return;
+            saveData.story ??= new StorySaveData();
+            saveData.story.currentChapter = currentChapter;
+            saveData.story.mainProgress = mainProgress;
+            saveData.story.completedEventIds.Clear();
+            saveData.story.completedEventIds.AddRange(completedEventIds);
+            saveData.story.completedEventIds.RemoveAll(string.IsNullOrWhiteSpace);
+            saveData.story.completedEventIds.Sort(System.StringComparer.Ordinal);
+        }
+
+        public void RestoreSaveData(GameSaveData saveData)
+        {
+            if (saveData?.story == null) return;
+            currentChapter = Mathf.Max(1, saveData.story.currentChapter);
+            mainProgress = Mathf.Max(0, saveData.story.mainProgress);
+            completedEventIds.Clear();
+            if (saveData.story.completedEventIds == null) return;
+            foreach (string id in saveData.story.completedEventIds)
+                if (!string.IsNullOrWhiteSpace(id)) completedEventIds.Add(id);
         }
     }
 }

@@ -7,11 +7,12 @@ using Game.Combat.Model;
 using Game.Combat.Adapters;
 using Game.Core;
 using Game.Player;
+using Game.NonCombat.Save;
 
 namespace Game.Combat.Integration
 {
     [RequireComponent(typeof(Collider2D))]
-    public sealed class CombatEncounterTrigger2D : MonoBehaviour, ICombatEncounterRuntimeOwner
+    public sealed class CombatEncounterTrigger2D : MonoBehaviour, ICombatEncounterRuntimeOwner, ISaveDataProvider, ISaveDataConsumer
     {
         [Header("Bind")]
         [SerializeField] private CombatEntryPoint entryPoint;
@@ -19,6 +20,7 @@ namespace Game.Combat.Integration
         [Header("Enemy")]
         [SerializeField] private GameObject enemyObject;
         [SerializeField] private CombatEncounterGroup encounterGroup;
+        [SerializeField] private string encounterId;
 
         [Header("Opening / Initiative")]
         [SerializeField] private OpeningEffectSO openingEffectOrNull;
@@ -46,6 +48,23 @@ namespace Game.Combat.Integration
         internal EncounterRuntimeLifecycle Lifecycle => encounterGroup != null ? encounterGroup.Lifecycle : _lifecycle;
         internal string ActiveCompletionId => encounterGroup != null ? encounterGroup.ActiveCompletionId : _activeCompletionId;
         internal bool HasPlayerPresence => encounterGroup != null ? encounterGroup.HasPlayerPresence : _playerColliderIds.Count > 0;
+
+        public string EncounterId => encounterId;
+
+        public void CaptureSaveData(GameSaveData saveData)
+        {
+            if (encounterGroup != null || saveData == null || _lifecycle != EncounterRuntimeLifecycle.Cleared || string.IsNullOrWhiteSpace(encounterId)) return;
+            saveData.world ??= new WorldSaveData();
+            if (!saveData.world.clearedEncounterIds.Contains(encounterId)) saveData.world.clearedEncounterIds.Add(encounterId);
+        }
+
+        public void RestoreSaveData(GameSaveData saveData)
+        {
+            if (encounterGroup != null || string.IsNullOrWhiteSpace(encounterId) || saveData?.world?.clearedEncounterIds == null || !saveData.world.clearedEncounterIds.Contains(encounterId)) return;
+            _lifecycle = EncounterRuntimeLifecycle.Cleared;
+            _reservationOwner = null; _activeCompletionId = null;
+            gameObject.SetActive(false);
+        }
 
         private void Awake()
         {

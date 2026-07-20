@@ -275,18 +275,22 @@ namespace Game.Quest
 
             saveData.quest ??= new QuestSaveData();
             saveData.quest.quests.Clear();
-            foreach (KeyValuePair<string, RuntimeQuestState> pair in _runtimeByQuestId)
+            List<string> questIds = new(_runtimeByQuestId.Keys);
+            questIds.Sort(StringComparer.Ordinal);
+            for (int questIndex = 0; questIndex < questIds.Count; questIndex++)
             {
-                RuntimeQuestState state = pair.Value;
+                RuntimeQuestState state = _runtimeByQuestId[questIds[questIndex]];
                 if (state == null || string.IsNullOrWhiteSpace(state.QuestId))
                     continue;
 
                 QuestStateSaveData questState = new()
                 {
                     questId = state.QuestId,
-                    completed = state.Status == QuestStatus.Completed
+                    completed = state.Status == QuestStatus.Completed,
+                    status = state.Status.ToString()
                 };
                 state.AppendObjectiveSaveData(questState.objectives);
+                state.AppendRememberedEventIds(questState.processedEventIds);
                 saveData.quest.quests.Add(questState);
             }
         }
@@ -303,9 +307,11 @@ namespace Game.Quest
                     continue;
 
                 RuntimeQuestState state = GetOrCreateState(questState.questId, FindDefinition(questState.questId));
-                state.Status = questState.completed ? QuestStatus.Completed : QuestStatus.Active;
+                state.Status = Enum.TryParse(questState.status, out QuestStatus status)
+                    ? status
+                    : questState.completed ? QuestStatus.Completed : QuestStatus.Active;
                 state.ApplyObjectiveSaveData(questState.objectives);
-                state.ClearRememberedEventIds();
+                state.ApplyRememberedEventIds(questState.processedEventIds, MaxRememberedEventIdsPerQuest);
             }
         }
 
@@ -467,6 +473,19 @@ namespace Game.Quest
                 _eventIdOrder.Clear();
             }
 
+            public void AppendRememberedEventIds(List<string> destination)
+            {
+                if (destination != null) destination.AddRange(_eventIdOrder);
+            }
+
+            public void ApplyRememberedEventIds(List<string> source, int limit)
+            {
+                ClearRememberedEventIds();
+                if (source == null) return;
+                for (int i = 0; i < source.Count; i++)
+                    if (!string.IsNullOrWhiteSpace(source[i])) TryRememberEventId(source[i], limit);
+            }
+
             public void ResetProgress()
             {
                 _progressByObjectiveId.Clear();
@@ -510,6 +529,7 @@ namespace Game.Quest
                         requiredCount = GetRequiredCount(pair.Key)
                     });
                 }
+                objectives.Sort((left, right) => string.CompareOrdinal(left.objectiveId, right.objectiveId));
             }
 
             public void ApplyObjectiveSaveData(List<QuestObjectiveSaveData> objectives)

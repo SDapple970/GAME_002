@@ -6,6 +6,7 @@ using Game.NonCombat.Inventory;
 using Game.NonCombat.Progress;
 using Game.Systems.Persona;
 using UnityEngine;
+using Game.Core;
 
 namespace Game.NonCombat.Save
 {
@@ -22,15 +23,29 @@ namespace Game.NonCombat.Save
 
         private void Update()
         {
+#if UNITY_EDITOR
             if (UnityEngine.Input.GetKeyDown(KeyCode.F5))
                 Save();
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.F6))
                 Load();
+#endif
         }
 
         public void Save()
         {
+            if (SaveLoadService.Instance != null)
+            {
+                SaveLoadService.Instance.Save();
+                return;
+            }
+
+            if (File.Exists(SavePath) && File.ReadAllText(SavePath).Contains("\"formatId\""))
+            {
+                Debug.LogWarning("[SaveManager] Legacy fallback refused to overwrite a canonical save.", this);
+                return;
+            }
+
             SaveData data = BuildSaveData();
             string json = SaveSerializer.ToJson(data);
             File.WriteAllText(SavePath, json);
@@ -39,6 +54,12 @@ namespace Game.NonCombat.Save
 
         public void Load()
         {
+            if (SaveLoadService.Instance != null)
+            {
+                SaveLoadService.Instance.Load();
+                return;
+            }
+
             if (!File.Exists(SavePath))
             {
                 Debug.LogWarning($"[SaveManager] Save file not found: {SavePath}", this);
@@ -46,6 +67,11 @@ namespace Game.NonCombat.Save
             }
 
             string json = File.ReadAllText(SavePath);
+            if (json.Contains("\"formatId\"") || json.Contains("\"header\""))
+            {
+                Debug.LogWarning("[SaveManager] Canonical save requires SaveLoadService; Legacy fallback did not restore it.", this);
+                return;
+            }
             ApplySaveData(SaveSerializer.FromJson(json));
             Debug.Log($"[SaveManager] Loaded: {SavePath}", this);
         }

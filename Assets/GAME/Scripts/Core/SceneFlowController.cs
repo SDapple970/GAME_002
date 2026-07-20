@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System;
 
 namespace Game.Core
 {
@@ -31,7 +32,18 @@ namespace Game.Core
             StartCoroutine(Co_LoadScene(sceneName));
         }
 
-        private IEnumerator Co_LoadScene(string sceneName)
+        public void LoadSceneForRestore(string sceneName, Action<bool> completed)
+        {
+            if (string.IsNullOrWhiteSpace(sceneName))
+            {
+                completed?.Invoke(false);
+                return;
+            }
+
+            StartCoroutine(Co_LoadScene(sceneName, false, completed));
+        }
+
+        private IEnumerator Co_LoadScene(string sceneName, bool enterExploration = true, Action<bool> completed = null)
         {
             if (GameFlowController.Instance != null)
                 GameFlowController.Instance.BeginLoading();
@@ -46,16 +58,22 @@ namespace Game.Core
                     GameFlowController.Instance.EnterExploration();
                 else
                     GameStateMachine.Instance?.TrySetState(GameState.Exploration, nameof(SceneFlowController));
+                completed?.Invoke(false);
                 yield break;
             }
 
             while (!operation.isDone)
                 yield return null;
 
-            if (GameFlowController.Instance != null)
-                GameFlowController.Instance.EnterExploration();
-            else
-                GameStateMachine.Instance?.TrySetState(GameState.Exploration, nameof(SceneFlowController));
+            if (enterExploration)
+            {
+                if (GameFlowController.Instance != null)
+                    GameFlowController.Instance.EnterExploration();
+                else
+                    GameStateMachine.Instance?.TrySetState(GameState.Exploration, nameof(SceneFlowController));
+            }
+
+            completed?.Invoke(true);
         }
     }
 }

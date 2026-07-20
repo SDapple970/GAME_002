@@ -77,6 +77,7 @@ namespace Game.NonCombat.Inventory
                 if (!string.IsNullOrEmpty(pair.Key) && pair.Value > 0)
                     saveData.inventory.items.Add(new SaveIntEntry { id = pair.Key, value = pair.Value });
             }
+            saveData.inventory.items.Sort((left, right) => string.CompareOrdinal(left.id, right.id));
         }
 
         public void RestoreSaveData(GameSaveData saveData)
@@ -89,7 +90,10 @@ namespace Game.NonCombat.Inventory
             {
                 SaveIntEntry entry = saveData.inventory.items[i];
                 if (entry != null && !string.IsNullOrEmpty(entry.id) && entry.value > 0)
-                    items[entry.id] = entry.value;
+                {
+                    items.TryGetValue(entry.id, out int current);
+                    items[entry.id] = current > int.MaxValue - entry.value ? int.MaxValue : current + entry.value;
+                }
             }
 
             ImportItems(items);

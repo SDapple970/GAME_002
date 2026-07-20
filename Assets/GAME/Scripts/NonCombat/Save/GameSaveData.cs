@@ -14,15 +14,21 @@ namespace Game.NonCombat.Save
         public ProgressionSaveData progression = new();
         public DemoMissionSaveData demoMission = new();
         public FutureDailySaveData futureDaily = new();
+        public StorySaveData story = new();
+        public RewardSaveData reward = new();
+        public WorldSaveData world = new();
+        public PlayerLocationSaveData location = new();
     }
 
     [Serializable]
     public sealed class SaveHeaderData
     {
-        public int schemaVersion = 1;
+        public string formatId = GameSaveDataFormat.FormatId;
+        public int schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
         public string savedAtUtc;
         public string activeSceneId;
         public string playerSpawnId;
+        public string applicationVersion;
     }
 
     [Serializable]
@@ -36,7 +42,9 @@ namespace Game.NonCombat.Save
     {
         public string questId;
         public bool completed;
+        public string status;
         public List<QuestObjectiveSaveData> objectives = new();
+        public List<string> processedEventIds = new();
     }
 
     [Serializable]
@@ -112,5 +120,59 @@ namespace Game.NonCombat.Save
     {
         public string id;
         public int value;
+    }
+
+    public static class GameSaveDataFormat
+    {
+        public const string FormatId = "GAME_002";
+        public const int CurrentSchemaVersion = 2;
+    }
+
+    [Serializable]
+    public sealed class StorySaveData
+    {
+        public int currentChapter = 1;
+        public int mainProgress;
+        public List<string> completedEventIds = new();
+        public List<SaveBoolEntry> flags = new();
+    }
+
+    [Serializable]
+    public sealed class SaveBoolEntry
+    {
+        public string id;
+        public bool value;
+    }
+
+    [Serializable]
+    public sealed class RewardSaveData
+    {
+        public List<RewardLedgerSaveData> combatLedger = new();
+    }
+
+    [Serializable]
+    public sealed class RewardLedgerSaveData
+    {
+        public string sourceType;
+        public string sourceId;
+        public int gold;
+        public int exp;
+        public string itemId;
+        public int itemCount;
+    }
+
+    [Serializable]
+    public sealed class WorldSaveData
+    {
+        public List<string> clearedEncounterIds = new();
+    }
+
+    [Serializable]
+    public sealed class PlayerLocationSaveData
+    {
+        public bool hasPositionFallback;
+        public float positionX;
+        public float positionY;
+        public float positionZ;
     }
 }

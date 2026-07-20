@@ -6,7 +6,7 @@ using Game.Quest;
 
 namespace Game.DemoMission.Runtime
 {
-    public sealed class DemoMissionRuntime : MonoBehaviour, ISaveDataProvider
+    public sealed class DemoMissionRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
     {
         public const string EnemyDefeatedObjectiveId = "enemy_defeated";
         public const string NpcTalkedObjectiveId = "npc_talked";
@@ -249,6 +249,15 @@ namespace Game.DemoMission.Runtime
             saveData.demoMission.enemyDefeatCount = EnemyDefeatCount;
             saveData.demoMission.npcRescued = IsNpcRescued;
             saveData.demoMission.completed = _completionRaised;
+        }
+
+        public void RestoreSaveData(GameSaveData saveData)
+        {
+            if (saveData?.demoMission == null || TryUseQuestRuntimeProgress()) return;
+            if (!string.IsNullOrWhiteSpace(saveData.demoMission.missionId) && saveData.demoMission.missionId != CurrentQuestId) return;
+            _enemyDefeatCount = Mathf.Max(0, saveData.demoMission.enemyDefeatCount);
+            _isNpcRescued = saveData.demoMission.npcRescued;
+            _completionRaised = saveData.demoMission.completed;
         }
 
         private void ConfigureQuestRuntime()
