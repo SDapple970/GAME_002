@@ -1378,6 +1378,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.QuestTrackerUI
   questManager: {fileID: 0}
+  questRuntime: {fileID: 1407302020}
   root: {fileID: 142427650}
   titleText: {fileID: 236669958}
   objectiveText: {fileID: 223644348}
@@ -2648,7 +2649,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.DemoMission.Runtime.MissionCompletionController
   missionRuntime: {fileID: 1407302019}
-  questRuntime: {fileID: 0}
+  questRuntime: {fileID: 1407302020}
   daySettlementFlow: {fileID: 0}
   objectiveTracker: {fileID: 810412911}
   completePanel: {fileID: 0}
@@ -6108,6 +6109,7 @@ MonoBehaviour:
   entryPoint: {fileID: 1873649839}
   enemyObject: {fileID: 546037145}
   encounterGroup: {fileID: 0}
+  encounterId: dungeon1.ghost.03
   openingEffectOrNull: {fileID: 0}
   startReason: 0
   initiativeSide: 0
@@ -6473,9 +6475,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 482622b941dd48f18f5caf2c9fde399d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.DemoMission.Runtime.RescueNpcActor
-  npcDefinition: {fileID: 0}
-  missionRuntime: {fileID: 0}
-  interactPromptRoot: {fileID: 0}
+  npcDefinition: {fileID: 11400000, guid: 6cd869715ed67d346b8de21f4e2d8bce, type: 2}
+  missionRuntime: {fileID: 1407302019}
+  interactPromptRoot: {fileID: 1958412248}
   playerTag: Player
   interactKey: 102
   requireEnemyKillsBeforeRescue: 1
@@ -9696,7 +9698,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.DemoMission.Runtime.MissionObjectiveTracker
   missionRuntime: {fileID: 1407302019}
-  questRuntime: {fileID: 0}
+  questRuntime: {fileID: 1407302020}
   completionController: {fileID: 268619594}
   objectiveText: {fileID: 0}
   preferQuestRuntime: 1
@@ -9726,13 +9728,14 @@ GameObject:
   - component: {fileID: 810955708}
   - component: {fileID: 810955707}
   - component: {fileID: 810955706}
+  - component: {fileID: 810955709}
   m_Layer: 0
   m_Name: StorySystem
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &810955706
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9745,7 +9748,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b4fefaff238ca0440ade6062b17d3a1a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Story.StoryEventRunner
-  dialoguePanel: {fileID: 0}
+  dialoguePanel: {fileID: 2008015774}
   storyDialogueHUD: {fileID: 0}
   timedChoiceDialoguePanel: {fileID: 2008015773}
   stateWhileRunning: 4
@@ -9783,6 +9786,20 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &810955709
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 810955705}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f6cbbbf5c94d5a4d8c0d54c2c0b5fb6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Story.StoryProgressManager
+  currentChapter: 1
+  mainProgress: 0
 --- !u!1 &824362602
 GameObject:
   m_ObjectHideFlags: 0
@@ -13055,6 +13072,7 @@ MonoBehaviour:
   entryPoint: {fileID: 1873649839}
   enemyObject: {fileID: 1061914872}
   encounterGroup: {fileID: 0}
+  encounterId: dungeon1.ghost.01
   openingEffectOrNull: {fileID: 0}
   startReason: 0
   initiativeSide: 0
@@ -16192,6 +16210,8 @@ GameObject:
   - component: {fileID: 2105100005}
   - component: {fileID: 2105100004}
   - component: {fileID: 2105100006}
+  - component: {fileID: 2105100009}
+  - component: {fileID: 2105100008}
   m_Layer: 0
   m_Name: Systems
   m_TagString: Untagged
@@ -16324,7 +16344,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Story.Interaction.StoryInteractionController
   promptUI: {fileID: 0}
-  runner: {fileID: 0}
+  runner: {fileID: 810955706}
   fallbackInteractKey: 101
   useLegacyFallbackKey: 1
   debugLogs: 0
@@ -16338,6 +16358,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1269336597}
   - component: {fileID: 1269336598}
+  - component: {fileID: 1269336599}
   m_Layer: 0
   m_Name: CombatHUD
   m_TagString: Untagged
@@ -16386,6 +16407,28 @@ MonoBehaviour:
   confirmButton: {fileID: 1259530958}
   errorText: {fileID: 370847187}
   statusText: {fileID: 0}
+--- !u!114 &1269336599
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1269336596}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ba141fb9470922348a7de28e5abc262c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.UI.CombatUIRootController
+  entryPoint: {fileID: 1873649839}
+  combatHudRoot: {fileID: 1269336596}
+  planningPanel: {fileID: 389039796}
+  widgetContainer: {fileID: 0}
+  planningHUD: {fileID: 1269336598}
+  overworldCanvas: {fileID: 0}
+  rewardCanvas: {fileID: 1644438668}
+  hideCombatHudOnAwake: 1
+  autoBindOnAwake: 1
+  logPhaseChanges: 0
 --- !u!1 &1271051630
 GameObject:
   m_ObjectHideFlags: 0
@@ -18110,6 +18153,9 @@ GameObject:
   m_Component:
   - component: {fileID: 1407302018}
   - component: {fileID: 1407302019}
+  - component: {fileID: 1407302020}
+  - component: {fileID: 1407302022}
+  - component: {fileID: 1407302021}
   m_Layer: 0
   m_Name: Mission
   m_TagString: Untagged
@@ -18147,11 +18193,58 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.DemoMission.Runtime.DemoMissionRuntime
   dontDestroyOnLoad: 1
-  currentMission: {fileID: 11400000, guid: f3b854ab5de8ffc4f814758e52f8f784, type: 2}
-  questRuntime: {fileID: 0}
+  currentMission: {fileID: 11400000, guid: 81a3aa3f206789243979d6a77b56496c, type: 2}
+  questRuntime: {fileID: 1407302020}
   bridgeToQuestRuntime: 1
   requireNpcTalkForQuestCompletion: 0
   requireNpcRescueForQuestCompletion: 1
+--- !u!114 &1407302020
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1407302017}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ad7b535a038a57c4682a3eb7c79c05f3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.QuestRuntime
+  missionManager: {fileID: 0}
+  questDefinitions: []
+--- !u!114 &1407302021
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1407302017}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 66e6def39c5ae3b44969aa0f4cf9449a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.QuestCompletionFlow
+  questRuntime: {fileID: 1407302020}
+  rewardService: {fileID: 2105100005}
+  daySettlementFlow: {fileID: 0}
+  enterRewardStateOnCompletion: 0
+  grantRewardOnCompletion: 1
+  notifyDaySettlementOnQuestCompletion: 0
+  fallbackRewardGold: 0
+  fallbackRewardExp: 0
+--- !u!114 &1407302022
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1407302017}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e24b398bb96a3b540b9c3a209f0499be, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.QuestObjectiveTracker
+  questRuntime: {fileID: 1407302020}
 --- !u!1 &1416026127
 GameObject:
   m_ObjectHideFlags: 0
@@ -24331,6 +24424,8 @@ GameObject:
   - component: {fileID: 1873649839}
   - component: {fileID: 1873649838}
   - component: {fileID: 1873649840}
+  - component: {fileID: 1873649842}
+  - component: {fileID: 1873649841}
   m_Layer: 0
   m_Name: CombatManager
   m_TagString: Untagged
@@ -24491,6 +24586,44 @@ MonoBehaviour:
   rewardService: {fileID: 2105100005}
   countEnemyDefeatOnVictory: 1
   restoreExplorationAfterRewardClosed: 1
+--- !u!114 &1873649841
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1873649831}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 05d13009597b4e8eab237105a1bc8dc1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatWorldLifecycleAdapter
+  entryPoint: {fileID: 1873649839}
+  fieldLock: {fileID: 1873649842}
+  cameraController: {fileID: 1873649834}
+  formationManager: {fileID: 1873649835}
+  debugLog: 0
+--- !u!114 &1873649842
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1873649831}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b9863487589361d41a2336caec5fc875, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatFieldLock
+  behavioursToDisable:
+  - {fileID: 2023473709}
+  - {fileID: 2023473708}
+  - {fileID: 2023473706}
+  gameObjectsToDisable: []
+  freezeBodies2D:
+  - {fileID: 2023473701}
+  disableColliders2D:
+  - {fileID: 2023473700}
 --- !u!1 &1881587696
 GameObject:
   m_ObjectHideFlags: 0
@@ -25607,6 +25740,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2008015772}
   - component: {fileID: 2008015773}
+  - component: {fileID: 2008015774}
   m_Layer: 0
   m_Name: TimedChoiceDialoguePanel
   m_TagString: Untagged
@@ -25663,6 +25797,26 @@ MonoBehaviour:
   timerSlider: {fileID: 1681411602}
   timerFill: {fileID: 0}
   pauseTimeScale: 0
+--- !u!114 &2008015774
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2008015771}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 20279cc36c032a4469c6d601391b5938, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Story.UI.DialoguePanel
+  rootGroup: {fileID: 0}
+  root: {fileID: 1613928386}
+  speakerText: {fileID: 550424365}
+  bodyText: {fileID: 404503030}
+  portraitImage: {fileID: 0}
+  nextButton: {fileID: 1257089125}
+  choiceContainer: {fileID: 1613928387}
+  choiceButtonPrefab: {fileID: 1563091560}
 --- !u!1 &2023473699
 GameObject:
   m_ObjectHideFlags: 0
@@ -26099,6 +26253,7 @@ MonoBehaviour:
   entryPoint: {fileID: 1873649839}
   enemyObject: {fileID: 2028767405}
   encounterGroup: {fileID: 0}
+  encounterId: dungeon1.ghost.02
   openingEffectOrNull: {fileID: 0}
   startReason: 0
   initiativeSide: 0
@@ -27326,6 +27481,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Core.SaveLoadService
   saveManager: {fileID: 0}
+  player: {fileID: 2023473702}
+  saveFileName: game_save.json
 --- !u!114 &2105100005
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -27374,6 +27531,32 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.UIScreenRouter
   uiRoot: {fileID: 2105100006}
   stateMachine: {fileID: 1263257827}
+  logRouteChanges: 0
+--- !u!114 &2105100008
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1263257820}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 77a3e55359878174d8b24f8c811903e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.NonCombat.Inventory.InventoryService
+--- !u!114 &2105100009
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1263257820}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 635974253fafe8b4c8b41f25d140fd18, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.NonCombat.Inventory.CurrencyWallet
+  gold: 0
 --- !u!1 &2113037573
 GameObject:
   m_ObjectHideFlags: 0
