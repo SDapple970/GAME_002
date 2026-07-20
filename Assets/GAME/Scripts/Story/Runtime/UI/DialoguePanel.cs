@@ -21,6 +21,9 @@ namespace Game.Story.UI
 
         private readonly List<Button> _choiceButtons = new();
 
+        public bool IsPresentationReady =>
+            (rootGroup != null || root != null) && speakerText != null && bodyText != null;
+
         public int VisibleChoiceCount => _choiceButtons.Count;
         public int InteractableChoiceCount
         {
@@ -176,6 +179,7 @@ namespace Game.Story.UI
             {
                 if (button != null)
                 {
+                    button.onClick.RemoveAllListeners();
                     Destroy(button.gameObject);
                 }
             }

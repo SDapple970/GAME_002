@@ -33,7 +33,9 @@ namespace Game.Story
             if (!other.CompareTag(playerTag)) return;
             if (!CanStartEvent()) return;
 
-            runner.StartEvent(eventDefinition);
+            if (!runner.TryStartEvent(eventDefinition))
+                return;
+
             _triggered = true;
 
             if (triggerOnce)

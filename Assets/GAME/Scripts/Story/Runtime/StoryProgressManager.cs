@@ -27,7 +27,8 @@ namespace Game.Story
             Instance = this;
             currentChapter = Mathf.Max(1, currentChapter);
             mainProgress = Mathf.Max(0, mainProgress);
-            DontDestroyOnLoad(gameObject);
+            if (Application.isPlaying)
+                DontDestroyOnLoad(gameObject);
         }
 
         public void SetChapter(int chapter)

@@ -24,15 +24,38 @@ namespace Game.DemoMission.Runtime
 
         public DemoMissionDefinitionSO CurrentMission => currentMission;
         public string CurrentQuestId => ResolveQuestId(currentMission);
+        public bool IsQuestRuntimeAuthoritative => TryUseQuestRuntimeProgress();
         public int CurrentEnemyKills => EnemyDefeatCount;
-        public int EnemyDefeatCount { get; private set; }
-        public bool IsNpcRescued { get; private set; }
+        public int EnemyDefeatCount
+        {
+            get
+            {
+                if (TryUseQuestRuntimeProgress())
+                    return questRuntime.GetObjectiveProgress(CurrentQuestId, EnemyDefeatedObjectiveId);
+                return _enemyDefeatCount;
+            }
+            private set => _enemyDefeatCount = value;
+        }
+        public bool IsNpcRescued
+        {
+            get
+            {
+                if (TryUseQuestRuntimeProgress())
+                    return questRuntime.GetObjectiveProgress(CurrentQuestId, NpcRescuedObjectiveId) > 0;
+                return _isNpcRescued;
+            }
+            private set => _isNpcRescued = value;
+        }
 
         public event Action OnMissionProgressChanged;
         public event Action OnMissionCompleted;
 
         private bool _completionRaised;
         private bool _missingQuestRuntimeWarned;
+        private int _enemyDefeatCount;
+        private bool _isNpcRescued;
+        private int _compatibilityEventSequence;
+        private QuestRuntime _subscribedQuestRuntime;
 
         private void Awake()
         {
@@ -46,6 +69,17 @@ namespace Game.DemoMission.Runtime
 
             if (dontDestroyOnLoad)
                 DontDestroyOnLoad(gameObject);
+        }
+
+        private void OnEnable()
+        {
+            ConfigureQuestRuntime();
+            SubscribeQuestRuntime();
+        }
+
+        private void OnDisable()
+        {
+            UnsubscribeQuestRuntime();
         }
 
         public static DemoMissionRuntime GetOrCreate()
@@ -84,27 +118,41 @@ namespace Game.DemoMission.Runtime
 
         public void RegisterEnemyDefeated()
         {
+            RegisterEnemyDefeated($"demo:{CurrentQuestId}:enemy:{++_compatibilityEventSequence}");
+        }
+
+        public void RegisterEnemyDefeated(string eventId)
+        {
             if (currentMission == null)
             {
                 Debug.LogWarning("[DemoMissionRuntime] Enemy defeat ignored. Current mission is null.", this);
                 return;
             }
 
-            int previousKills = EnemyDefeatCount;
+            if (TryResolveQuestRuntime(false))
+            {
+                TryPublishQuestEvent(QuestEventType.Kill, EnemyDefeatedObjectiveId, 1, eventId);
+                return;
+            }
+
+            int previousKills = _enemyDefeatCount;
             int requiredKills = Mathf.Max(0, currentMission.requiredEnemyKills);
             if (requiredKills > 0)
-                EnemyDefeatCount = Mathf.Min(EnemyDefeatCount + 1, requiredKills);
+                _enemyDefeatCount = Mathf.Min(_enemyDefeatCount + 1, requiredKills);
             else
-                EnemyDefeatCount++;
+                _enemyDefeatCount++;
 
-            if (EnemyDefeatCount != previousKills)
-                PublishQuestEvent(QuestEventType.Kill, EnemyDefeatedObjectiveId, 1);
-
-            RaiseProgressChanged();
+            if (_enemyDefeatCount != previousKills)
+                RaiseProgressChanged();
             TryRaiseCompleted();
         }
 
         public void RegisterNpcRescued()
+        {
+            RegisterNpcRescued($"demo:{CurrentQuestId}:rescue:{GetInstanceID()}");
+        }
+
+        public void RegisterNpcRescued(string eventId)
         {
             if (currentMission == null)
             {
@@ -112,11 +160,16 @@ namespace Game.DemoMission.Runtime
                 return;
             }
 
-            if (IsNpcRescued)
+            if (TryResolveQuestRuntime(false))
+            {
+                TryPublishQuestEvent(QuestEventType.Rescue, NpcRescuedObjectiveId, 1, eventId);
+                return;
+            }
+
+            if (_isNpcRescued)
                 return;
 
-            IsNpcRescued = true;
-            PublishQuestEvent(QuestEventType.Rescue, NpcRescuedObjectiveId, 1);
+            _isNpcRescued = true;
             RaiseProgressChanged();
             TryRaiseCompleted();
         }
@@ -133,7 +186,7 @@ namespace Game.DemoMission.Runtime
                     return questRuntime.GetObjectiveProgress(CurrentQuestId, EnemyDefeatedObjectiveId) >= requiredKillsFromQuest;
             }
 
-            return EnemyDefeatCount >= Mathf.Max(0, currentMission.requiredEnemyKills);
+            return _enemyDefeatCount >= Mathf.Max(0, currentMission.requiredEnemyKills);
         }
 
         public bool IsMissionComplete()
@@ -141,7 +194,7 @@ namespace Game.DemoMission.Runtime
             if (TryUseQuestRuntimeProgress())
                 return questRuntime.IsQuestComplete(CurrentQuestId);
 
-            return currentMission != null && HasRequiredEnemyKills() && IsNpcRescued;
+            return currentMission != null && HasRequiredEnemyKills() && _isNpcRescued;
         }
 
         private void TryRaiseCompleted()
@@ -150,7 +203,6 @@ namespace Game.DemoMission.Runtime
                 return;
 
             _completionRaised = true;
-            PublishQuestEvent(QuestEventType.MissionCompleted, MissionCompletedObjectiveId, 1);
             OnMissionCompleted?.Invoke();
         }
 
@@ -161,20 +213,30 @@ namespace Game.DemoMission.Runtime
 
         public void PublishQuestEvent(QuestEventType eventType, string objectiveId, int amount = 1)
         {
+            TryPublishQuestEvent(
+                eventType,
+                objectiveId,
+                amount,
+                $"demo:{CurrentQuestId}:{objectiveId}:{++_compatibilityEventSequence}");
+        }
+
+        public bool TryPublishQuestEvent(QuestEventType eventType, string objectiveId, int amount, string eventId)
+        {
             if (currentMission == null)
-                return;
+                return false;
 
             if (!bridgeToQuestRuntime)
-                return;
+                return false;
 
-            QuestEvent questEvent = new QuestEvent(eventType, CurrentQuestId, objectiveId, amount, gameObject);
+            QuestEvent questEvent = new QuestEvent(eventType, CurrentQuestId, objectiveId, amount, gameObject, eventId);
             if (TryResolveQuestRuntime(true))
             {
-                questRuntime.ApplyEvent(questEvent);
-                return;
+                SubscribeQuestRuntime();
+                return questRuntime.ApplyEvent(questEvent);
             }
 
             QuestEventChannel.Publish(questEvent);
+            return false;
         }
 
         public void CaptureSaveData(GameSaveData saveData)
@@ -203,6 +265,7 @@ namespace Game.DemoMission.Runtime
                 requireNpcTalkForQuestCompletion,
                 requireNpcRescueForQuestCompletion
             );
+            SubscribeQuestRuntime();
         }
 
         private void ResetQuestRuntimeProgress()
@@ -240,6 +303,51 @@ namespace Game.DemoMission.Runtime
             }
 
             return false;
+        }
+
+        private void SubscribeQuestRuntime()
+        {
+            QuestRuntime candidate = TryResolveQuestRuntime(false) ? questRuntime : null;
+            if (_subscribedQuestRuntime == candidate)
+                return;
+
+            UnsubscribeQuestRuntime();
+            _subscribedQuestRuntime = candidate;
+            if (_subscribedQuestRuntime == null)
+                return;
+
+            _subscribedQuestRuntime.OnObjectiveProgressChanged += HandleQuestProgressChanged;
+            _subscribedQuestRuntime.OnQuestCompleted += HandleQuestCompleted;
+        }
+
+        private void UnsubscribeQuestRuntime()
+        {
+            if (_subscribedQuestRuntime != null)
+            {
+                _subscribedQuestRuntime.OnObjectiveProgressChanged -= HandleQuestProgressChanged;
+                _subscribedQuestRuntime.OnQuestCompleted -= HandleQuestCompleted;
+            }
+
+            _subscribedQuestRuntime = null;
+        }
+
+        private void HandleQuestProgressChanged(string questId, string objectiveId, int current, int required)
+        {
+            if (questId != CurrentQuestId)
+                return;
+
+            _enemyDefeatCount = questRuntime.GetObjectiveProgress(CurrentQuestId, EnemyDefeatedObjectiveId);
+            _isNpcRescued = questRuntime.GetObjectiveProgress(CurrentQuestId, NpcRescuedObjectiveId) > 0;
+            RaiseProgressChanged();
+        }
+
+        private void HandleQuestCompleted(string questId)
+        {
+            if (questId != CurrentQuestId || _completionRaised)
+                return;
+
+            _completionRaised = true;
+            OnMissionCompleted?.Invoke();
         }
 
         private static string ResolveQuestId(DemoMissionDefinitionSO mission)

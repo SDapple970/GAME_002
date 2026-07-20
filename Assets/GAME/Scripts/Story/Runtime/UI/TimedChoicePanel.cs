@@ -25,6 +25,7 @@ namespace Game.Story.UI
         private float _duration;
         private bool _runningTimer;
         private bool _selectionLocked;
+        private int _generation;
 
         private void Awake()
         {
@@ -40,15 +41,17 @@ namespace Game.Story.UI
         {
             if (_selectionLocked || _visibleChoices.Count == 0) return;
 
+            int generation = _generation;
+
             if (UnityEngine.Input.GetKeyDown(firstChoiceKey))
             {
-                SelectVisibleChoice(0);
+                SelectVisibleChoice(0, generation);
                 return;
             }
 
             if (UnityEngine.Input.GetKeyDown(secondChoiceKey))
             {
-                SelectVisibleChoice(1);
+                SelectVisibleChoice(1, generation);
                 return;
             }
 
@@ -59,6 +62,7 @@ namespace Game.Story.UI
 
             if (_remainingTime > 0f) return;
 
+            if (generation != _generation) return;
             _selectionLocked = true;
             Action callback = _onTimeout;
             Hide();
@@ -69,6 +73,8 @@ namespace Game.Story.UI
         {
             Clear();
 
+            int generation = ++_generation;
+
             _onChoiceSelected = onChoiceSelected;
             _onTimeout = onTimeout;
             _duration = Mathf.Max(0f, timeLimitSeconds);
@@ -77,7 +83,7 @@ namespace Game.Story.UI
             _selectionLocked = false;
 
             BuildVisibleChoices(choices);
-            BindButtons();
+            BindButtons(generation);
             UpdateTimerFill();
             SetVisible(_visibleChoices.Count > 0);
         }
@@ -91,6 +97,7 @@ namespace Game.Story.UI
 
         public void Clear()
         {
+            _generation++;
             _visibleChoices.Clear();
             _onChoiceSelected = null;
             _onTimeout = null;
@@ -133,7 +140,7 @@ namespace Game.Story.UI
             }
         }
 
-        private void BindButtons()
+        private void BindButtons(int generation)
         {
             int buttonCount = choiceButtons != null ? choiceButtons.Length : 0;
             int textCount = choiceTexts != null ? choiceTexts.Length : 0;
@@ -157,12 +164,13 @@ namespace Game.Story.UI
                 if (!isMet) continue;
 
                 int capturedIndex = i;
-                button.onClick.AddListener(() => SelectVisibleChoice(capturedIndex));
+                button.onClick.AddListener(() => SelectVisibleChoice(capturedIndex, generation));
             }
         }
 
-        private void SelectVisibleChoice(int index)
+        private void SelectVisibleChoice(int index, int generation)
         {
+            if (generation != _generation) return;
             if (_selectionLocked) return;
             if (index < 0 || index >= _visibleChoices.Count) return;
 

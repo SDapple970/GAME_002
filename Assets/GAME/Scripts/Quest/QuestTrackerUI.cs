@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace Game.Quest
@@ -6,11 +7,13 @@ namespace Game.Quest
     public sealed class QuestTrackerUI : MonoBehaviour
     {
         [SerializeField] private QuestManager questManager;
+        [SerializeField] private QuestRuntime questRuntime;
         [SerializeField] private GameObject root;
         [SerializeField] private Text titleText;
         [SerializeField] private Text objectiveText;
 
-        private bool _subscribed;
+        private bool _legacySubscribed;
+        private bool _runtimeSubscribed;
 
         private void Awake()
         {
@@ -21,23 +24,14 @@ namespace Game.Quest
         {
             AutoBindReferences();
             Subscribe();
-            Refresh(questManager != null ? questManager.GetActiveQuest() : null);
+            SceneManager.sceneLoaded += HandleSceneLoaded;
+            RefreshCurrent();
         }
 
         private void OnDisable()
         {
             Unsubscribe();
-        }
-
-        private void Update()
-        {
-            if (_subscribed)
-                return;
-
-            AutoBindReferences();
-            Subscribe();
-            if (_subscribed)
-                Refresh(questManager.GetActiveQuest());
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
         }
 
         private void AutoBindReferences()
@@ -47,27 +41,109 @@ namespace Game.Quest
 
             if (questManager == null)
                 questManager = QuestManager.Instance != null ? QuestManager.Instance : FindFirstObjectByType<QuestManager>();
+
+            if (questRuntime == null)
+                questRuntime = FindFirstObjectByType<QuestRuntime>();
         }
 
         private void Subscribe()
         {
-            if (_subscribed || questManager == null)
-                return;
+            if (!_runtimeSubscribed && questRuntime != null)
+            {
+                questRuntime.OnQuestStarted += HandleQuestStarted;
+                questRuntime.OnObjectiveProgressChanged += HandleObjectiveProgressChanged;
+                questRuntime.OnQuestCompleted += HandleQuestCompleted;
+                _runtimeSubscribed = true;
+            }
 
-            questManager.OnQuestChanged += Refresh;
-            _subscribed = true;
+            if (!_legacySubscribed && questManager != null)
+            {
+                questManager.OnQuestChanged += Refresh;
+                _legacySubscribed = true;
+            }
         }
 
         private void Unsubscribe()
         {
-            if (!_subscribed || questManager == null)
+            if (_runtimeSubscribed && questRuntime != null)
             {
-                _subscribed = false;
+                questRuntime.OnQuestStarted -= HandleQuestStarted;
+                questRuntime.OnObjectiveProgressChanged -= HandleObjectiveProgressChanged;
+                questRuntime.OnQuestCompleted -= HandleQuestCompleted;
+            }
+
+            if (_legacySubscribed && questManager != null)
+                questManager.OnQuestChanged -= Refresh;
+
+            _runtimeSubscribed = false;
+            _legacySubscribed = false;
+        }
+
+        private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            Unsubscribe();
+            AutoBindReferences();
+            Subscribe();
+            RefreshCurrent();
+        }
+
+        private void HandleQuestStarted(string questId) => RefreshCurrent();
+
+        private void HandleObjectiveProgressChanged(string questId, string objectiveId, int current, int required)
+        {
+            RefreshCurrent();
+        }
+
+        private void HandleQuestCompleted(string questId) => RefreshCurrent();
+
+        private void RefreshCurrent()
+        {
+            if (questRuntime != null && questRuntime.TryGetFirstActiveQuestId(out string questId))
+            {
+                RefreshRuntimeQuest(questId);
                 return;
             }
 
-            questManager.OnQuestChanged -= Refresh;
-            _subscribed = false;
+            Refresh(questManager != null ? questManager.GetActiveQuest() : null);
+        }
+
+        private void RefreshRuntimeQuest(string questId)
+        {
+            string title = questId;
+            if (questRuntime.TryGetQuestTitle(questId, out string configuredTitle))
+                title = configuredTitle;
+
+            if (titleText != null)
+                titleText.text = title;
+
+            if (objectiveText != null)
+                objectiveText.text = BuildRuntimeObjectiveText(questId);
+
+            SetVisible(true);
+        }
+
+        private string BuildRuntimeObjectiveText(string questId)
+        {
+            if (!questRuntime.TryGetDefinition(questId, out QuestDefinitionSO definition) ||
+                definition.Objectives == null)
+            {
+                return questId;
+            }
+
+            for (int i = 0; i < definition.Objectives.Length; i++)
+            {
+                QuestObjectiveDefinition objective = definition.Objectives[i];
+                if (objective == null)
+                    continue;
+
+                int current = questRuntime.GetObjectiveProgress(questId, objective.ObjectiveId);
+                string description = string.IsNullOrWhiteSpace(objective.Description)
+                    ? objective.ObjectiveId
+                    : objective.Description;
+                return $"{description} {current}/{objective.RequiredCount}";
+            }
+
+            return questId;
         }
 
         private void Refresh(QuestProgress progress)

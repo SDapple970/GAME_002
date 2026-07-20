@@ -23,6 +23,7 @@ namespace Game.DemoMission.Runtime
         private bool _playerInRange;
         private bool _rescueRegistered;
         private bool _dialogueRunning;
+        private bool _talkRegistered;
         private float _lastInteractionTime = -999f;
         private GameInputInstaller _input;
         private bool _inputSubscribed;
@@ -95,18 +96,18 @@ namespace Game.DemoMission.Runtime
                 return;
 
             _lastInteractionTime = Time.unscaledTime;
-            missionRuntime.PublishQuestEvent(Game.Quest.QuestEventType.Talk, DemoMissionRuntime.NpcTalkedObjectiveId);
-
             if (requireEnemyKillsBeforeRescue && !missionRuntime.HasRequiredEnemyKills())
             {
                 Debug.Log("[RescueNpcActor] Required enemy kills are not complete yet.", this);
                 LogDialogue(GetDialogueLines(false));
+                RegisterTalkAfterCompletedInteraction();
                 return;
             }
 
             if (_rescueRegistered || missionRuntime.IsNpcRescued)
             {
                 LogDialogue(GetDialogueLines(true));
+                RegisterTalkAfterCompletedInteraction();
                 return;
             }
 
@@ -119,13 +120,28 @@ namespace Game.DemoMission.Runtime
             LogDialogue(GetDialogueLines(false));
             yield return null;
 
+            RegisterTalkAfterCompletedInteraction();
+
             _rescueRegistered = true;
             if (markCompleteOnInteract)
-                missionRuntime.RegisterNpcRescued();
+                missionRuntime.RegisterNpcRescued($"rescue:{GetInstanceID()}");
 
             LogDialogue(GetDialogueLines(true));
 
             _dialogueRunning = false;
+        }
+
+        private void RegisterTalkAfterCompletedInteraction()
+        {
+            if (_talkRegistered || missionRuntime == null)
+                return;
+
+            _talkRegistered = true;
+            missionRuntime.TryPublishQuestEvent(
+                Game.Quest.QuestEventType.Talk,
+                DemoMissionRuntime.NpcTalkedObjectiveId,
+                1,
+                $"talk:{GetInstanceID()}");
         }
 
         private IEnumerable<string> GetDialogueLines(bool afterRescue)

@@ -25,7 +25,6 @@ namespace Game.Quest
                 return false;
 
             return string.IsNullOrEmpty(objectiveId) ||
-                   string.IsNullOrEmpty(questEvent.ObjectiveId) ||
                    objectiveId == questEvent.ObjectiveId;
         }
     }

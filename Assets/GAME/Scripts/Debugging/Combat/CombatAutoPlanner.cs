@@ -39,6 +39,7 @@ namespace Game.Combat.Debugging
 
         private void Update()
         {
+#if UNITY_EDITOR
             if (!CanPrepareSubmit())
                 return;
 
@@ -46,6 +47,7 @@ namespace Game.Combat.Debugging
                 return;
 
             _submitRoutine = StartCoroutine(Co_SubmitAfterDelay(entryPoint.ActiveSession.TurnIndex));
+#endif
         }
 
         private void AutoBindReferences()

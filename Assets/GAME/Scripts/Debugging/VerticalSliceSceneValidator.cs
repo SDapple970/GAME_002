@@ -26,14 +26,18 @@ namespace Game.Debugging
 
         private void Start()
         {
+#if UNITY_EDITOR
             if (validateOnStart)
                 ValidateCurrentScene();
+#endif
         }
 
         private void Update()
         {
+#if UNITY_EDITOR
             if (validateOnHotkey && UnityEngine.Input.GetKeyDown(validateKey))
                 ValidateCurrentScene();
+#endif
         }
 
         [ContextMenu("Validate Current Scene")]

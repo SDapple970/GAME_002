@@ -341,11 +341,15 @@ namespace Game.Combat.UI
             if (!countEnemyDefeatOnVictory || !IsVictory(result) || DemoMissionRuntime.Instance == null)
                 return;
 
+            string completionId = RewardService.CreateCombatRewardRequest(result, null).SourceId;
             HashSet<int> uniqueEnemyIds = new HashSet<int>();
             for (int i = 0; i < result.DefeatedEnemyIds.Count; i++)
             {
                 if (uniqueEnemyIds.Add(result.DefeatedEnemyIds[i]))
-                    DemoMissionRuntime.Instance.RegisterEnemyDefeated();
+                {
+                    DemoMissionRuntime.Instance.RegisterEnemyDefeated(
+                        $"combat:{completionId}:enemy:{result.DefeatedEnemyIds[i]}");
+                }
             }
         }
 

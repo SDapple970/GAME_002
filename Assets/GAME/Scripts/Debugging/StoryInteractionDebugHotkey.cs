@@ -9,6 +9,7 @@ namespace Game.Story.Interaction
 
         private void Update()
         {
+#if UNITY_EDITOR
             if (!UnityEngine.Input.GetKeyDown(interactKey)) return;
 
             if (StoryInteractionController.Instance != null)
@@ -16,6 +17,7 @@ namespace Game.Story.Interaction
                 StoryInteractionController.Instance.RefreshCurrentTarget();
                 StoryInteractionController.Instance.TryInteractCurrent();
             }
+#endif
         }
     }
 }

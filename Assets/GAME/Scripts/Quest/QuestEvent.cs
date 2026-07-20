@@ -9,19 +9,22 @@ namespace Game.Quest
         public readonly string ObjectiveId;
         public readonly int Amount;
         public readonly GameObject Source;
+        public readonly string EventId;
 
         public QuestEvent(
             QuestEventType type,
             string questId,
             string objectiveId,
             int amount = 1,
-            GameObject source = null)
+            GameObject source = null,
+            string eventId = null)
         {
             Type = type;
             QuestId = questId;
             ObjectiveId = objectiveId;
             Amount = amount;
             Source = source;
+            EventId = eventId;
         }
     }
 }

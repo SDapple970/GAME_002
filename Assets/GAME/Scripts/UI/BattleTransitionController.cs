@@ -5,6 +5,7 @@ using UnityEngine.SceneManagement;
 using Game.Core;
 using Game.Battle;
 using Game.UI;
+using Game.Combat.Core;
 
 namespace Game.Battle
 {
@@ -32,6 +33,9 @@ namespace Game.Battle
 
         private void HandleBattleRequested(BattleTransitionRequest req)
         {
+            if (FindFirstObjectByType<CombatEntryPoint>(FindObjectsInactive.Include) != null)
+                return;
+
             if (GameStateMachine.Instance == null)
                 return;
 

@@ -74,6 +74,9 @@ namespace Game.DemoMission.Runtime
 
         public void HandleMissionCompleted()
         {
+            if (missionRuntime != null && missionRuntime.IsQuestRuntimeAuthoritative)
+                return;
+
             if (_handled)
             {
                 WarnDuplicateCompletionBlocked();

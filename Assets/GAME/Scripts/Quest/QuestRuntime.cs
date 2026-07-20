@@ -9,11 +9,14 @@ namespace Game.Quest
 {
     public sealed class QuestRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
     {
+        private const int MaxRememberedEventIdsPerQuest = 256;
+
         [SerializeField] private MissionManager missionManager;
         [SerializeField] private QuestDefinitionSO[] questDefinitions;
 
         private readonly Dictionary<string, RuntimeQuestState> _runtimeByQuestId = new();
 
+        public event Action<string> OnQuestStarted;
         public event Action<string> OnQuestCompleted;
         public event Action<string, string, int, int> OnObjectiveProgressChanged;
 
@@ -23,22 +26,11 @@ namespace Game.Quest
             RegisterSerializedDefinitions();
         }
 
+        // Legacy MissionDefinitionSO compatibility. New production quests use QuestDefinitionSO.
         public void StartQuest(MissionDefinitionSO definition)
         {
             ResolveMissionManager();
             missionManager?.StartMission(definition);
-        }
-
-        public void CompleteObjective(string questId, string objectiveId)
-        {
-            ResolveMissionManager();
-            missionManager?.CompleteObjective(questId, objectiveId);
-        }
-
-        public void CompleteQuest(string questId)
-        {
-            ResolveMissionManager();
-            missionManager?.CompleteMission(questId);
         }
 
         public void StartQuest(QuestDefinitionSO definition)
@@ -49,15 +41,28 @@ namespace Game.Quest
                 return;
             }
 
-            RuntimeQuestState state = GetOrCreateState(GetQuestId(definition), definition);
+            string questId = GetQuestId(definition);
+            RuntimeQuestState state = GetOrCreateState(questId, definition);
             state.Definition = definition;
-            state.Completed = false;
+            if (state.Status == QuestStatus.Completed || state.Status == QuestStatus.Active)
+                return;
+
+            state.Status = QuestStatus.Active;
+            OnQuestStarted?.Invoke(questId);
         }
 
         public bool ApplyEvent(QuestEvent questEvent)
         {
             if (questEvent.Type == QuestEventType.Unknown)
                 return false;
+
+            if (questEvent.Amount <= 0)
+            {
+                Debug.LogWarning(
+                    $"[QuestRuntime] QuestEvent ignored. Amount must be positive. questId={questEvent.QuestId}, objectiveId={questEvent.ObjectiveId}, amount={questEvent.Amount}.",
+                    this);
+                return false;
+            }
 
             string questId = questEvent.QuestId;
             if (string.IsNullOrWhiteSpace(questId))
@@ -66,14 +71,15 @@ namespace Game.Quest
                 return false;
             }
 
-            RuntimeQuestState state = GetOrCreateState(questId, FindDefinition(questId));
-            if (state.Completed)
+            if (!_runtimeByQuestId.TryGetValue(questId, out RuntimeQuestState state) ||
+                state.Status != QuestStatus.Active)
+            {
                 return false;
+            }
 
             QuestObjectiveDefinition objective = state.Definition != null
                 ? state.Definition.FindObjective(questEvent)
                 : null;
-
             if (state.Definition != null && objective == null)
                 return false;
 
@@ -84,25 +90,48 @@ namespace Game.Quest
                 return false;
             }
 
-            int configuredRequiredCount = state.GetRequiredCount(objectiveId);
-            int requiredCount = objective != null ? objective.RequiredCount : Mathf.Max(1, configuredRequiredCount);
-            int amount = Mathf.Max(1, questEvent.Amount);
-            int current = state.GetProgress(objectiveId);
-            int next = Mathf.Min(current + amount, requiredCount);
+            int requiredCount = objective != null
+                ? objective.RequiredCount
+                : state.GetRequiredCount(objectiveId);
+            if (requiredCount <= 0)
+                return false;
 
+            int current = state.GetProgress(objectiveId);
+            int next = Mathf.Min(current + questEvent.Amount, requiredCount);
             if (next == current)
                 return false;
 
-            state.SetProgress(objectiveId, next);
-            OnObjectiveProgressChanged?.Invoke(questId, objectiveId, next, requiredCount);
-
-            if (state.AreRequiredObjectivesComplete())
+            if (!string.IsNullOrWhiteSpace(questEvent.EventId) &&
+                !state.TryRememberEventId(questEvent.EventId, MaxRememberedEventIdsPerQuest))
             {
-                state.Completed = true;
-                OnQuestCompleted?.Invoke(questId);
+                return false;
             }
 
+            ApplyProgressChange(state, objectiveId, next, requiredCount);
             return true;
+        }
+
+        public void CompleteObjective(string questId, string objectiveId)
+        {
+            if (!TryGetActiveState(questId, out RuntimeQuestState state) ||
+                string.IsNullOrWhiteSpace(objectiveId))
+            {
+                return;
+            }
+
+            int requiredCount = state.GetRequiredCount(objectiveId);
+            if (requiredCount <= 0 || state.GetProgress(objectiveId) >= requiredCount)
+                return;
+
+            ApplyProgressChange(state, objectiveId, requiredCount, requiredCount);
+        }
+
+        public void CompleteQuest(string questId)
+        {
+            if (!TryGetActiveState(questId, out RuntimeQuestState state))
+                return;
+
+            CompleteState(state);
         }
 
         public void ConfigureCompatibilityQuest(
@@ -121,23 +150,44 @@ namespace Game.Quest
             state.ConfigureObjective("enemy_defeated", Mathf.Max(0, requiredEnemyKills), requiredEnemyKills <= 0);
             state.ConfigureObjective("npc_talked", requireNpcTalk ? 1 : 0, !requireNpcTalk);
             state.ConfigureObjective("npc_rescued", requireNpcRescue ? 1 : 0, !requireNpcRescue);
-            state.Completed = false;
+            if (state.Status != QuestStatus.Completed)
+            {
+                bool newlyActive = state.Status != QuestStatus.Active;
+                state.Status = QuestStatus.Active;
+                if (newlyActive)
+                    OnQuestStarted?.Invoke(questId);
+            }
         }
 
         public void ResetQuestProgress(string questId)
         {
-            if (string.IsNullOrWhiteSpace(questId))
+            if (string.IsNullOrWhiteSpace(questId) ||
+                !_runtimeByQuestId.TryGetValue(questId, out RuntimeQuestState state))
+            {
                 return;
+            }
 
-            if (_runtimeByQuestId.TryGetValue(questId, out RuntimeQuestState state))
-                state.ResetProgress();
+            state.ResetProgress();
+            state.Status = QuestStatus.Active;
+            OnQuestStarted?.Invoke(questId);
+        }
+
+        public bool IsQuestActive(string questId)
+        {
+            return GetQuestStatus(questId) == QuestStatus.Active;
+        }
+
+        public QuestStatus GetQuestStatus(string questId)
+        {
+            return !string.IsNullOrWhiteSpace(questId) &&
+                   _runtimeByQuestId.TryGetValue(questId, out RuntimeQuestState state)
+                ? state.Status
+                : QuestStatus.Inactive;
         }
 
         public bool IsQuestComplete(string questId)
         {
-            return !string.IsNullOrWhiteSpace(questId) &&
-                   _runtimeByQuestId.TryGetValue(questId, out RuntimeQuestState state) &&
-                   state.Completed;
+            return GetQuestStatus(questId) == QuestStatus.Completed;
         }
 
         public int GetObjectiveProgress(string questId, string objectiveId)
@@ -165,22 +215,39 @@ namespace Game.Quest
             return !string.IsNullOrWhiteSpace(questId) && _runtimeByQuestId.ContainsKey(questId);
         }
 
-        public bool TryGetQuestReward(string questId, out int gold, out int exp)
+        public bool TryGetDefinition(string questId, out QuestDefinitionSO definition)
         {
-            gold = 0;
-            exp = 0;
-
-            if (string.IsNullOrWhiteSpace(questId))
-                return false;
-
-            QuestDefinitionSO definition = FindDefinition(questId);
+            definition = FindDefinition(questId);
             if (definition == null &&
+                !string.IsNullOrWhiteSpace(questId) &&
                 _runtimeByQuestId.TryGetValue(questId, out RuntimeQuestState state))
             {
                 definition = state.Definition;
             }
 
-            if (definition == null)
+            return definition != null;
+        }
+
+        public bool TryGetFirstActiveQuestId(out string questId)
+        {
+            questId = null;
+            foreach (KeyValuePair<string, RuntimeQuestState> pair in _runtimeByQuestId)
+            {
+                if (pair.Value.Status != QuestStatus.Active)
+                    continue;
+
+                questId = pair.Key;
+                return true;
+            }
+
+            return false;
+        }
+
+        public bool TryGetQuestReward(string questId, out int gold, out int exp)
+        {
+            gold = 0;
+            exp = 0;
+            if (!TryGetDefinition(questId, out QuestDefinitionSO definition))
                 return false;
 
             gold = definition.RewardGold;
@@ -191,19 +258,11 @@ namespace Game.Quest
         public bool TryGetQuestTitle(string questId, out string questTitle)
         {
             questTitle = null;
-
-            if (string.IsNullOrWhiteSpace(questId))
-                return false;
-
-            QuestDefinitionSO definition = FindDefinition(questId);
-            if (definition == null &&
-                _runtimeByQuestId.TryGetValue(questId, out RuntimeQuestState state))
+            if (!TryGetDefinition(questId, out QuestDefinitionSO definition) ||
+                string.IsNullOrWhiteSpace(definition.QuestTitle))
             {
-                definition = state.Definition;
-            }
-
-            if (definition == null || string.IsNullOrWhiteSpace(definition.QuestTitle))
                 return false;
+            }
 
             questTitle = definition.QuestTitle;
             return true;
@@ -216,7 +275,6 @@ namespace Game.Quest
 
             saveData.quest ??= new QuestSaveData();
             saveData.quest.quests.Clear();
-
             foreach (KeyValuePair<string, RuntimeQuestState> pair in _runtimeByQuestId)
             {
                 RuntimeQuestState state = pair.Value;
@@ -226,7 +284,7 @@ namespace Game.Quest
                 QuestStateSaveData questState = new()
                 {
                     questId = state.QuestId,
-                    completed = state.Completed
+                    completed = state.Status == QuestStatus.Completed
                 };
                 state.AppendObjectiveSaveData(questState.objectives);
                 saveData.quest.quests.Add(questState);
@@ -245,9 +303,35 @@ namespace Game.Quest
                     continue;
 
                 RuntimeQuestState state = GetOrCreateState(questState.questId, FindDefinition(questState.questId));
-                state.Completed = questState.completed;
+                state.Status = questState.completed ? QuestStatus.Completed : QuestStatus.Active;
                 state.ApplyObjectiveSaveData(questState.objectives);
+                state.ClearRememberedEventIds();
             }
+        }
+
+        private void ApplyProgressChange(RuntimeQuestState state, string objectiveId, int next, int requiredCount)
+        {
+            state.SetProgress(objectiveId, next);
+            OnObjectiveProgressChanged?.Invoke(state.QuestId, objectiveId, next, requiredCount);
+            if (state.AreRequiredObjectivesComplete())
+                CompleteState(state);
+        }
+
+        private void CompleteState(RuntimeQuestState state)
+        {
+            if (state == null || state.Status != QuestStatus.Active)
+                return;
+
+            state.Status = QuestStatus.Completed;
+            OnQuestCompleted?.Invoke(state.QuestId);
+        }
+
+        private bool TryGetActiveState(string questId, out RuntimeQuestState state)
+        {
+            state = null;
+            return !string.IsNullOrWhiteSpace(questId) &&
+                   _runtimeByQuestId.TryGetValue(questId, out state) &&
+                   state.Status == QuestStatus.Active;
         }
 
         private void ResolveMissionManager()
@@ -266,10 +350,8 @@ namespace Game.Quest
             for (int i = 0; i < questDefinitions.Length; i++)
             {
                 QuestDefinitionSO definition = questDefinitions[i];
-                if (definition == null)
-                    continue;
-
-                GetOrCreateState(GetQuestId(definition), definition);
+                if (definition != null)
+                    GetOrCreateState(GetQuestId(definition), definition);
             }
         }
 
@@ -320,16 +402,19 @@ namespace Game.Quest
         {
             private readonly Dictionary<string, int> _progressByObjectiveId = new();
             private readonly Dictionary<string, ObjectiveRequirement> _compatibilityRequirements = new();
+            private readonly HashSet<string> _rememberedEventIds = new();
+            private readonly Queue<string> _eventIdOrder = new();
 
             public RuntimeQuestState(string questId, QuestDefinitionSO definition)
             {
                 QuestId = questId;
                 Definition = definition;
+                Status = QuestStatus.Inactive;
             }
 
             public string QuestId { get; }
             public QuestDefinitionSO Definition { get; set; }
-            public bool Completed { get; set; }
+            public QuestStatus Status { get; set; }
 
             public int GetProgress(string objectiveId)
             {
@@ -347,10 +432,8 @@ namespace Game.Quest
 
             public void ConfigureObjective(string objectiveId, int requiredCount, bool optional)
             {
-                if (string.IsNullOrWhiteSpace(objectiveId))
-                    return;
-
-                _compatibilityRequirements[objectiveId] = new ObjectiveRequirement(Mathf.Max(0, requiredCount), optional);
+                if (!string.IsNullOrWhiteSpace(objectiveId))
+                    _compatibilityRequirements[objectiveId] = new ObjectiveRequirement(Mathf.Max(0, requiredCount), optional);
             }
 
             public int GetRequiredCount(string objectiveId)
@@ -367,10 +450,27 @@ namespace Game.Quest
                     : 0;
             }
 
+            public bool TryRememberEventId(string eventId, int limit)
+            {
+                if (!_rememberedEventIds.Add(eventId))
+                    return false;
+
+                _eventIdOrder.Enqueue(eventId);
+                while (_eventIdOrder.Count > Mathf.Max(1, limit))
+                    _rememberedEventIds.Remove(_eventIdOrder.Dequeue());
+                return true;
+            }
+
+            public void ClearRememberedEventIds()
+            {
+                _rememberedEventIds.Clear();
+                _eventIdOrder.Clear();
+            }
+
             public void ResetProgress()
             {
                 _progressByObjectiveId.Clear();
-                Completed = false;
+                ClearRememberedEventIds();
             }
 
             public bool AreRequiredObjectivesComplete()
@@ -400,15 +500,14 @@ namespace Game.Quest
 
                 foreach (KeyValuePair<string, int> pair in _progressByObjectiveId)
                 {
-                    string objectiveId = pair.Key;
-                    if (string.IsNullOrWhiteSpace(objectiveId))
+                    if (string.IsNullOrWhiteSpace(pair.Key))
                         continue;
 
                     objectives.Add(new QuestObjectiveSaveData
                     {
-                        objectiveId = objectiveId,
+                        objectiveId = pair.Key,
                         progress = Mathf.Max(0, pair.Value),
-                        requiredCount = GetRequiredCount(objectiveId)
+                        requiredCount = GetRequiredCount(pair.Key)
                     });
                 }
             }
@@ -426,7 +525,7 @@ namespace Game.Quest
                         continue;
 
                     SetProgress(objective.objectiveId, objective.progress);
-                    if (objective.requiredCount > 0 && !HasDefinitionObjective(objective.objectiveId))
+                    if (objective.requiredCount > 0 && FindDefinitionObjective(objective.objectiveId) == null)
                         ConfigureObjective(objective.objectiveId, objective.requiredCount, false);
                 }
             }
@@ -461,11 +560,6 @@ namespace Game.Quest
                 }
 
                 return null;
-            }
-
-            private bool HasDefinitionObjective(string objectiveId)
-            {
-                return FindDefinitionObjective(objectiveId) != null;
             }
         }
 

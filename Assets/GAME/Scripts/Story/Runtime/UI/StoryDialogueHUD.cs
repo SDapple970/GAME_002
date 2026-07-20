@@ -11,6 +11,9 @@ namespace Game.Story.UI
         [SerializeField] private WorldDialogueBubble worldBubble;
         [SerializeField] private TimedChoicePanel timedChoicePanel;
 
+        public bool IsPresentationReady => worldBubble != null;
+        public bool CanPresentChoices => timedChoicePanel != null;
+
         private void Awake()
         {
             HideAll();

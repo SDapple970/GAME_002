@@ -23,6 +23,7 @@ namespace Game.Combat.Core
 
         private void Start()
         {
+#if UNITY_EDITOR
             SkillBook book = new SkillBook();
             if (basicAttackSO != null)
                 book.Register(new SoSkill(basicAttackSO));
@@ -48,15 +49,18 @@ namespace Game.Combat.Core
             Debug.Log($"[CombatStart] Turn={_session.TurnIndex}, Inspiration={_session.Inspiration.Current}/{_session.Inspiration.Max}");
             Debug.Log($"[CombatStart] Allies={_session.Allies.Count}, Enemies={_session.Enemies.Count}");
             DumpEvents();
+#endif
         }
 
         private void Update()
         {
+#if UNITY_EDITOR
             if (_sm == null || debugStep?.action == null || !debugStep.action.WasPressedThisFrame())
                 return;
 
             _sm.Tick();
             DumpEvents();
+#endif
         }
 
         private void DumpEvents()

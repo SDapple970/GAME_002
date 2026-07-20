@@ -3,6 +3,7 @@ using Game.Story;
 using Game.Story.Core;
 using Game.Mission;
 using Game.Mission.Data;
+using Game.Quest;
 using Game.Systems.Persona;
 using UnityEngine;
 
@@ -21,7 +22,8 @@ namespace Game.Story.Data
         ClearEventCompleted,
         StartMission,
         CompleteMission,
-        CompleteMissionObjective
+        CompleteMissionObjective,
+        PublishQuestEvent
     }
 
     [System.Serializable]
@@ -36,8 +38,14 @@ namespace Game.Story.Data
         [SerializeField] private MissionDefinitionSO missionDefinition;
         [SerializeField] private string missionId;
         [SerializeField] private string objectiveId;
+        [SerializeField] private QuestEventType questEventType = QuestEventType.Unknown;
 
         public void Apply()
+        {
+            Apply(default);
+        }
+
+        internal void Apply(StoryEffectContext context)
         {
             switch (type)
             {
@@ -100,9 +108,33 @@ namespace Game.Story.Data
                     if (!CanUseMissionEffect()) return;
                     MissionManager.Instance.CompleteObjective(missionId, objectiveId);
                     return;
+                case StoryEffectType.PublishQuestEvent:
+                    PublishQuestEvent(context);
+                    return;
                 default:
                     return;
             }
+        }
+
+        private void PublishQuestEvent(StoryEffectContext context)
+        {
+            if (questEventType == QuestEventType.Unknown ||
+                string.IsNullOrWhiteSpace(missionId) ||
+                string.IsNullOrWhiteSpace(objectiveId) ||
+                intValue <= 0)
+            {
+                Debug.LogWarning(
+                    $"[StoryEffect] Invalid authored QuestEvent. type={questEventType}, questId='{missionId}', objectiveId='{objectiveId}', amount={intValue}.");
+                return;
+            }
+
+            QuestEventChannel.Publish(new QuestEvent(
+                questEventType,
+                missionId,
+                objectiveId,
+                intValue,
+                context.Source,
+                context.EventId));
         }
 
         private bool CanUseFlagEffect()
@@ -133,6 +165,18 @@ namespace Game.Story.Data
 
             Debug.LogWarning($"[StoryEffect] MissionManager missing for type='{type}' missionId='{missionId}' objectiveId='{objectiveId}'.");
             return false;
+        }
+    }
+
+    internal readonly struct StoryEffectContext
+    {
+        public readonly GameObject Source;
+        public readonly string EventId;
+
+        public StoryEffectContext(GameObject source, string eventId)
+        {
+            Source = source;
+            EventId = eventId;
         }
     }
 }

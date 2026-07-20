@@ -187,7 +187,9 @@ namespace Game.Story
 
             ResolveSpeakerAnchor();
             LogDebug($"[StoryInteractable2D] Calling runner.StartEvent event={eventDefinition.EventId}");
-            runner.StartEvent(eventDefinition, speakerAnchor);
+            if (!runner.TryStartEvent(eventDefinition, speakerAnchor))
+                return;
+
             MarkUsedIfNeeded();
 
             if (!disableAfterUse) return;

@@ -38,11 +38,19 @@ namespace Game.Story.Data
 
         public void ApplyEffects()
         {
+            ApplyEffects(default);
+        }
+
+        internal void ApplyEffects(StoryEffectContext context)
+        {
             if (effects == null) return;
 
-            foreach (StoryEffect effect in effects)
+            for (int i = 0; i < effects.Count; i++)
             {
-                effect?.Apply();
+                StoryEffect effect = effects[i];
+                effect?.Apply(new StoryEffectContext(
+                    context.Source,
+                    string.IsNullOrWhiteSpace(context.EventId) ? null : $"{context.EventId}:effect:{i}"));
             }
         }
     }

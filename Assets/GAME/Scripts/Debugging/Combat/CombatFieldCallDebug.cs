@@ -22,16 +22,20 @@ namespace Game.Combat.Core
 
         private void OnEnable()
         {
+#if UNITY_EDITOR
             EnableAndBind(f1StartPlayerFirstHit, OnF1);
             EnableAndBind(f2StartPlayerGotHit, OnF2);
             EnableAndBind(f3StartSpecialSkill, OnF3);
+#endif
         }
 
         private void OnDisable()
         {
+#if UNITY_EDITOR
             DisableAndUnbind(f1StartPlayerFirstHit, OnF1);
             DisableAndUnbind(f2StartPlayerGotHit, OnF2);
             DisableAndUnbind(f3StartSpecialSkill, OnF3);
+#endif
         }
 
         private static void EnableAndBind(InputActionReference r, System.Action<InputAction.CallbackContext> cb)
