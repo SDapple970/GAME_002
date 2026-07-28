@@ -1,0 +1,137 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &983610231012664106
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6230029406771623098}
+  - component: {fileID: 8945921886167358035}
+  - component: {fileID: 3458696486045702784}
+  - component: {fileID: 4803411875580991714}
+  - component: {fileID: 7555609939051138548}
+  - component: {fileID: 4972631044839159580}
+  - component: {fileID: 7893522877659082516}
+  m_Layer: 0
+  m_Name: CombatRuntime
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6230029406771623098
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 983610231012664106}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8945921886167358035
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 983610231012664106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87780b0c5573e6345a59272ccf2f5e65, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Core.CombatEntryPoint
+  director: {fileID: 4803411875580991714}
+  flowOrchestrator: {fileID: 3458696486045702784}
+  skillDefinitions: []
+  inspirationMax: 10
+  inspirationStart: 3
+  deactivateDefeatedEnemies: 1
+  destroyDefeatedEnemies: 0
+--- !u!114 &3458696486045702784
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 983610231012664106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87771121262fd914cbcbb2d789f2deda, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Core.CombatFlowOrchestrator
+  entryPoint: {fileID: 8945921886167358035}
+--- !u!114 &4803411875580991714
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 983610231012664106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 50e0a7a1bfd472446ae887e4c7f7af0b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Effects.CombatDirector
+  entryPoint: {fileID: 8945921886167358035}
+  cameraController: {fileID: 0}
+  fallbackApproachDuration: 0.2
+  fallbackActionDelay: 0.15
+--- !u!114 &7555609939051138548
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 983610231012664106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0fdb663f890e40e3969dd81405af3da2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.UI.CombatRewardUIBinder
+  entryPoint: {fileID: 8945921886167358035}
+  rewardPanel: {fileID: 0}
+  rewardService: {fileID: 0}
+  countEnemyDefeatOnVictory: 1
+  restoreExplorationAfterRewardClosed: 1
+--- !u!114 &4972631044839159580
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 983610231012664106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 05d13009597b4e8eab237105a1bc8dc1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatWorldLifecycleAdapter
+  entryPoint: {fileID: 8945921886167358035}
+  fieldLock: {fileID: 7893522877659082516}
+  cameraController: {fileID: 0}
+  formationManager: {fileID: 0}
+  debugLog: 0
+--- !u!114 &7893522877659082516
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 983610231012664106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b9863487589361d41a2336caec5fc875, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatFieldLock
+  behavioursToDisable: []
+  gameObjectsToDisable: []
+  freezeBodies2D: []
+  disableColliders2D: []
