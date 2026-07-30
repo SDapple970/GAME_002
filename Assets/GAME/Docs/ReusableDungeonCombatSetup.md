@@ -4,7 +4,10 @@ This setup is verified from `Assets/GAME/Scenes/Dungeon 1.unity` and the current
 
 `Field encounter -> CombatStartRequest -> CombatEntryPoint -> FieldCombatantAdapter -> CombatSession -> CombatPlanning -> CombatResolving -> CombatResult -> CombatRewardUIBinder -> Reward -> GameFlowController -> Exploration`
 
-Use `Assets/GAME/Prefabs/DungeonCombatRuntime.prefab` once per dungeon scene. Do not copy Dungeon 1's entire `Systems` or `UI` hierarchy with it.
+Use `Assets/GAME/Prefabs/CombatRuntime.prefab` once per dungeon scene. Use
+`Assets/GAME/Prefabs/UI/ProductionDungeonUI.prefab` once when the dungeon does
+not receive an equivalent UI from a persistent bootstrap scene. Do not copy
+Dungeon 1's entire `Systems` or `UI` hierarchy.
 
 ## Ownership and classification
 
@@ -16,12 +19,12 @@ Use `Assets/GAME/Prefabs/DungeonCombatRuntime.prefab` once per dungeon scene. Do
 | Rewards | `RewardService` | Production global service | One instance; `CombatRewardUIBinder` resolves it if its field is empty. |
 | Input | `GameInputInstaller`, `InputService`, `InputRouter` | Production global input | One persistent installer; exploration commands are allowed only in `Exploration`. |
 | UI routing | `UIScreenRouter`, `GameUIRootController` | Production global UI ownership | One routing path; do not duplicate it in the runtime prefab. |
-| Dungeon combat | `DungeonCombatRuntime` prefab | Production dungeon-local | Exactly one instance per loaded dungeon scene. |
-| Planning UI | `CombatPlanningHUD` under Dungeon 1 `UI/Canvas/CombatHUD` | Production combat UI | One HUD, connected to the scene's runtime instance. |
-| Reward UI | `RewardUIPanel` under Dungeon 1 `UI/RewardUI` | Production reward UI | One panel, used by one `CombatRewardUIBinder`. |
-| Camera | `CombatCameraController` | Optional production presentation | Included in the runtime prefab; may auto-resolve `Camera.main` or be explicitly connected. |
-| Formation | `CombatFormationManager` | Optional production presentation | Included but formation placement remains disabled by the verified Dungeon 1 setting. |
-| Field lock | `CombatFieldLock` | Optional production presentation/integration | Not used by Dungeon 1. Add only for physics/behaviours not already gated by `GameState`. |
+| Dungeon combat | `CombatRuntime` prefab | Production dungeon-local | Exactly one instance per loaded dungeon scene. |
+| Planning UI | `ProductionDungeonUI/CombatCanvas/CombatHUD` | Production combat UI | One HUD, connected to the scene's runtime instance. |
+| Reward UI | `ProductionDungeonUI/RewardCanvas/RewardUI` | Production reward UI | One panel, used by one `CombatRewardUIBinder`. |
+| Camera | `CombatCameraController` | Optional production presentation | Scene integration on the template runtime instance; explicitly connected to the dungeon camera and follow behaviour. |
+| Formation | `CombatFormationManager` | Optional production presentation | Not present in the reusable runtime prefab; add only when a dungeon authors formation placement. |
+| Field lock | `CombatFieldLock` | Production presentation/integration | Included in the runtime prefab; the template overrides its player locks. |
 | State observer | `CombatStateSyncer` | Compatibility-only | Excluded. `CombatEntryPoint` already owns production combat phase synchronization. |
 | Tutorial bridge | `TutorialQuestCombatBridge` | Tutorial-specific compatibility | Excluded. Add separately only in tutorial content that needs it. |
 | Demo flow/UI | `CombatDemoFlowController`, DemoMission/Demo UI components | Demo | Excluded; never required by production dungeon combat. |
@@ -38,14 +41,19 @@ The prefab contains:
 - `CombatFlowOrchestrator`: validates/commits the player's plan and advances the current session.
 - `CombatDirector`: presents the already-resolved playbook.
 - `CombatRewardUIBinder`: grants through `RewardService`, enters `Reward`, shows `RewardUIPanel`, and returns through `GameFlowController` when the panel closes.
-- `CombatCameraController`: optional camera framing.
-- `CombatFormationManager`: optional formation placement, disabled by default.
+- `CombatWorldLifecycleAdapter`: coordinates field lock and optional presentation integrations.
+- `CombatFieldLock`: freezes explicitly assigned field behaviours and bodies.
 
-It deliberately excludes global services, canvases, HUDs, players, enemies, encounter triggers/groups, tutorial bridges, `CombatStateSyncer`, Demo/Debug components, and Legacy battle components.
+The template adds `CombatCameraController` to its runtime prefab instance and
+connects it to the Main Camera and `CameraFollow2D`. The prefab deliberately
+excludes global services, canvases, HUDs, players, enemies, encounter
+triggers/groups, formation authoring, tutorial bridges, `CombatStateSyncer`,
+Demo/Debug components, and Legacy battle components.
 
 ## Required combat UI
 
-The verified Dungeon 1 UI is scene-authored, not part of the runtime prefab:
+Dungeon 1's UI remains scene-authored. The reusable subset is now stored in
+`Assets/GAME/Prefabs/UI/ProductionDungeonUI.prefab`:
 
 - One `CombatPlanningHUD` with its planning panel, skill list root, target list root, choice-button prefab, confirm button, and error text.
 - One `RewardUIPanel` with its root, display fields/rows, and close button.
@@ -124,8 +132,8 @@ Dungeon 1 currently has three independent single-enemy triggers and no serialize
 ## Create a new dungeon
 
 1. Enter the dungeon through the existing production bootstrap/scene flow. Do not copy Dungeon 1's `Systems` object into the new scene.
-2. Add exactly one `DungeonCombatRuntime` prefab instance.
-3. Add or reuse one combat HUD and one reward UI owned by the existing UI routing design; do not duplicate the full UI root if it persists from the bootstrap scene.
+2. Add exactly one `CombatRuntime` prefab instance.
+3. Add or reuse one `ProductionDungeonUI` instance. Remove it only when a bootstrap scene demonstrably supplies one persistent HUD, reward panel, and EventSystem.
 4. Connect `CombatPlanningHUD` to the prefab instance's entry point and flow orchestrator. Verify all HUD child references.
 5. Ensure exactly one `CombatRewardUIBinder` is active. Assign the reward panel/service or verify auto-binding finds the intended single instances.
 6. Connect the prefab camera fields only if the dungeon needs explicit camera-follow suspension. Enable formation placement only when authored for that dungeon.
