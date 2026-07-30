@@ -1,6 +1,7 @@
 using Game.NonCombat.Chapter;
 using Game.NonCombat.Inventory;
 using Game.NonCombat.Progress;
+using Game.Reward;
 using Game.Systems.Persona;
 using UnityEngine;
 
@@ -73,13 +74,23 @@ namespace Game.NonCombat.Choice
 
         public void ApplyOutcomes(ChoiceOutcome[] outcomes)
         {
+            ApplyOutcomes(outcomes, null);
+        }
+
+        public void ApplyOutcomes(ChoiceOutcome[] outcomes, string sourceId)
+        {
             if (outcomes == null) return;
 
             for (int i = 0; i < outcomes.Length; i++)
-                ApplyOutcome(outcomes[i]);
+                ApplyOutcome(outcomes[i], sourceId, i);
         }
 
         public void ApplyOutcome(ChoiceOutcome outcome)
+        {
+            ApplyOutcome(outcome, null, 0);
+        }
+
+        private void ApplyOutcome(ChoiceOutcome outcome, string sourceId, int outcomeIndex)
         {
             if (outcome == null) return;
 
@@ -101,13 +112,20 @@ namespace Game.NonCombat.Choice
                     persona?.AddXp(outcome.PersonaStat, outcome.Amount);
                     break;
                 case ChoiceOutcomeType.AddGold:
-                    wallet?.AddGold(outcome.Amount);
+                    GrantChoiceReward(
+                        sourceId,
+                        outcomeIndex,
+                        gold: Mathf.Max(0, outcome.Amount));
                     break;
                 case ChoiceOutcomeType.RemoveGold:
                     wallet?.TrySpendGold(outcome.Amount);
                     break;
                 case ChoiceOutcomeType.AddItem:
-                    inventory?.AddItem(outcome.Id, Mathf.Max(1, outcome.Amount));
+                    GrantChoiceReward(
+                        sourceId,
+                        outcomeIndex,
+                        itemId: outcome.Id,
+                        itemCount: Mathf.Max(1, outcome.Amount));
                     break;
                 case ChoiceOutcomeType.RemoveItem:
                     inventory?.TryRemoveItem(outcome.Id, Mathf.Max(1, outcome.Amount));
@@ -119,6 +137,39 @@ namespace Game.NonCombat.Choice
                     chapter?.CompleteObjective(outcome.Id);
                     break;
             }
+        }
+
+        private void GrantChoiceReward(
+            string sourceId,
+            int outcomeIndex,
+            int gold = 0,
+            string itemId = null,
+            int itemCount = 0)
+        {
+            RewardService service = RewardService.Instance;
+            if (service == null)
+            {
+                Debug.LogWarning("[ChoiceRunner] RewardService is missing. Choice reward was not granted.", this);
+                return;
+            }
+
+            string resolvedSourceId = string.IsNullOrWhiteSpace(sourceId)
+                ? $"compat-choice:{name}"
+                : sourceId.Trim();
+            if (string.IsNullOrWhiteSpace(sourceId))
+            {
+                Debug.LogWarning(
+                    $"[ChoiceRunner] Using compatibility choice identity '{resolvedSourceId}'. New production choice calls must pass an authored source ID.",
+                    this);
+            }
+
+            service.GrantReward(new RewardGrantRequest(
+                RewardSourceType.Choice,
+                resolvedSourceId,
+                gold: gold,
+                itemId: itemId,
+                itemCount: itemCount,
+                actionId: $"outcome:{outcomeIndex}"));
         }
     }
 }

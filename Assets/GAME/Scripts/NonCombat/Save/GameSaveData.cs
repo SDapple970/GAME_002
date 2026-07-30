@@ -125,7 +125,7 @@ namespace Game.NonCombat.Save
     public static class GameSaveDataFormat
     {
         public const string FormatId = "GAME_002";
-        public const int CurrentSchemaVersion = 2;
+        public const int CurrentSchemaVersion = 3;
     }
 
     [Serializable]
@@ -147,6 +147,7 @@ namespace Game.NonCombat.Save
     [Serializable]
     public sealed class RewardSaveData
     {
+        public List<RewardLedgerSaveData> ledger = new();
         public List<RewardLedgerSaveData> combatLedger = new();
     }
 
@@ -155,10 +156,21 @@ namespace Game.NonCombat.Save
     {
         public string sourceType;
         public string sourceId;
+        public string actionId;
+        public int requestedGold;
+        public int requestedExp;
+        public string requestedItemId;
+        public int requestedItemCount;
         public int gold;
         public int exp;
         public string itemId;
         public int itemCount;
+        public bool partialFailure;
+
+        public RewardLedgerSaveData Clone()
+        {
+            return (RewardLedgerSaveData)MemberwiseClone();
+        }
     }
 
     [Serializable]

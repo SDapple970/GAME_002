@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Game.Common.Identity;
+using Game.Reward;
 using UnityEngine;
 
 namespace Game.NonCombat.Save
@@ -35,6 +37,8 @@ namespace Game.NonCombat.Save
 
                 if (version <= 1)
                     MigrateVersion1(data);
+                if (version <= 2)
+                    MigrateVersion2(data);
             }
             else
             {
@@ -69,6 +73,35 @@ namespace Game.NonCombat.Save
                     quest.status = quest.completed ? "Completed" : hasProgress ? "Active" : "Inactive";
                 }
             }
+        }
+
+        private static void MigrateVersion2(GameSaveData data)
+        {
+            data.header ??= new SaveHeaderData();
+            data.reward ??= new RewardSaveData();
+            data.reward.ledger ??= new List<RewardLedgerSaveData>();
+            if (data.reward.combatLedger != null)
+            {
+                for (int i = 0; i < data.reward.combatLedger.Count; i++)
+                {
+                    RewardLedgerSaveData oldEntry = data.reward.combatLedger[i];
+                    if (oldEntry == null)
+                        continue;
+
+                    RewardLedgerSaveData migrated = oldEntry.Clone();
+                    migrated.sourceType = RewardSourceType.Combat.ToString();
+                    migrated.requestedGold = Mathf.Max(migrated.requestedGold, migrated.gold);
+                    migrated.requestedExp = Mathf.Max(migrated.requestedExp, migrated.exp);
+                    migrated.requestedItemId = string.IsNullOrWhiteSpace(migrated.requestedItemId)
+                        ? migrated.itemId
+                        : migrated.requestedItemId;
+                    migrated.requestedItemCount = Mathf.Max(migrated.requestedItemCount, migrated.itemCount);
+                    migrated.exp = 0;
+                    migrated.partialFailure = migrated.partialFailure || migrated.requestedExp > 0;
+                    data.reward.ledger.Add(migrated);
+                }
+            }
+            data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
         }
 
         private static GameSaveData FromLegacy(SaveData old)
@@ -115,9 +148,78 @@ namespace Game.NonCombat.Save
             NormalizeIntEntries(data.inventory.items);
             NormalizeStrings(data.story.completedEventIds, MaxLedgerEntries);
             NormalizeStrings(data.world.clearedEncounterIds, MaxLedgerEntries);
+            NormalizeRewardLedger(data.reward);
             if (data.quest.quests != null)
                 foreach (QuestStateSaveData quest in data.quest.quests)
                     if (quest != null) NormalizeStrings(quest.processedEventIds, MaxLedgerEntries);
+        }
+
+        private static void NormalizeRewardLedger(RewardSaveData reward)
+        {
+            reward.ledger ??= new List<RewardLedgerSaveData>();
+            reward.combatLedger ??= new List<RewardLedgerSaveData>();
+            Dictionary<string, RewardLedgerSaveData> unique = new(StringComparer.Ordinal);
+            for (int i = 0; i < reward.ledger.Count; i++)
+            {
+                RewardLedgerSaveData entry = reward.ledger[i];
+                if (entry == null ||
+                    !Enum.TryParse(entry.sourceType, out RewardSourceType sourceType) ||
+                    !TryMapSourceType(sourceType, out GameplayOutcomeSourceType outcomeType) ||
+                    !GameplayOutcomeIdentity.TryCreate(outcomeType, entry.sourceId, entry.actionId, out GameplayOutcomeIdentity identity))
+                {
+                    continue;
+                }
+
+                entry.sourceId = identity.SourceId;
+                entry.actionId = identity.ActionId;
+                entry.requestedGold = Mathf.Max(0, entry.requestedGold);
+                entry.requestedExp = Mathf.Max(0, entry.requestedExp);
+                entry.requestedItemId = NormalizeId(entry.requestedItemId);
+                entry.requestedItemCount = entry.requestedItemId == null ? 0 : Mathf.Max(0, entry.requestedItemCount);
+                entry.gold = Mathf.Max(0, entry.gold);
+                entry.exp = Mathf.Max(0, entry.exp);
+                entry.itemId = NormalizeId(entry.itemId);
+                entry.itemCount = entry.itemId == null ? 0 : Mathf.Max(0, entry.itemCount);
+                unique.TryAdd(identity.CanonicalId, entry);
+            }
+
+            reward.ledger.Clear();
+            reward.ledger.AddRange(unique.Values);
+            reward.ledger.Sort(CompareLedgerEntries);
+            if (reward.ledger.Count > MaxLedgerEntries)
+                reward.ledger.RemoveRange(MaxLedgerEntries, reward.ledger.Count - MaxLedgerEntries);
+        }
+
+        private static int CompareLedgerEntries(RewardLedgerSaveData left, RewardLedgerSaveData right)
+        {
+            int source = string.CompareOrdinal(left?.sourceType, right?.sourceType);
+            if (source != 0) return source;
+            int id = string.CompareOrdinal(left?.sourceId, right?.sourceId);
+            return id != 0 ? id : string.CompareOrdinal(left?.actionId, right?.actionId);
+        }
+
+        private static bool TryMapSourceType(
+            RewardSourceType sourceType,
+            out GameplayOutcomeSourceType outcomeType)
+        {
+            outcomeType = sourceType switch
+            {
+                RewardSourceType.Combat => GameplayOutcomeSourceType.Combat,
+                RewardSourceType.QuestCompletion => GameplayOutcomeSourceType.QuestCompletion,
+                RewardSourceType.MissionCompletion => GameplayOutcomeSourceType.MissionCompletion,
+                RewardSourceType.Interaction => GameplayOutcomeSourceType.Interaction,
+                RewardSourceType.Story => GameplayOutcomeSourceType.Story,
+                RewardSourceType.Choice => GameplayOutcomeSourceType.Choice,
+                RewardSourceType.Loot => GameplayOutcomeSourceType.Loot,
+                RewardSourceType.Tutorial => GameplayOutcomeSourceType.Tutorial,
+                _ => GameplayOutcomeSourceType.Unknown
+            };
+            return outcomeType != GameplayOutcomeSourceType.Unknown;
+        }
+
+        private static string NormalizeId(string value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
 
         internal static bool TryValidate(GameSaveData data, out string error)

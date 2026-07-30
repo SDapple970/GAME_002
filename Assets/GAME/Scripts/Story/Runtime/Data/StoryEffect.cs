@@ -1,9 +1,11 @@
 // Assets/GAME/Scripts/Story/Runtime/Data/StoryEffect.cs
+using Game.Common.Identity;
 using Game.Story;
 using Game.Story.Core;
 using Game.Mission;
 using Game.Mission.Data;
 using Game.Quest;
+using Game.Reward;
 using Game.Systems.Persona;
 using UnityEngine;
 
@@ -23,7 +25,8 @@ namespace Game.Story.Data
         StartMission,
         CompleteMission,
         CompleteMissionObjective,
-        PublishQuestEvent
+        PublishQuestEvent,
+        GrantReward
     }
 
     [System.Serializable]
@@ -39,6 +42,11 @@ namespace Game.Story.Data
         [SerializeField] private string missionId;
         [SerializeField] private string objectiveId;
         [SerializeField] private QuestEventType questEventType = QuestEventType.Unknown;
+        [SerializeField] private string rewardSourceId;
+        [SerializeField] private int rewardGold;
+        [SerializeField] private int rewardExp;
+        [SerializeField] private string rewardItemId;
+        [SerializeField] private int rewardItemCount;
 
         public void Apply()
         {
@@ -111,9 +119,44 @@ namespace Game.Story.Data
                 case StoryEffectType.PublishQuestEvent:
                     PublishQuestEvent(context);
                     return;
+                case StoryEffectType.GrantReward:
+                    GrantReward(context);
+                    return;
                 default:
                     return;
             }
+        }
+
+        private void GrantReward(StoryEffectContext context)
+        {
+            RewardService service = RewardService.Instance;
+            if (service == null)
+            {
+                Debug.LogWarning("[StoryEffect] RewardService missing. Story reward was not granted.");
+                return;
+            }
+
+            string sourceId = string.IsNullOrWhiteSpace(rewardSourceId)
+                ? context.EventId
+                : rewardSourceId.Trim();
+            if (string.IsNullOrWhiteSpace(rewardSourceId))
+            {
+                Debug.LogWarning(
+                    $"[StoryEffect] Using story action compatibility identity '{sourceId}'. New production reward effects should author rewardSourceId.");
+            }
+
+            RewardSourceType sourceType = context.EventId != null &&
+                                          (context.EventId.Contains(":choice:") ||
+                                           context.EventId.Contains(":timeout:"))
+                ? RewardSourceType.Choice
+                : RewardSourceType.Story;
+            service.GrantReward(new RewardGrantRequest(
+                sourceType,
+                sourceId,
+                Mathf.Max(0, rewardGold),
+                Mathf.Max(0, rewardExp),
+                rewardItemId,
+                Mathf.Max(0, rewardItemCount)));
         }
 
         private void PublishQuestEvent(StoryEffectContext context)
@@ -132,9 +175,11 @@ namespace Game.Story.Data
                 questEventType,
                 missionId,
                 objectiveId,
+                new GameplayOutcomeIdentity(
+                    GameplayOutcomeSourceType.Story,
+                    context.EventId),
                 intValue,
-                context.Source,
-                context.EventId));
+                context.Source));
         }
 
         private bool CanUseFlagEffect()

@@ -372,7 +372,7 @@ namespace Game.Story
             int choiceIndex = GetCurrentChoiceIndex(choice);
             choice.ApplyEffects(new StoryEffectContext(
                 gameObject,
-                BuildStoryActionId($"node:{nodeToken}:choice:{choiceIndex}")));
+                BuildStoryActionId($"choice:{choiceIndex}")));
             if (!IsCurrentNode(nodeToken) || !IsRunning)
                 return;
 
@@ -412,7 +412,7 @@ namespace Game.Story
                 StoryChoice choice = availableChoices[choiceIndex];
                 choice.ApplyEffects(new StoryEffectContext(
                     gameObject,
-                    BuildStoryActionId($"node:{nodeToken}:timeout:{choiceIndex}")));
+                    BuildStoryActionId($"timeout:{choiceIndex}")));
                 ContinueAfterChoice(choice.NextNodeId);
                 return;
             }
@@ -451,7 +451,7 @@ namespace Game.Story
                 StoryEffect effect = node.Effects[i];
                 effect?.Apply(new StoryEffectContext(
                     gameObject,
-                    BuildStoryActionId($"node:{nodeToken}:effect:{i}")));
+                    BuildStoryActionId($"effect:{i}")));
             }
         }
 
@@ -659,7 +659,7 @@ namespace Game.Story
 
         private string BuildStoryActionId(string action)
         {
-            return $"story:{_currentEvent?.EventId}:run:{_generation}:{action}";
+            return $"story:{_currentEvent?.EventId}:node:{_currentNode?.NodeId}:{action}";
         }
 
         private static bool EventRequiresChoices(StoryEventDefinitionSO eventDefinition)

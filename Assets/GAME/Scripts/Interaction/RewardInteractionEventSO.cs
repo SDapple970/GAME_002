@@ -1,4 +1,3 @@
-using Game.NonCombat.Inventory;
 using Game.Reward;
 using Game.UI;
 using UnityEngine;
@@ -9,6 +8,7 @@ namespace Game.Interaction
     public sealed class RewardInteractionEventSO : InteractionEventSO
     {
         [SerializeField] private string itemId = "item.test";
+        [SerializeField] private string rewardSourceId;
         [SerializeField] private int amount = 1;
         [SerializeField] private string displayName = "아이템";
         [SerializeField] private bool addToInventoryIfAvailable = true;
@@ -23,14 +23,22 @@ namespace Game.Interaction
 
             Debug.Log($"[RewardInteractionEvent] {message}", context.Target);
 
+            RewardGrantResult grantResult = RewardGrantResult.Empty;
             if (addToInventoryIfAvailable)
             {
                 RewardService rewardService = RewardService.Instance;
                 if (rewardService != null)
-                    rewardService.Grant(new RewardGrantRequest(RewardSourceType.Interaction, name, itemId: itemId, itemCount: safeAmount));
-                else if (InventoryService.Instance != null)
-                    InventoryService.Instance.AddItem(itemId, safeAmount);
+                    grantResult = rewardService.GrantReward(new RewardGrantRequest(
+                        RewardSourceType.Interaction,
+                        ResolveSourceId(),
+                        itemId: itemId,
+                        itemCount: safeAmount));
+                else
+                    Debug.LogWarning($"[RewardInteractionEvent] RewardService is missing. sourceId='{ResolveSourceId()}'.", context.Target);
             }
+
+            if (grantResult.DuplicateBlocked || (addToInventoryIfAvailable && !grantResult.HasAnyReward))
+                return;
 
             RewardUIPanel rewardPanel = Object.FindFirstObjectByType<RewardUIPanel>();
             if (rewardPanel != null && rewardPanel.TryShowFieldRewardMessage(message))
@@ -38,6 +46,17 @@ namespace Game.Interaction
 
             if (showPromptMessage && context.Controller != null)
                 context.Controller.ShowTemporaryMessage(message, messageSeconds);
+        }
+
+        private string ResolveSourceId()
+        {
+            if (!string.IsNullOrWhiteSpace(rewardSourceId))
+                return rewardSourceId.Trim();
+
+            Debug.LogWarning(
+                $"[RewardInteractionEvent] Using asset-name compatibility identity '{name}'. New production content must author rewardSourceId.",
+                this);
+            return $"compat-interaction:{name}";
         }
     }
 }

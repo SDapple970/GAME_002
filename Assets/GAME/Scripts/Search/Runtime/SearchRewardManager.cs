@@ -1,4 +1,5 @@
 using UnityEngine;
+using Game.Reward;
 
 namespace Game.Search
 {
@@ -71,24 +72,51 @@ namespace Game.Search
             }
 
             int amount = Mathf.Max(1, proposal.Amount);
+            RewardService rewardService = RewardService.Instance;
+            if (rewardService == null)
+            {
+                Debug.LogWarning("[SearchRewardManager] RewardService is missing. Search reward was not granted.", this);
+                return;
+            }
+
+            RewardGrantRequest request = proposal.Kind == SearchRewardKind.Currency
+                ? new RewardGrantRequest(
+                    RewardSourceType.Loot,
+                    proposal.RewardId,
+                    gold: amount,
+                    actionId: proposal.Kind.ToString())
+                : new RewardGrantRequest(
+                    RewardSourceType.Loot,
+                    proposal.RewardId,
+                    itemId: proposal.RewardId,
+                    itemCount: amount,
+                    actionId: proposal.Kind.ToString());
+            RewardGrantResult grant = rewardService.GrantReward(request);
+            if (grant.DuplicateBlocked || grant.InvalidRequest)
+                return;
+            int appliedAmount = proposal.Kind == SearchRewardKind.Currency
+                ? grant.Gold
+                : grant.ItemCount;
+            if (appliedAmount <= 0)
+                return;
 
             switch (proposal.Kind)
             {
                 case SearchRewardKind.SmallLoot:
-                    AddSmallLoot(amount);
+                    AddSmallLoot(appliedAmount);
                     break;
                 case SearchRewardKind.LargeLoot:
-                    AddLargeLoot(amount);
+                    AddLargeLoot(appliedAmount);
                     break;
                 case SearchRewardKind.Journal:
-                    AddJournal(amount);
+                    AddJournal(appliedAmount);
                     break;
                 case SearchRewardKind.Cat:
-                    AddCat(amount);
+                    AddCat(appliedAmount);
                     break;
                 case SearchRewardKind.Currency:
-                    currency += amount;
-                    Debug.Log($"[SearchRewardManager] Currency +{amount}. total={currency}", this);
+                    currency += grant.Gold;
+                    Debug.Log($"[SearchRewardManager] Currency +{grant.Gold}. total={currency}", this);
                     break;
                 case SearchRewardKind.Custom:
                     Debug.Log($"[SearchRewardManager] Custom reward accepted. id='{proposal.RewardId}' name='{proposal.RewardName}' amount={amount}", this);

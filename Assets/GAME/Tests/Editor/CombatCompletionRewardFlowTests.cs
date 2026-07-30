@@ -8,10 +8,12 @@ using Game.Combat.Data;
 using Game.Combat.Environment;
 using Game.Combat.Model;
 using Game.Combat.UI;
+using Game.Common.Identity;
 using Game.Core;
 using Game.DemoMission.Data;
 using Game.DemoMission.Runtime;
 using Game.NonCombat.Inventory;
+using Game.NonCombat.Save;
 using Game.Reward;
 using Game.UI;
 using NUnit.Framework;
@@ -305,17 +307,21 @@ namespace Game.Tests.Combat
         }
 
         [Test]
-        public void DuplicateResponse_RetainsOriginalDiagnostics()
+        public void DuplicateResponse_RetainsRequestedDiagnostics_ButReportsNoAppliedReward()
         {
             RewardService service = CreateRewardService(CreateWallet(), CreateInventory());
             RewardGrantRequest request = new(RewardSourceType.Combat, "diagnostic", 7, 3, "potion", 2);
             RewardGrantResult first = service.GrantReward(request);
             RewardGrantResult duplicate = service.GrantReward(request);
 
-            Assert.That(duplicate.Gold, Is.EqualTo(first.Gold));
-            Assert.That(duplicate.Exp, Is.EqualTo(first.Exp));
-            Assert.That(duplicate.ItemId, Is.EqualTo(first.ItemId));
-            Assert.That(duplicate.ItemCount, Is.EqualTo(first.ItemCount));
+            Assert.That(duplicate.RequestedGold, Is.EqualTo(first.RequestedGold));
+            Assert.That(duplicate.RequestedExp, Is.EqualTo(first.RequestedExp));
+            Assert.That(duplicate.RequestedItemId, Is.EqualTo(first.RequestedItemId));
+            Assert.That(duplicate.RequestedItemCount, Is.EqualTo(first.RequestedItemCount));
+            Assert.That(duplicate.Gold, Is.Zero);
+            Assert.That(duplicate.Exp, Is.Zero);
+            Assert.That(duplicate.ItemId, Is.Null);
+            Assert.That(duplicate.ItemCount, Is.Zero);
         }
 
         [Test]
@@ -341,7 +347,7 @@ namespace Game.Tests.Combat
             RewardGrantResult duplicate = service.GrantReward(request);
 
             Assert.That(first.HasAnyReward, Is.False);
-            Assert.That(first.SourceId, Is.EqualTo("combat:legacy-empty"));
+            Assert.That(first.SourceId, Is.EqualTo("legacy-empty-combat-result"));
             Assert.That(duplicate.DuplicateBlocked, Is.True);
         }
 
@@ -394,6 +400,127 @@ namespace Game.Tests.Combat
             service.GrantMissionCompletion("mission", 4, 0);
 
             Assert.That(wallet.Gold, Is.EqualTo(7));
+        }
+
+        [TestCase(RewardSourceType.Combat)]
+        [TestCase(RewardSourceType.QuestCompletion)]
+        [TestCase(RewardSourceType.MissionCompletion)]
+        [TestCase(RewardSourceType.Interaction)]
+        [TestCase(RewardSourceType.Story)]
+        [TestCase(RewardSourceType.Choice)]
+        [TestCase(RewardSourceType.Loot)]
+        [TestCase(RewardSourceType.Tutorial)]
+        public void EveryProductionRewardSource_IsIdempotentBeforeAndAfterRestore(RewardSourceType sourceType)
+        {
+            CurrencyWallet wallet = CreateWallet();
+            RewardService source = CreateRewardService(wallet, null);
+            RewardGrantRequest request = new(sourceType, "stable-source", gold: 5, actionId: "outcome");
+
+            RewardGrantResult first = source.GrantReward(request);
+            RewardGrantResult immediateDuplicate = source.GrantReward(request);
+            GameSaveData save = new();
+            source.CaptureSaveData(save);
+            UnityEngine.Object.DestroyImmediate(source.gameObject);
+
+            RewardService restored = CreateRewardService(wallet, null);
+            restored.RestoreSaveData(save);
+            RewardGrantResult restoredDuplicate = restored.GrantReward(request);
+
+            Assert.That(first.Gold, Is.EqualTo(5));
+            Assert.That(immediateDuplicate.DuplicateBlocked, Is.True);
+            Assert.That(immediateDuplicate.Gold, Is.Zero);
+            Assert.That(restoredDuplicate.DuplicateBlocked, Is.True);
+            Assert.That(restoredDuplicate.Gold, Is.Zero);
+            Assert.That(wallet.Gold, Is.EqualTo(5));
+        }
+
+        [Test]
+        public void SameTextIdUnderDifferentSourceTypes_DoesNotCollide()
+        {
+            CurrencyWallet wallet = CreateWallet();
+            RewardService service = CreateRewardService(wallet, null);
+
+            service.GrantReward(new RewardGrantRequest(RewardSourceType.Story, "same", gold: 2));
+            service.GrantReward(new RewardGrantRequest(RewardSourceType.Choice, "same", gold: 3));
+
+            Assert.That(wallet.Gold, Is.EqualTo(5));
+            Assert.That(service.GrantLedgerCount, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void EmptyProductionRewardId_IsRejectedWithoutGrant()
+        {
+            CurrencyWallet wallet = CreateWallet();
+            RewardService service = CreateRewardService(wallet, null);
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("identity is invalid"));
+
+            RewardGrantResult result = service.GrantReward(
+                new RewardGrantRequest(RewardSourceType.Story, null, gold: 10));
+
+            Assert.That(result.InvalidRequest, Is.True);
+            Assert.That(result.Gold, Is.Zero);
+            Assert.That(wallet.Gold, Is.Zero);
+            Assert.That(service.GrantLedgerCount, Is.Zero);
+        }
+
+        [Test]
+        public void RequestedExp_IsNotReportedAsApplied_AndAttemptIsConsumed()
+        {
+            InventoryService inventory = CreateInventory();
+            RewardService service = CreateRewardService(null, inventory);
+            RewardGrantRequest request = new(
+                RewardSourceType.QuestCompletion,
+                "quest:exp",
+                exp: 20,
+                itemId: "token",
+                itemCount: 1);
+
+            RewardGrantResult first = service.GrantReward(request);
+            RewardGrantResult duplicate = service.GrantReward(request);
+
+            Assert.That(first.RequestedExp, Is.EqualTo(20));
+            Assert.That(first.Exp, Is.Zero);
+            Assert.That(first.ItemCount, Is.EqualTo(1));
+            Assert.That(first.PartialFailure, Is.True);
+            Assert.That(duplicate.DuplicateBlocked, Is.True);
+            Assert.That(duplicate.Exp, Is.Zero);
+            Assert.That(inventory.GetCount("token"), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void LedgerSerialization_IsDeterministicAcrossSourceAndAction()
+        {
+            RewardService service = CreateRewardService(CreateWallet(), null);
+            service.GrantReward(new RewardGrantRequest(RewardSourceType.Story, "z", gold: 1, actionId: "b"));
+            service.GrantReward(new RewardGrantRequest(RewardSourceType.Combat, "a", gold: 1));
+            service.GrantReward(new RewardGrantRequest(RewardSourceType.Story, "z", gold: 1, actionId: "a"));
+            GameSaveData first = new();
+            GameSaveData second = new();
+
+            service.CaptureSaveData(first);
+            service.CaptureSaveData(second);
+
+            Assert.That(JsonUtility.ToJson(first.reward), Is.EqualTo(JsonUtility.ToJson(second.reward)));
+            Assert.That(first.reward.ledger, Has.Count.EqualTo(3));
+        }
+
+        [Test]
+        public void GameplayOutcomeIdentity_IsStableAndSeparatesBoundaries()
+        {
+            GameplayOutcomeIdentity first = new(GameplayOutcomeSourceType.Story, "ab|c", "d");
+            GameplayOutcomeIdentity same = new(GameplayOutcomeSourceType.Story, "ab|c", "d");
+            GameplayOutcomeIdentity differentBoundary = new(GameplayOutcomeSourceType.Story, "ab", "c|d");
+            GameplayOutcomeIdentity differentSource = new(GameplayOutcomeSourceType.Choice, "ab|c", "d");
+
+            Assert.That(first, Is.EqualTo(same));
+            Assert.That(first.CanonicalId, Is.EqualTo(same.CanonicalId));
+            Assert.That(first.CanonicalId, Is.Not.EqualTo(differentBoundary.CanonicalId));
+            Assert.That(first.CanonicalId, Is.Not.EqualTo(differentSource.CanonicalId));
+            Assert.That(GameplayOutcomeIdentity.TryCreate(
+                GameplayOutcomeSourceType.Story,
+                null,
+                null,
+                out _), Is.False);
         }
 
         [Test]

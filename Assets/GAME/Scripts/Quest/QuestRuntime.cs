@@ -15,6 +15,7 @@ namespace Game.Quest
         [SerializeField] private QuestDefinitionSO[] questDefinitions;
 
         private readonly Dictionary<string, RuntimeQuestState> _runtimeByQuestId = new();
+        private bool _missingPersistentEventIdWarned;
 
         public event Action<string> OnQuestStarted;
         public event Action<string> OnQuestCompleted;
@@ -101,14 +102,54 @@ namespace Game.Quest
             if (next == current)
                 return false;
 
-            if (!string.IsNullOrWhiteSpace(questEvent.EventId) &&
-                !state.TryRememberEventId(questEvent.EventId, MaxRememberedEventIdsPerQuest))
+            string persistentEventId = ResolvePersistentEventId(questEvent);
+            if (persistentEventId == null && !questEvent.AllowUntrackedCompatibility)
+            {
+                WarnMissingPersistentEventId(questEvent);
+                return false;
+            }
+
+            if (persistentEventId == null)
+                WarnUntrackedCompatibilityEvent(questEvent);
+            else if (!state.TryRememberEventId(persistentEventId, MaxRememberedEventIdsPerQuest))
             {
                 return false;
             }
 
             ApplyProgressChange(state, objectiveId, next, requiredCount);
             return true;
+        }
+
+        private static string ResolvePersistentEventId(QuestEvent questEvent)
+        {
+            if (questEvent.Identity.IsValid)
+                return questEvent.Identity.CanonicalId;
+
+            return string.IsNullOrWhiteSpace(questEvent.EventId)
+                ? null
+                : questEvent.EventId.Trim();
+        }
+
+        private void WarnMissingPersistentEventId(QuestEvent questEvent)
+        {
+            if (_missingPersistentEventIdWarned)
+                return;
+
+            _missingPersistentEventIdWarned = true;
+            Debug.LogWarning(
+                $"[QuestRuntime] Persistent QuestEvent rejected because its canonical identity is invalid. questId='{questEvent.QuestId}', objectiveId='{questEvent.ObjectiveId}', type={questEvent.Type}.",
+                this);
+        }
+
+        private void WarnUntrackedCompatibilityEvent(QuestEvent questEvent)
+        {
+            if (_missingPersistentEventIdWarned)
+                return;
+
+            _missingPersistentEventIdWarned = true;
+            Debug.LogWarning(
+                $"[QuestRuntime] QuestEvent used the explicit untracked compatibility path. New production events require GameplayOutcomeIdentity. questId='{questEvent.QuestId}', objectiveId='{questEvent.ObjectiveId}', type={questEvent.Type}.",
+                this);
         }
 
         public void CompleteObjective(string questId, string objectiveId)

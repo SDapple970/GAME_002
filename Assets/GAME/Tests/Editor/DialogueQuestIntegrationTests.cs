@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using Game.Core;
+using Game.Common.Identity;
 using Game.DemoMission.Data;
 using Game.DemoMission.Runtime;
 using Game.NonCombat.Inventory;
@@ -281,7 +282,9 @@ namespace Game.Tests.Integration
                 Assert.That(count, Is.EqualTo(1));
                 Assert.That(received.QuestId, Is.EqualTo("quest"));
                 Assert.That(received.ObjectiveId, Is.EqualTo("talk"));
-                Assert.That(received.EventId, Does.Contain("story:story:run:"));
+                Assert.That(received.Identity.SourceType, Is.EqualTo(GameplayOutcomeSourceType.Story));
+                Assert.That(received.Identity.SourceId, Is.EqualTo("story:story:node:start:effect:0"));
+                Assert.That(received.EventId, Is.EqualTo(received.Identity.CanonicalId));
             }
             finally
             {
@@ -425,6 +428,73 @@ namespace Game.Tests.Integration
             Assert.That(runtime.ApplyEvent(new QuestEvent(QuestEventType.Kill, "quest", "kill", 1, null, "a")), Is.False);
             Assert.That(runtime.ApplyEvent(new QuestEvent(QuestEventType.Kill, "quest", "kill", 1, null, "b")), Is.True);
             Assert.That(runtime.GetObjectiveProgress("quest", "kill"), Is.EqualTo(2));
+        }
+
+        [Test]
+        public void CanonicalQuestEvent_DuplicateAfterSaveRestore_DoesNotProgressAgain()
+        {
+            GameplayOutcomeIdentity identity = new(
+                GameplayOutcomeSourceType.Combat,
+                "completion-1",
+                "defeated-enemies");
+            QuestEvent questEvent = new(
+                QuestEventType.Kill,
+                "quest",
+                "kill",
+                identity);
+            QuestRuntime source = CreateComponent<QuestRuntime>("SourceRuntime");
+            source.StartQuest(CreateQuestDefinition("quest", QuestEventType.Kill, "kill", 3));
+            Assert.That(source.ApplyEvent(questEvent), Is.True);
+            GameSaveData save = new();
+            source.CaptureSaveData(save);
+
+            QuestRuntime restored = CreateComponent<QuestRuntime>("RestoredRuntime");
+            restored.StartQuest(CreateQuestDefinition("quest", QuestEventType.Kill, "kill", 3));
+            restored.RestoreSaveData(save);
+
+            Assert.That(restored.ApplyEvent(questEvent), Is.False);
+            Assert.That(restored.GetObjectiveProgress("quest", "kill"), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ProductionAndCompatibilityEvent_WithSameCanonicalId_Collide()
+        {
+            GameplayOutcomeIdentity identity = new(
+                GameplayOutcomeSourceType.Combat,
+                "completion-2",
+                "defeated-enemies");
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            runtime.StartQuest(CreateQuestDefinition("quest", QuestEventType.Kill, "kill", 3));
+            QuestEvent production = new(QuestEventType.Kill, "quest", "kill", identity);
+            QuestEvent compatibility = new(
+                QuestEventType.Kill,
+                "quest",
+                "kill",
+                1,
+                null,
+                identity.CanonicalId);
+
+            Assert.That(runtime.ApplyEvent(production), Is.True);
+            Assert.That(runtime.ApplyEvent(compatibility), Is.False);
+            Assert.That(runtime.GetObjectiveProgress("quest", "kill"), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void DuplicateCompletingCanonicalEvent_RaisesCompletionOnce()
+        {
+            GameplayOutcomeIdentity identity = new(
+                GameplayOutcomeSourceType.Story,
+                "story-event",
+                "quest-effect");
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            runtime.StartQuest(CreateQuestDefinition("quest", QuestEventType.Talk, "talk", 1));
+            int completions = 0;
+            runtime.OnQuestCompleted += _ => completions++;
+            QuestEvent questEvent = new(QuestEventType.Talk, "quest", "talk", identity);
+
+            Assert.That(runtime.ApplyEvent(questEvent), Is.True);
+            Assert.That(runtime.ApplyEvent(questEvent), Is.False);
+            Assert.That(completions, Is.EqualTo(1));
         }
 
         [Test]

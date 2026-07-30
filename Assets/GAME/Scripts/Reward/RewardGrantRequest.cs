@@ -8,6 +8,7 @@ namespace Game.Reward
         public readonly int Exp;
         public readonly string ItemId;
         public readonly int ItemCount;
+        public readonly string ActionId;
 
         public RewardGrantRequest(
             RewardSourceType sourceType,
@@ -15,7 +16,8 @@ namespace Game.Reward
             int gold = 0,
             int exp = 0,
             string itemId = null,
-            int itemCount = 0)
+            int itemCount = 0,
+            string actionId = null)
         {
             SourceType = sourceType;
             SourceId = sourceId;
@@ -23,6 +25,7 @@ namespace Game.Reward
             Exp = exp;
             ItemId = itemId;
             ItemCount = itemCount;
+            ActionId = actionId;
         }
     }
 }

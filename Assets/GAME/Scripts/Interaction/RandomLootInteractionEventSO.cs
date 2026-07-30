@@ -1,4 +1,3 @@
-using Game.NonCombat.Inventory;
 using Game.Reward;
 using Game.UI;
 using UnityEngine;
@@ -9,6 +8,7 @@ namespace Game.Interaction
     public sealed class RandomLootInteractionEventSO : InteractionEventSO
     {
         [SerializeField] private RandomLootEntry[] entries;
+        [SerializeField] private string rewardSourceId;
         [SerializeField] private bool addToInventoryIfAvailable = true;
         [SerializeField] private bool showMessage = true;
         [SerializeField] private float messageSeconds = 1.5f;
@@ -22,21 +22,41 @@ namespace Game.Interaction
             }
 
             string message = BuildMessage(entry);
+            RewardGrantResult grantResult = RewardGrantResult.Empty;
 
             if (!entry.isNothing && addToInventoryIfAvailable)
             {
                 int amount = Mathf.Max(1, entry.amount);
                 RewardService rewardService = RewardService.Instance;
                 if (rewardService != null)
-                    rewardService.Grant(new RewardGrantRequest(RewardSourceType.Interaction, name, itemId: entry.itemId, itemCount: amount));
-                else if (InventoryService.Instance != null)
-                    InventoryService.Instance.AddItem(entry.itemId, amount);
+                    grantResult = rewardService.GrantReward(new RewardGrantRequest(
+                        RewardSourceType.Loot,
+                        ResolveSourceId(),
+                        itemId: entry.itemId,
+                        itemCount: amount,
+                        actionId: entry.itemId));
+                else
+                    Debug.LogWarning($"[RandomLootInteractionEventSO] RewardService is missing. sourceId='{ResolveSourceId()}'.", context.Target);
             }
+
+            if (grantResult.DuplicateBlocked || (!entry.isNothing && addToInventoryIfAvailable && !grantResult.HasAnyReward))
+                return;
 
             Debug.Log($"[RandomLootInteractionEventSO] {message}", context.Target);
 
             if (showMessage)
                 ShowRewardMessage(context, message);
+        }
+
+        private string ResolveSourceId()
+        {
+            if (!string.IsNullOrWhiteSpace(rewardSourceId))
+                return rewardSourceId.Trim();
+
+            Debug.LogWarning(
+                $"[RandomLootInteractionEventSO] Using asset-name compatibility identity '{name}'. New production content must author rewardSourceId.",
+                this);
+            return $"compat-loot:{name}";
         }
 
         private bool TryPickEntry(out RandomLootEntry selected)

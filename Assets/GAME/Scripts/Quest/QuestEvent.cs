@@ -1,3 +1,4 @@
+using Game.Common.Identity;
 using UnityEngine;
 
 namespace Game.Quest
@@ -10,6 +11,8 @@ namespace Game.Quest
         public readonly int Amount;
         public readonly GameObject Source;
         public readonly string EventId;
+        public readonly GameplayOutcomeIdentity Identity;
+        public readonly bool AllowUntrackedCompatibility;
 
         public QuestEvent(
             QuestEventType type,
@@ -25,6 +28,26 @@ namespace Game.Quest
             Amount = amount;
             Source = source;
             EventId = eventId;
+            Identity = default;
+            AllowUntrackedCompatibility = string.IsNullOrWhiteSpace(eventId);
+        }
+
+        public QuestEvent(
+            QuestEventType type,
+            string questId,
+            string objectiveId,
+            GameplayOutcomeIdentity identity,
+            int amount = 1,
+            GameObject source = null)
+        {
+            Type = type;
+            QuestId = questId;
+            ObjectiveId = objectiveId;
+            Amount = amount;
+            Source = source;
+            Identity = identity;
+            EventId = identity.CanonicalId;
+            AllowUntrackedCompatibility = false;
         }
     }
 }

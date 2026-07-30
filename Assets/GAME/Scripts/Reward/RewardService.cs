@@ -1,8 +1,8 @@
 using Game.Combat.Model;
+using Game.Common.Identity;
 using Game.NonCombat.Inventory;
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using UnityEngine;
 using Game.NonCombat.Save;
 
@@ -10,21 +10,24 @@ namespace Game.Reward
 {
     public sealed class RewardService : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
     {
-        private const string LegacyEmptyCombatSourceId = "combat:legacy-empty";
+        private const string LegacyEmptyCombatSourceId = "legacy-empty-combat-result";
 
         public static RewardService Instance { get; private set; }
 
         [SerializeField] private CurrencyWallet currencyWallet;
         [SerializeField] private InventoryService inventoryService;
 
-        private readonly Dictionary<string, RewardGrantResult> _combatGrantLedger = new();
+        private readonly Dictionary<string, RewardGrantResult> _grantLedger = new();
 
         private bool _missingCurrencyWalletWarned;
         private bool _missingInventoryServiceWarned;
         private bool _missingProgressionWarned;
-        private bool _duplicateCombatRewardWarned;
+        private bool _duplicateRewardWarned;
+        private bool _compatibilityIdentityWarned;
+        private bool _invalidIdentityWarned;
 
-        internal int CombatGrantLedgerCount => _combatGrantLedger.Count;
+        internal int CombatGrantLedgerCount => _grantLedger.Count;
+        internal int GrantLedgerCount => _grantLedger.Count;
 
         private void Awake()
         {
@@ -54,7 +57,7 @@ namespace Game.Reward
         {
             return Grant(new RewardGrantRequest(
                 RewardSourceType.QuestCompletion,
-                questId,
+                PrefixCompatibilityId("quest", questId),
                 gold,
                 exp));
         }
@@ -63,7 +66,7 @@ namespace Game.Reward
         {
             return Grant(new RewardGrantRequest(
                 RewardSourceType.MissionCompletion,
-                missionId,
+                PrefixCompatibilityId("mission", missionId),
                 gold,
                 exp));
         }
@@ -75,50 +78,74 @@ namespace Game.Reward
 
         public RewardGrantResult GrantReward(RewardGrantRequest request)
         {
-            string sourceId = ResolveRequestSourceId(request);
-            if (request.SourceType == RewardSourceType.Combat &&
-                _combatGrantLedger.TryGetValue(sourceId, out RewardGrantResult recorded))
+            if (!TryResolveIdentity(request, out GameplayOutcomeIdentity identity))
             {
-                WarnDuplicateCombatReward(sourceId);
+                WarnInvalidIdentity(request);
                 return new RewardGrantResult(
-                    recorded.SourceType,
-                    recorded.SourceId,
-                    recorded.Gold,
-                    recorded.Exp,
-                    recorded.ItemId,
-                    recorded.ItemCount,
-                    true);
+                    request.SourceType,
+                    request.SourceId,
+                    Mathf.Max(0, request.Gold),
+                    Mathf.Max(0, request.Exp),
+                    0,
+                    0,
+                    NormalizeItemId(request.ItemId),
+                    NormalizeItemCount(request.ItemId, request.ItemCount),
+                    null,
+                    0,
+                    false,
+                    HasRequestedReward(request),
+                    true,
+                    request.ActionId);
+            }
+
+            string ledgerKey = identity.CanonicalId;
+            if (_grantLedger.TryGetValue(ledgerKey, out RewardGrantResult recorded))
+            {
+                WarnDuplicateReward(identity);
+                return CreateDuplicateResult(recorded);
             }
 
             int requestedGold = Mathf.Max(0, request.Gold);
-            int acceptedExp = Mathf.Max(0, request.Exp);
-            string requestedItemId = string.IsNullOrWhiteSpace(request.ItemId) ? null : request.ItemId;
-            int requestedItemCount = requestedItemId != null ? Mathf.Max(0, request.ItemCount) : 0;
+            int requestedExp = Mathf.Max(0, request.Exp);
+            string requestedItemId = NormalizeItemId(request.ItemId);
+            int requestedItemCount = NormalizeItemCount(requestedItemId, request.ItemCount);
 
             int appliedGold = 0;
+            int appliedExp = 0;
             int appliedItemCount = 0;
-            if (requestedGold > 0 && GrantGold(requestedGold, request, sourceId))
+            if (requestedGold > 0 && GrantGold(requestedGold, request, identity.CanonicalId))
                 appliedGold = requestedGold;
 
-            if (requestedItemCount > 0 && GrantItem(requestedItemId, requestedItemCount, request, sourceId))
+            if (requestedItemCount > 0 && GrantItem(requestedItemId, requestedItemCount, request, identity.CanonicalId))
                 appliedItemCount = requestedItemCount;
 
-            if (acceptedExp > 0)
-                WarnMissingProgressionOnce(acceptedExp, request, sourceId);
+            if (requestedExp > 0)
+                WarnMissingProgressionOnce(requestedExp, request, identity.CanonicalId);
+
+            bool partialFailure = appliedGold != requestedGold ||
+                                  appliedExp != requestedExp ||
+                                  appliedItemCount != requestedItemCount;
 
             RewardGrantResult result = new RewardGrantResult(
                 request.SourceType,
-                sourceId,
+                identity.SourceId,
+                requestedGold,
+                requestedExp,
                 appliedGold,
-                acceptedExp,
+                appliedExp,
+                requestedItemId,
+                requestedItemCount,
                 appliedItemCount > 0 ? requestedItemId : null,
                 appliedItemCount,
-                false);
+                false,
+                partialFailure,
+                false,
+                identity.ActionId);
 
-            // A combat request is consumed after its one application attempt. Retrying a
-            // partial attempt could duplicate a channel that already succeeded.
-            if (request.SourceType == RewardSourceType.Combat)
-                _combatGrantLedger[sourceId] = result;
+            // All sources use a permanently-consumed attempt. This is intentionally not
+            // resumable: retrying a partial multi-channel grant could duplicate a channel
+            // which already succeeded.
+            _grantLedger[ledgerKey] = result;
 
             return result;
         }
@@ -129,9 +156,7 @@ namespace Game.Reward
                 ? result.CompletionId
                 : !string.IsNullOrWhiteSpace(sourceId)
                     ? sourceId
-                    : result != null
-                        ? $"combat:{RuntimeHelpers.GetHashCode(result)}"
-                        : "combat:null";
+                    : LegacyEmptyCombatSourceId;
 
             if (!IsVictory(result))
                 return new RewardGrantRequest(RewardSourceType.Combat, resolvedSourceId);
@@ -145,41 +170,93 @@ namespace Game.Reward
 
         internal void ResetCombatLedgerForTests()
         {
-            _combatGrantLedger.Clear();
-            _duplicateCombatRewardWarned = false;
+            _grantLedger.Clear();
+            _duplicateRewardWarned = false;
+            _compatibilityIdentityWarned = false;
+            _invalidIdentityWarned = false;
         }
 
         public void CaptureSaveData(GameSaveData saveData)
         {
             if (saveData == null) return;
             saveData.reward ??= new RewardSaveData();
+            saveData.reward.ledger.Clear();
             saveData.reward.combatLedger.Clear();
-            foreach (KeyValuePair<string, RewardGrantResult> pair in _combatGrantLedger)
+            List<KeyValuePair<string, RewardGrantResult>> ordered = new(_grantLedger);
+            ordered.Sort((left, right) => string.CompareOrdinal(left.Key, right.Key));
+            foreach (KeyValuePair<string, RewardGrantResult> pair in ordered)
             {
                 RewardGrantResult result = pair.Value;
-                if (string.IsNullOrWhiteSpace(pair.Key)) continue;
-                saveData.reward.combatLedger.Add(new RewardLedgerSaveData
+                if (!TryCreateIdentity(result.SourceType, result.SourceId, result.ActionId, out _))
+                    continue;
+
+                RewardLedgerSaveData entry = new RewardLedgerSaveData
                 {
-                    sourceType = result.SourceType.ToString(), sourceId = pair.Key, gold = result.Gold,
-                    exp = result.Exp, itemId = result.ItemId, itemCount = result.ItemCount
-                });
+                    sourceType = result.SourceType.ToString(),
+                    sourceId = result.SourceId,
+                    actionId = result.ActionId,
+                    requestedGold = result.RequestedGold,
+                    requestedExp = result.RequestedExp,
+                    requestedItemId = result.RequestedItemId,
+                    requestedItemCount = result.RequestedItemCount,
+                    gold = result.Gold,
+                    exp = result.Exp,
+                    itemId = result.ItemId,
+                    itemCount = result.ItemCount,
+                    partialFailure = result.PartialFailure
+                };
+                saveData.reward.ledger.Add(entry);
+
+                if (result.SourceType == RewardSourceType.Combat)
+                    saveData.reward.combatLedger.Add(entry.Clone());
             }
-            saveData.reward.combatLedger.Sort((left, right) => string.CompareOrdinal(left.sourceId, right.sourceId));
         }
 
         public void RestoreSaveData(GameSaveData saveData)
         {
-            _combatGrantLedger.Clear();
-            if (saveData?.reward?.combatLedger == null) return;
-            for (int i = 0; i < saveData.reward.combatLedger.Count; i++)
+            _grantLedger.Clear();
+            List<RewardLedgerSaveData> entries = saveData?.reward?.ledger;
+            if (entries == null || entries.Count == 0)
+                entries = saveData?.reward?.combatLedger;
+            if (entries == null) return;
+
+            for (int i = 0; i < entries.Count; i++)
             {
-                RewardLedgerSaveData entry = saveData.reward.combatLedger[i];
+                RewardLedgerSaveData entry = entries[i];
                 if (entry == null || string.IsNullOrWhiteSpace(entry.sourceId) ||
-                    !Enum.TryParse(entry.sourceType, out RewardSourceType sourceType) || sourceType != RewardSourceType.Combat)
+                    !Enum.TryParse(entry.sourceType, out RewardSourceType sourceType) ||
+                    !TryCreateIdentity(sourceType, entry.sourceId, entry.actionId, out GameplayOutcomeIdentity identity))
                     continue;
-                _combatGrantLedger[entry.sourceId] = new RewardGrantResult(sourceType, entry.sourceId,
-                    Mathf.Max(0, entry.gold), Mathf.Max(0, entry.exp),
-                    string.IsNullOrWhiteSpace(entry.itemId) ? null : entry.itemId, Mathf.Max(0, entry.itemCount), false);
+
+                int appliedGold = Mathf.Max(0, entry.gold);
+                int appliedExp = Mathf.Max(0, entry.exp);
+                string appliedItemId = NormalizeItemId(entry.itemId);
+                int appliedItemCount = NormalizeItemCount(appliedItemId, entry.itemCount);
+                int requestedGold = entry.requestedGold > 0 ? entry.requestedGold : appliedGold;
+                int requestedExp = entry.requestedExp > 0 ? entry.requestedExp : appliedExp;
+                string requestedItemId = NormalizeItemId(entry.requestedItemId) ?? appliedItemId;
+                int requestedItemCount = entry.requestedItemCount > 0
+                    ? entry.requestedItemCount
+                    : appliedItemCount;
+                bool partial = entry.partialFailure ||
+                               requestedGold != appliedGold ||
+                               requestedExp != appliedExp ||
+                               requestedItemCount != appliedItemCount;
+                _grantLedger[identity.CanonicalId] = new RewardGrantResult(
+                    sourceType,
+                    identity.SourceId,
+                    requestedGold,
+                    requestedExp,
+                    appliedGold,
+                    appliedExp,
+                    requestedItemId,
+                    requestedItemCount,
+                    appliedItemId,
+                    appliedItemCount,
+                    false,
+                    partial,
+                    false,
+                    identity.ActionId);
             }
         }
 
@@ -193,12 +270,30 @@ namespace Game.Reward
                 : result.IsWin;
         }
 
-        private static string ResolveRequestSourceId(RewardGrantRequest request)
+        private bool TryResolveIdentity(
+            RewardGrantRequest request,
+            out GameplayOutcomeIdentity identity)
         {
-            if (request.SourceType == RewardSourceType.Combat && string.IsNullOrWhiteSpace(request.SourceId))
-                return LegacyEmptyCombatSourceId;
+            string sourceId = request.SourceId;
+            if (request.SourceType == RewardSourceType.Combat &&
+                string.IsNullOrWhiteSpace(sourceId))
+            {
+                sourceId = LegacyEmptyCombatSourceId;
+            }
 
-            return request.SourceId;
+            if (request.SourceType == RewardSourceType.Combat &&
+                string.Equals(sourceId, LegacyEmptyCombatSourceId, StringComparison.Ordinal))
+            {
+                if (!_compatibilityIdentityWarned)
+                {
+                    _compatibilityIdentityWarned = true;
+                    Debug.LogWarning(
+                        "[RewardService] Combat reward used the legacy empty-ID compatibility identity. New production combat results require CompletionId.",
+                        this);
+                }
+            }
+
+            return TryCreateIdentity(request.SourceType, sourceId, request.ActionId, out identity);
         }
 
         private bool GrantGold(int amount, RewardGrantRequest request, string sourceId)
@@ -262,13 +357,91 @@ namespace Game.Reward
             Debug.Log($"[RewardService] EXP {exp} received from {request.SourceType} ({sourceId}). CharacterProgressionService is not implemented yet.", this);
         }
 
-        private void WarnDuplicateCombatReward(string sourceId)
+        private static bool TryCreateIdentity(
+            RewardSourceType sourceType,
+            string sourceId,
+            string actionId,
+            out GameplayOutcomeIdentity identity)
         {
-            if (_duplicateCombatRewardWarned)
+            GameplayOutcomeSourceType outcomeType = sourceType switch
+            {
+                RewardSourceType.Combat => GameplayOutcomeSourceType.Combat,
+                RewardSourceType.QuestCompletion => GameplayOutcomeSourceType.QuestCompletion,
+                RewardSourceType.MissionCompletion => GameplayOutcomeSourceType.MissionCompletion,
+                RewardSourceType.Interaction => GameplayOutcomeSourceType.Interaction,
+                RewardSourceType.Story => GameplayOutcomeSourceType.Story,
+                RewardSourceType.Choice => GameplayOutcomeSourceType.Choice,
+                RewardSourceType.Loot => GameplayOutcomeSourceType.Loot,
+                RewardSourceType.Tutorial => GameplayOutcomeSourceType.Tutorial,
+                _ => GameplayOutcomeSourceType.Unknown
+            };
+            return GameplayOutcomeIdentity.TryCreate(outcomeType, sourceId, actionId, out identity);
+        }
+
+        private static RewardGrantResult CreateDuplicateResult(RewardGrantResult recorded)
+        {
+            return new RewardGrantResult(
+                recorded.SourceType,
+                recorded.SourceId,
+                recorded.RequestedGold,
+                recorded.RequestedExp,
+                0,
+                0,
+                recorded.RequestedItemId,
+                recorded.RequestedItemCount,
+                null,
+                0,
+                true,
+                recorded.PartialFailure,
+                false,
+                recorded.ActionId);
+        }
+
+        private static string NormalizeItemId(string itemId)
+        {
+            return string.IsNullOrWhiteSpace(itemId) ? null : itemId.Trim();
+        }
+
+        private static int NormalizeItemCount(string itemId, int itemCount)
+        {
+            return string.IsNullOrWhiteSpace(itemId) ? 0 : Mathf.Max(0, itemCount);
+        }
+
+        private static bool HasRequestedReward(RewardGrantRequest request)
+        {
+            return request.Gold > 0 || request.Exp > 0 ||
+                   (!string.IsNullOrWhiteSpace(request.ItemId) && request.ItemCount > 0);
+        }
+
+        private static string PrefixCompatibilityId(string prefix, string sourceId)
+        {
+            if (string.IsNullOrWhiteSpace(sourceId))
+                return null;
+
+            string trimmed = sourceId.Trim();
+            return trimmed.StartsWith(prefix + ":", StringComparison.Ordinal)
+                ? trimmed
+                : $"{prefix}:{trimmed}";
+        }
+
+        private void WarnInvalidIdentity(RewardGrantRequest request)
+        {
+            if (_invalidIdentityWarned)
                 return;
 
-            _duplicateCombatRewardWarned = true;
-            Debug.LogWarning($"[RewardService] Duplicate combat reward blocked. sourceId={sourceId}", this);
+            _invalidIdentityWarned = true;
+            Debug.LogWarning(
+                $"[RewardService] Reward rejected because its production identity is invalid. sourceType={request.SourceType}, sourceId='{request.SourceId}', actionId='{request.ActionId}'.",
+                this);
+        }
+
+        private void WarnDuplicateReward(GameplayOutcomeIdentity identity)
+        {
+            if (_duplicateRewardWarned)
+                return;
+
+            _duplicateRewardWarned = true;
+            Debug.LogWarning($"[RewardService] Duplicate reward blocked. identity={identity.CanonicalId}", this);
         }
     }
 }

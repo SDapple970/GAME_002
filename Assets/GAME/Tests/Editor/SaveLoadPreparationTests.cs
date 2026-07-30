@@ -129,7 +129,7 @@ namespace Game.Tests.Integration
         {
             string json = "{\"header\":{\"schemaVersion\":1},\"quest\":{\"quests\":[{\"questId\":\"q\",\"completed\":true}]}}";
             GameSaveData data = ReadSnapshotFromLegacyJson(json);
-            Assert.That(data.header.schemaVersion, Is.EqualTo(2));
+            Assert.That(data.header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion));
             Assert.That(data.header.formatId, Is.EqualTo(GameSaveDataFormat.FormatId));
             Assert.That(data.quest.quests[0].status, Is.EqualTo("Completed"));
         }
@@ -182,6 +182,52 @@ namespace Game.Tests.Integration
             RewardGrantResult result = rewards.GrantReward(new RewardGrantRequest(RewardSourceType.Combat, "combat-1", 50, 0));
             Assert.That(result.DuplicateBlocked, Is.True);
             Assert.That(wallet.Gold, Is.Zero);
+        }
+
+        [Test]
+        public void SchemaTwoCombatLedger_MigratesIntoCanonicalAllSourceLedger()
+        {
+            string json =
+                "{\"header\":{\"formatId\":\"GAME_002\",\"schemaVersion\":2}," +
+                "\"reward\":{\"combatLedger\":[{\"sourceType\":\"Combat\",\"sourceId\":\"combat-old\",\"gold\":9,\"exp\":4}]}}";
+
+            GameSaveData migrated = ReadSnapshotFromLegacyJson(json);
+
+            Assert.That(migrated.header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion));
+            Assert.That(migrated.reward.ledger, Has.Count.EqualTo(1));
+            Assert.That(migrated.reward.ledger[0].sourceType, Is.EqualTo(RewardSourceType.Combat.ToString()));
+            Assert.That(migrated.reward.ledger[0].sourceId, Is.EqualTo("combat-old"));
+            Assert.That(migrated.reward.ledger[0].requestedGold, Is.EqualTo(9));
+            Assert.That(migrated.reward.ledger[0].requestedExp, Is.EqualTo(4));
+            Assert.That(migrated.reward.ledger[0].exp, Is.Zero);
+            Assert.That(migrated.reward.ledger[0].partialFailure, Is.True);
+        }
+
+        [Test]
+        public void InvalidAndDuplicateCanonicalLedgerEntries_NormalizeSafely()
+        {
+            GameSaveData data = new();
+            data.reward.ledger.Add(new RewardLedgerSaveData
+            {
+                sourceType = RewardSourceType.Story.ToString(),
+                sourceId = "story",
+                actionId = "reward",
+                gold = 3
+            });
+            data.reward.ledger.Add(new RewardLedgerSaveData
+            {
+                sourceType = RewardSourceType.Story.ToString(),
+                sourceId = "story",
+                actionId = "reward",
+                gold = 99
+            });
+            data.reward.ledger.Add(new RewardLedgerSaveData { sourceType = "Invalid", sourceId = "bad" });
+            data.reward.ledger.Add(new RewardLedgerSaveData { sourceType = RewardSourceType.Choice.ToString(), sourceId = "" });
+
+            GameSaveData normalized = ReadSnapshotFromLegacyJson(SaveSerializer.ToJson(data));
+
+            Assert.That(normalized.reward.ledger, Has.Count.EqualTo(1));
+            Assert.That(normalized.reward.ledger[0].gold, Is.EqualTo(3));
         }
 
         [Test]

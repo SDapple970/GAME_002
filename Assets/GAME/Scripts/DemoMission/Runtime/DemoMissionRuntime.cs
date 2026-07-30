@@ -123,6 +123,11 @@ namespace Game.DemoMission.Runtime
 
         public void RegisterEnemyDefeated(string eventId)
         {
+            RegisterEnemyDefeated(1, eventId);
+        }
+
+        public void RegisterEnemyDefeated(int amount, string eventId)
+        {
             if (currentMission == null)
             {
                 Debug.LogWarning("[DemoMissionRuntime] Enemy defeat ignored. Current mission is null.", this);
@@ -131,16 +136,16 @@ namespace Game.DemoMission.Runtime
 
             if (TryResolveQuestRuntime(false))
             {
-                TryPublishQuestEvent(QuestEventType.Kill, EnemyDefeatedObjectiveId, 1, eventId);
+                TryPublishQuestEvent(QuestEventType.Kill, EnemyDefeatedObjectiveId, Mathf.Max(1, amount), eventId);
                 return;
             }
 
             int previousKills = _enemyDefeatCount;
             int requiredKills = Mathf.Max(0, currentMission.requiredEnemyKills);
             if (requiredKills > 0)
-                _enemyDefeatCount = Mathf.Min(_enemyDefeatCount + 1, requiredKills);
+                _enemyDefeatCount = Mathf.Min(_enemyDefeatCount + Mathf.Max(1, amount), requiredKills);
             else
-                _enemyDefeatCount++;
+                _enemyDefeatCount += Mathf.Max(1, amount);
 
             if (_enemyDefeatCount != previousKills)
                 RaiseProgressChanged();

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Game.Combat.Core;
+using Game.Common.Identity;
 using Game.Combat.Model;
 using Game.Core;
 using Game.DemoMission.Runtime;
@@ -344,12 +345,17 @@ namespace Game.Combat.UI
             string completionId = RewardService.CreateCombatRewardRequest(result, null).SourceId;
             HashSet<int> uniqueEnemyIds = new HashSet<int>();
             for (int i = 0; i < result.DefeatedEnemyIds.Count; i++)
+                uniqueEnemyIds.Add(result.DefeatedEnemyIds[i]);
+
+            if (uniqueEnemyIds.Count > 0)
             {
-                if (uniqueEnemyIds.Add(result.DefeatedEnemyIds[i]))
-                {
-                    DemoMissionRuntime.Instance.RegisterEnemyDefeated(
-                        $"combat:{completionId}:enemy:{result.DefeatedEnemyIds[i]}");
-                }
+                GameplayOutcomeIdentity questIdentity = new(
+                    GameplayOutcomeSourceType.Combat,
+                    completionId,
+                    "defeated-enemies");
+                DemoMissionRuntime.Instance.RegisterEnemyDefeated(
+                    uniqueEnemyIds.Count,
+                    questIdentity.CanonicalId);
             }
         }
 
