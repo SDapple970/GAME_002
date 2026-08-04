@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Game.Common.Identity;
+using Game.Quest;
 using Game.Reward;
 using UnityEngine;
 
@@ -39,6 +40,8 @@ namespace Game.NonCombat.Save
                     MigrateVersion1(data);
                 if (version <= 2)
                     MigrateVersion2(data);
+                if (version <= 3)
+                    MigrateVersion3(data);
             }
             else
             {
@@ -107,6 +110,27 @@ namespace Game.NonCombat.Save
             data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
         }
 
+        private static void MigrateVersion3(GameSaveData data)
+        {
+            data.header ??= new SaveHeaderData();
+            if (data.quest?.quests != null)
+            {
+                for (int i = 0; i < data.quest.quests.Count; i++)
+                {
+                    QuestStateSaveData quest = data.quest.quests[i];
+                    if (quest == null)
+                        continue;
+
+                    quest.activeGroupIndex = 0;
+                    quest.attempt = string.Equals(quest.status, QuestStatus.Inactive.ToString(), StringComparison.Ordinal)
+                        ? 0
+                        : 1;
+                    quest.failureReasonId = null;
+                }
+            }
+            data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
+        }
+
         private static GameSaveData FromLegacy(SaveData old)
         {
             GameSaveData data = new();
@@ -151,7 +175,10 @@ namespace Game.NonCombat.Save
             if (data?.quest?.quests != null)
             {
                 for (int i = 0; i < data.quest.quests.Count; i++)
+                {
                     identityRecords += data.quest.quests[i]?.processedEventIds?.Count ?? 0;
+                    identityRecords += data.quest.quests[i]?.retiredEventIds?.Count ?? 0;
+                }
             }
 
             if (identityRecords > MaxTotalIdentityRecords)
@@ -178,7 +205,30 @@ namespace Game.NonCombat.Save
             NormalizeRewardLedger(data.reward);
             if (data.quest.quests != null)
                 foreach (QuestStateSaveData quest in data.quest.quests)
-                    if (quest != null) NormalizeStrings(quest.processedEventIds);
+                    if (quest != null) NormalizeQuestState(quest);
+        }
+
+        private static void NormalizeQuestState(QuestStateSaveData quest)
+        {
+            NormalizeStrings(quest.processedEventIds);
+            NormalizeStrings(quest.retiredEventIds);
+            NormalizeStrings(quest.revealedObjectiveIds);
+            quest.activeGroupIndex = Mathf.Max(0, quest.activeGroupIndex);
+            quest.attempt = Mathf.Max(0, quest.attempt);
+            quest.failureReasonId = NormalizeId(quest.failureReasonId);
+
+            if (!Enum.TryParse(quest.status, out QuestStatus status) ||
+                !Enum.IsDefined(typeof(QuestStatus), status))
+            {
+                status = quest.completed ? QuestStatus.Completed : QuestStatus.Inactive;
+            }
+
+            quest.status = status.ToString();
+            quest.completed = status == QuestStatus.Completed;
+            if (status != QuestStatus.Failed)
+                quest.failureReasonId = null;
+            if (status != QuestStatus.Inactive)
+                quest.attempt = Mathf.Max(1, quest.attempt);
         }
 
         private static void NormalizeRewardLedger(RewardSaveData reward)

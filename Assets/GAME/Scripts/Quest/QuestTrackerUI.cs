@@ -53,6 +53,9 @@ namespace Game.Quest
                 questRuntime.OnQuestStarted += HandleQuestStarted;
                 questRuntime.OnObjectiveProgressChanged += HandleObjectiveProgressChanged;
                 questRuntime.OnQuestCompleted += HandleQuestCompleted;
+                questRuntime.OnQuestFailed += HandleQuestFailed;
+                questRuntime.OnQuestRetried += HandleQuestRetried;
+                questRuntime.OnObjectiveVisibilityChanged += HandleObjectiveVisibilityChanged;
                 _runtimeSubscribed = true;
             }
 
@@ -70,6 +73,9 @@ namespace Game.Quest
                 questRuntime.OnQuestStarted -= HandleQuestStarted;
                 questRuntime.OnObjectiveProgressChanged -= HandleObjectiveProgressChanged;
                 questRuntime.OnQuestCompleted -= HandleQuestCompleted;
+                questRuntime.OnQuestFailed -= HandleQuestFailed;
+                questRuntime.OnQuestRetried -= HandleQuestRetried;
+                questRuntime.OnObjectiveVisibilityChanged -= HandleObjectiveVisibilityChanged;
             }
 
             if (_legacySubscribed && questManager != null)
@@ -96,6 +102,12 @@ namespace Game.Quest
 
         private void HandleQuestCompleted(string questId) => RefreshCurrent();
 
+        private void HandleQuestFailed(string questId, string reasonId) => RefreshCurrent();
+
+        private void HandleQuestRetried(string questId, int attempt) => RefreshCurrent();
+
+        private void HandleObjectiveVisibilityChanged(string questId, string objectiveId, bool visible) => RefreshCurrent();
+
         private void RefreshCurrent()
         {
             if (questRuntime != null && questRuntime.TryGetFirstActiveQuestId(out string questId))
@@ -104,7 +116,26 @@ namespace Game.Quest
                 return;
             }
 
+            if (questRuntime != null && questRuntime.TryGetFirstFailedQuestId(out questId))
+            {
+                RefreshFailedQuest(questId);
+                return;
+            }
+
             Refresh(questManager != null ? questManager.GetActiveQuest() : null);
+        }
+
+        private void RefreshFailedQuest(string questId)
+        {
+            string title = questId;
+            if (questRuntime.TryGetQuestTitle(questId, out string configuredTitle))
+                title = configuredTitle;
+
+            if (titleText != null)
+                titleText.text = title;
+            if (objectiveText != null)
+                objectiveText.text = "Failed";
+            SetVisible(true);
         }
 
         private void RefreshRuntimeQuest(string questId)
@@ -124,16 +155,17 @@ namespace Game.Quest
 
         private string BuildRuntimeObjectiveText(string questId)
         {
-            if (!questRuntime.TryGetDefinition(questId, out QuestDefinitionSO definition) ||
-                definition.Objectives == null)
+            if (!questRuntime.TryGetDefinition(questId, out _))
             {
                 return questId;
             }
 
-            for (int i = 0; i < definition.Objectives.Length; i++)
+            System.Collections.Generic.IReadOnlyList<QuestObjectiveDefinition> objectives =
+                questRuntime.GetVisibleObjectives(questId);
+            for (int i = 0; i < objectives.Count; i++)
             {
-                QuestObjectiveDefinition objective = definition.Objectives[i];
-                if (objective == null)
+                QuestObjectiveDefinition objective = objectives[i];
+                if (objective == null || !questRuntime.IsObjectiveActive(questId, objective.ObjectiveId))
                     continue;
 
                 int current = questRuntime.GetObjectiveProgress(questId, objective.ObjectiveId);
@@ -143,7 +175,7 @@ namespace Game.Quest
                 return $"{description} {current}/{objective.RequiredCount}";
             }
 
-            return questId;
+            return string.Empty;
         }
 
         private void Refresh(QuestProgress progress)

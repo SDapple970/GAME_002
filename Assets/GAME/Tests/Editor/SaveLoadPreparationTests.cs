@@ -228,6 +228,52 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void SchemaThreeFlatQuests_MigrateIntoDefaultGroupAndPreserveCompletion()
+        {
+            string json =
+                "{\"header\":{\"formatId\":\"GAME_002\",\"schemaVersion\":3}," +
+                "\"quest\":{\"quests\":[" +
+                "{\"questId\":\"active\",\"status\":\"Active\",\"objectives\":[{\"objectiveId\":\"kill\",\"progress\":1,\"requiredCount\":2}]}," +
+                "{\"questId\":\"done\",\"completed\":true,\"status\":\"Completed\"}]}}";
+
+            GameSaveData migrated = ReadSnapshotFromLegacyJson(json);
+
+            Assert.That(migrated.header.schemaVersion, Is.EqualTo(4));
+            Assert.That(migrated.quest.quests[0].status, Is.EqualTo(QuestStatus.Active.ToString()));
+            Assert.That(migrated.quest.quests[0].activeGroupIndex, Is.Zero);
+            Assert.That(migrated.quest.quests[0].attempt, Is.EqualTo(1));
+            Assert.That(migrated.quest.quests[0].objectives.Single().progress, Is.EqualTo(1));
+            Assert.That(migrated.quest.quests[1].status, Is.EqualTo(QuestStatus.Completed.ToString()));
+            Assert.That(migrated.quest.quests[1].completed, Is.True);
+        }
+
+        [Test]
+        public void MalformedSchemaFourQuestState_NormalizesDeterministically()
+        {
+            GameSaveData data = new();
+            QuestStateSaveData quest = new()
+            {
+                questId = "malformed",
+                status = "999",
+                activeGroupIndex = -4,
+                attempt = -2,
+                failureReasonId = "should-clear"
+            };
+            quest.revealedObjectiveIds.Add("secret");
+            quest.revealedObjectiveIds.Add("secret");
+            data.quest.quests.Add(quest);
+
+            GameSaveData normalized = ReadSnapshotFromLegacyJson(SaveSerializer.ToJson(data));
+            QuestStateSaveData result = normalized.quest.quests.Single();
+
+            Assert.That(result.status, Is.EqualTo(QuestStatus.Inactive.ToString()));
+            Assert.That(result.activeGroupIndex, Is.Zero);
+            Assert.That(result.attempt, Is.Zero);
+            Assert.That(result.failureReasonId, Is.Null);
+            Assert.That(result.revealedObjectiveIds, Is.EqualTo(new[] { "secret" }));
+        }
+
+        [Test]
         public void InvalidAndDuplicateCanonicalLedgerEntries_NormalizeSafely()
         {
             GameSaveData data = new();

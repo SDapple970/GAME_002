@@ -754,11 +754,153 @@ namespace Game.Tests.Integration
             Assert.That(completions, Is.Zero);
         }
 
+        [Test]
+        public void OrderedGroups_ProgressInParallelUnlockRevealAndCompleteOnce()
+        {
+            QuestObjectiveDefinition first = CreateObjective(QuestEventType.Kill, "first", 1, false);
+            QuestObjectiveDefinition parallel = CreateObjective(QuestEventType.Talk, "parallel", 1, false);
+            QuestObjectiveDefinition optional = CreateObjective(QuestEventType.Inspect, "optional", 1, true);
+            QuestObjectiveDefinition final = CreateObjective(QuestEventType.Interact, "final", 1, false);
+            SetField(final, "groupIndex", 1);
+            SetField(final, "visibility", QuestObjectiveVisibility.RevealWhenGroupActive);
+            QuestDefinitionSO definition = CreateQuestDefinition("ordered", first, parallel, optional, final);
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            runtime.StartQuest(definition);
+            int completions = 0;
+            runtime.OnQuestCompleted += _ => completions++;
+
+            GameplayOutcomeIdentity lockedIdentity = new(GameplayOutcomeSourceType.Interaction, "locked", "final");
+            Assert.That(runtime.IsObjectiveVisible("ordered", "final"), Is.False);
+            Assert.That(runtime.ApplyEvent(new QuestEvent(QuestEventType.Interact, "ordered", "final", lockedIdentity)), Is.False);
+            Assert.That(runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, "ordered", "first", "first")), Is.True);
+            Assert.That(runtime.GetActiveGroupIndex("ordered"), Is.Zero);
+            Assert.That(runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Talk, "ordered", "parallel", "parallel")), Is.True);
+
+            Assert.That(runtime.GetActiveGroupIndex("ordered"), Is.EqualTo(1));
+            Assert.That(runtime.IsObjectiveVisible("ordered", "final"), Is.True);
+            Assert.That(runtime.GetObjectiveProgress("ordered", "optional"), Is.Zero);
+            Assert.That(runtime.ApplyEvent(new QuestEvent(QuestEventType.Interact, "ordered", "final", lockedIdentity)), Is.True,
+                "An event rejected while the objective was locked must not be consumed.");
+            Assert.That(runtime.IsQuestComplete("ordered"), Is.True);
+            Assert.That(completions, Is.EqualTo(1));
+            Assert.That(runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Interact, "ordered", "final", "later")), Is.False);
+            Assert.That(completions, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void VisibilityQueries_HideAuthoredObjectivesAndSaveRuntimeReveal()
+        {
+            QuestObjectiveDefinition hidden = CreateObjective(QuestEventType.Inspect, "secret", 2, false);
+            SetField(hidden, "visibility", QuestObjectiveVisibility.Hidden);
+            QuestDefinitionSO definition = CreateQuestDefinition("hidden", hidden);
+            QuestRuntime source = CreateComponent<QuestRuntime>("Source");
+            source.StartQuest(definition);
+
+            Assert.That(source.IsObjectiveActive("hidden", "secret"), Is.True);
+            Assert.That(source.IsObjectiveVisible("hidden", "secret"), Is.False);
+            Assert.That(source.GetVisibleObjectives("hidden"), Is.Empty);
+            Assert.That(source.RevealObjective("hidden", "secret"), Is.True);
+            Assert.That(source.GetVisibleObjectives("hidden"), Has.Count.EqualTo(1));
+            Assert.That(source.ApplyEvent(CanonicalQuestEvent(QuestEventType.Inspect, "hidden", "secret", "one")), Is.True);
+
+            GameSaveData save = new();
+            source.CaptureSaveData(save);
+            UnityEngine.Object.DestroyImmediate(source.gameObject);
+            QuestRuntime restored = CreateRuntimeWithDefinition("Restored", definition);
+            restored.RestoreSaveData(save);
+
+            Assert.That(restored.IsObjectiveVisible("hidden", "secret"), Is.True);
+            Assert.That(restored.GetObjectiveProgress("hidden", "secret"), Is.EqualTo(1));
+            Assert.That(restored.GetVisibleObjectives("hidden").Single().ObjectiveId, Is.EqualTo("secret"));
+        }
+
+        [Test]
+        public void Failure_SaveRestoreAndRestartPolicy_AreDeterministic()
+        {
+            QuestDefinitionSO definition = CreateQuestDefinition("retry", QuestEventType.Kill, "kill", 2);
+            SetField(definition, "retryPolicy", QuestRetryPolicy.RestartFromBeginning);
+            QuestRuntime source = CreateComponent<QuestRuntime>("Source");
+            source.StartQuest(definition);
+            QuestEvent oldEvent = CanonicalQuestEvent(QuestEventType.Kill, "retry", "kill", "old-event");
+            GameplayOutcomeIdentity failure = new(GameplayOutcomeSourceType.Story, "retry", "failed");
+            Assert.That(source.ApplyEvent(oldEvent), Is.True);
+            int failures = 0;
+            source.OnQuestFailed += (_, _) => failures++;
+            Assert.That(source.FailQuest("retry", failure, "time_limit"), Is.True);
+            Assert.That(source.FailQuest("retry", failure, "time_limit"), Is.False);
+            Assert.That(source.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, "retry", "kill", "blocked")), Is.False);
+            Assert.That(failures, Is.EqualTo(1));
+
+            GameSaveData save = new();
+            source.CaptureSaveData(save);
+            UnityEngine.Object.DestroyImmediate(source.gameObject);
+            QuestRuntime restored = CreateRuntimeWithDefinition("Restored", definition);
+            int restoredFailures = 0;
+            restored.OnQuestFailed += (_, _) => restoredFailures++;
+            restored.RestoreSaveData(save);
+            Assert.That(restored.IsQuestFailed("retry"), Is.True);
+            Assert.That(restored.GetFailureReasonId("retry"), Is.EqualTo("time_limit"));
+            Assert.That(restoredFailures, Is.Zero);
+
+            int retries = 0;
+            restored.OnQuestRetried += (_, _) => retries++;
+            Assert.That(restored.RetryQuest("retry"), Is.True);
+            Assert.That(restored.IsQuestActive("retry"), Is.True);
+            Assert.That(restored.GetQuestAttempt("retry"), Is.EqualTo(2));
+            Assert.That(restored.GetActiveGroupIndex("retry"), Is.Zero);
+            Assert.That(restored.GetObjectiveProgress("retry", "kill"), Is.Zero);
+            Assert.That(restored.ApplyEvent(oldEvent), Is.False, "A retired old-attempt outcome must not replay.");
+            Assert.That(restored.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, "retry", "kill", "new-event")), Is.True);
+            Assert.That(retries, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void NotRetryableAndCompletedQuest_RejectInvalidTerminalTransitions()
+        {
+            QuestDefinitionSO notRetryable = CreateQuestDefinition("no-retry", QuestEventType.Kill, "kill", 1);
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            runtime.StartQuest(notRetryable);
+            Assert.That(runtime.FailQuest("no-retry", new GameplayOutcomeIdentity(GameplayOutcomeSourceType.Story, "no-retry", "fail")), Is.True);
+            Assert.That(runtime.RetryQuest("no-retry"), Is.False);
+            runtime.ResetQuestProgress("no-retry");
+            Assert.That(runtime.IsQuestFailed("no-retry"), Is.True, "Compatibility reset must not bypass authored retry policy.");
+
+            QuestDefinitionSO completed = CreateQuestDefinition("completed", QuestEventType.Talk, "talk", 1);
+            runtime.StartQuest(completed);
+            Assert.That(runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Talk, "completed", "talk", "complete")), Is.True);
+            Assert.That(runtime.FailQuest("completed", new GameplayOutcomeIdentity(GameplayOutcomeSourceType.Story, "completed", "fail")), Is.False);
+            Assert.That(runtime.GetQuestStatus("completed"), Is.EqualTo(QuestStatus.Completed));
+        }
+
         private (GameStateMachine, GameFlowController) CreateFlowState()
         {
             GameStateMachine state = CreateComponent<GameStateMachine>("GameStateMachine");
             GameFlowController flow = CreateComponent<GameFlowController>("GameFlowController");
             return (state, flow);
+        }
+
+        private QuestRuntime CreateRuntimeWithDefinition(string name, QuestDefinitionSO definition)
+        {
+            GameObject go = CreateGameObject(name);
+            go.SetActive(false);
+            QuestRuntime runtime = go.AddComponent<QuestRuntime>();
+            SetField(runtime, "questDefinitions", new[] { definition });
+            go.SetActive(true);
+            InvokeIfPresent(runtime, "Awake");
+            return runtime;
+        }
+
+        private static QuestEvent CanonicalQuestEvent(
+            QuestEventType type,
+            string questId,
+            string objectiveId,
+            string sourceId)
+        {
+            return new QuestEvent(
+                type,
+                questId,
+                objectiveId,
+                new GameplayOutcomeIdentity(GameplayOutcomeSourceType.Interaction, sourceId, objectiveId));
         }
 
         private StoryEventDefinitionSO CreateStoryEvent(string id, bool endOnStart, StoryEffect effect = null)

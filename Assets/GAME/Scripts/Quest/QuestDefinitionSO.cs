@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace Game.Quest
@@ -12,6 +13,7 @@ namespace Game.Quest
         [SerializeField] private QuestObjectiveDefinition[] objectives;
         [SerializeField] private int rewardGold;
         [SerializeField] private int rewardExp;
+        [SerializeField] private QuestRetryPolicy retryPolicy = QuestRetryPolicy.NotRetryable;
 
         public string QuestId => questId;
         public string QuestTitle => questTitle;
@@ -19,6 +21,7 @@ namespace Game.Quest
         public QuestObjectiveDefinition[] Objectives => objectives;
         public int RewardGold => rewardGold;
         public int RewardExp => rewardExp;
+        public QuestRetryPolicy RetryPolicy => retryPolicy;
 
         public QuestObjectiveDefinition FindObjective(QuestEvent questEvent)
         {
@@ -29,6 +32,21 @@ namespace Game.Quest
             {
                 QuestObjectiveDefinition objective = objectives[i];
                 if (objective != null && objective.Matches(questEvent))
+                    return objective;
+            }
+
+            return null;
+        }
+
+        public QuestObjectiveDefinition FindObjective(string objectiveId)
+        {
+            if (objectives == null || string.IsNullOrWhiteSpace(objectiveId))
+                return null;
+
+            for (int i = 0; i < objectives.Length; i++)
+            {
+                QuestObjectiveDefinition objective = objectives[i];
+                if (objective != null && objective.ObjectiveId == objectiveId)
                     return objective;
             }
 

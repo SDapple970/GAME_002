@@ -43,8 +43,13 @@ namespace Game.NonCombat.Save
         public string questId;
         public bool completed;
         public string status;
+        public int activeGroupIndex;
+        public string failureReasonId;
+        public int attempt;
         public List<QuestObjectiveSaveData> objectives = new();
         public List<string> processedEventIds = new();
+        public List<string> retiredEventIds = new();
+        public List<string> revealedObjectiveIds = new();
     }
 
     [Serializable]
@@ -125,7 +130,7 @@ namespace Game.NonCombat.Save
     public static class GameSaveDataFormat
     {
         public const string FormatId = "GAME_002";
-        public const int CurrentSchemaVersion = 3;
+        public const int CurrentSchemaVersion = 4;
     }
 
     [Serializable]
