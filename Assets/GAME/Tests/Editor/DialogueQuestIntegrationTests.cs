@@ -328,11 +328,35 @@ namespace Game.Tests.Integration
             QuestDefinitionSO definition = CreateQuestDefinition("quest", QuestEventType.Kill, "kill", 1);
             runtime.StartQuest(definition);
             QuestEvent questEvent = new(QuestEventType.Kill, "quest", "kill", 1, null, "event-1");
-            runtime.ApplyEvent(questEvent);
+            Assert.That(runtime.ApplyEvent(questEvent), Is.True);
+            int started = 0;
+            int retried = 0;
+            runtime.OnQuestStarted += _ => started++;
+            runtime.OnQuestRetried += (_, _) => retried++;
+
             runtime.ResetQuestProgress("quest");
 
-            Assert.That(runtime.IsQuestComplete("quest"), Is.True);
+            Assert.That(runtime.GetQuestStatus("quest"), Is.EqualTo(QuestStatus.Completed));
+            Assert.That(runtime.GetObjectiveProgress("quest", "kill"), Is.EqualTo(1));
+            Assert.That(started, Is.Zero);
+            Assert.That(retried, Is.Zero);
             Assert.That(runtime.ApplyEvent(questEvent), Is.False);
+        }
+
+        [Test]
+        public void ExplicitReset_PreservesDefinitionlessCompatibilityBehavior()
+        {
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            runtime.ConfigureCompatibilityQuest("demo", 1, false, false);
+            runtime.CompleteQuest("demo");
+            int started = 0;
+            runtime.OnQuestStarted += _ => started++;
+
+            runtime.ResetQuestProgress("demo");
+
+            Assert.That(runtime.GetQuestStatus("demo"), Is.EqualTo(QuestStatus.Active));
+            Assert.That(runtime.GetObjectiveProgress("demo", "enemy_defeated"), Is.Zero);
+            Assert.That(started, Is.EqualTo(1));
         }
 
         [Test]
@@ -824,6 +848,8 @@ namespace Game.Tests.Integration
             QuestEvent oldEvent = CanonicalQuestEvent(QuestEventType.Kill, "retry", "kill", "old-event");
             GameplayOutcomeIdentity failure = new(GameplayOutcomeSourceType.Story, "retry", "failed");
             Assert.That(source.ApplyEvent(oldEvent), Is.True);
+            Assert.That(source.ApplyEvent(oldEvent), Is.False,
+                "The same authored gameplay source must remain idempotent within the first attempt.");
             int failures = 0;
             source.OnQuestFailed += (_, _) => failures++;
             Assert.That(source.FailQuest("retry", failure, "time_limit"), Is.True);
@@ -854,6 +880,19 @@ namespace Game.Tests.Integration
             Assert.That(restored.ApplyEvent(oldEvent), Is.False,
                 "The same authored gameplay source must remain idempotent within the new attempt.");
             Assert.That(retries, Is.EqualTo(1));
+
+            GameSaveData retriedSave = new();
+            restored.CaptureSaveData(retriedSave);
+            QuestStateSaveData retriedState = retriedSave.quest.quests.Single(item => item.questId == "retry");
+            Assert.That(retriedState.retiredEventIds, Does.Contain(oldEvent.Identity.CanonicalId));
+            Assert.That(retriedState.processedEventIds, Does.Contain(oldEvent.Identity.CanonicalId));
+            UnityEngine.Object.DestroyImmediate(restored.gameObject);
+
+            QuestRuntime restoredAttemptTwo = CreateRuntimeWithDefinition("RestoredAttemptTwo", definition);
+            restoredAttemptTwo.RestoreSaveData(retriedSave);
+            Assert.That(restoredAttemptTwo.GetQuestAttempt("retry"), Is.EqualTo(2));
+            Assert.That(restoredAttemptTwo.ApplyEvent(oldEvent), Is.False,
+                "Save/load must retain duplicate blocking for the current attempt.");
         }
 
         [Test]

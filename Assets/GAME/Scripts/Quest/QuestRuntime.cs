@@ -107,7 +107,7 @@ namespace Game.Quest
 
             if (persistentEventId == null)
                 WarnUntrackedCompatibilityEvent(questEvent);
-            else if (state.HasConsumedEventId(persistentEventId))
+            else if (state.HasConsumedCurrentAttemptEventId(persistentEventId))
             {
                 return false;
             }
@@ -191,7 +191,7 @@ namespace Game.Quest
                 return false;
 
             string canonicalId = identity.CanonicalId;
-            if (state.HasConsumedEventId(canonicalId))
+            if (state.HasConsumedCurrentAttemptEventId(canonicalId))
                 return false;
 
             state.RememberEventId(canonicalId);
@@ -751,7 +751,7 @@ namespace Game.Quest
                     : 0;
             }
 
-            public bool HasConsumedEventId(string eventId)
+            public bool HasConsumedCurrentAttemptEventId(string eventId)
             {
                 return !string.IsNullOrWhiteSpace(eventId) &&
                        _rememberedEventIds.Contains(eventId);
