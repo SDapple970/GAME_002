@@ -14,6 +14,8 @@ namespace Game.Interaction
         [SerializeField] private GameObject[] activateObjects;
         [SerializeField] private GameObject[] deactivateObjects;
 
+        public override bool SupportsProductionExecution => true;
+
         public override void Execute(InteractionContext context)
         {
             SpriteRenderer renderer = targetRendererOverride;
@@ -25,6 +27,17 @@ namespace Game.Interaction
 
             SetObjectsActive(activateObjects, true);
             SetObjectsActive(deactivateObjects, false);
+        }
+
+        public override InteractionEventResult ExecuteProduction(InteractionExecutionContext context)
+        {
+            Execute(context.LegacyContext);
+            bool changed = openedSprite != null ||
+                           (activateObjects != null && activateObjects.Length > 0) ||
+                           (deactivateObjects != null && deactivateObjects.Length > 0);
+            return changed
+                ? InteractionEventResult.AcceptedResult(true, false)
+                : InteractionEventResult.NoEffect();
         }
 
         private SpriteRenderer ResolveRenderer(InteractableObject target)

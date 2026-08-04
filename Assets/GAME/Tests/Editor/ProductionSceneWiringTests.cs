@@ -7,6 +7,8 @@ using Game.Combat.UI;
 using Game.Core;
 using Game.DemoMission.Runtime;
 using Game.Input;
+using Game.Interaction;
+using Game.Interaction.Editor;
 using Game.NonCombat.Inventory;
 using Game.Quest;
 using Game.Reward;
@@ -144,6 +146,27 @@ namespace Game.Tests.Integration
                  component.GetType().Name == "BattleTrigger2D" ||
                  component.GetType().Namespace?.Contains("Debugging") == true ||
                  component.GetType().Namespace?.Contains("Legacy") == true)), Is.False);
+        }
+
+        [Test]
+        public void DungeonTemplate_InteractionIdsAndRunnerOwnershipAreValid()
+        {
+            Open(DungeonTemplate);
+            Assert.That(FindAll<InteractionRunner>(), Has.Length.LessThanOrEqualTo(1));
+
+            InteractableObject[] persistent = FindAll<InteractableObject>()
+                .Where(item => item.UsePolicy == InteractionUsePolicy.PersistentOnce)
+                .ToArray();
+            Assert.That(persistent.Select(item => item.InteractionId), Has.None.Null.Or.Empty);
+            Assert.That(
+                persistent.Select(item => item.InteractionId).Distinct(System.StringComparer.Ordinal).Count(),
+                Is.EqualTo(persistent.Length));
+        }
+
+        [Test]
+        public void ProductionBuildScenes_PassInteractionAuthoringValidation()
+        {
+            Assert.That(ProductionInteractionValidator.ValidateBuildScenes(), Is.Empty);
         }
 
         [Test]

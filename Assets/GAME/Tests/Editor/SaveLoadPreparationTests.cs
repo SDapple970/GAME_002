@@ -238,7 +238,7 @@ namespace Game.Tests.Integration
 
             GameSaveData migrated = ReadSnapshotFromLegacyJson(json);
 
-            Assert.That(migrated.header.schemaVersion, Is.EqualTo(4));
+            Assert.That(migrated.header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion));
             Assert.That(migrated.quest.quests[0].status, Is.EqualTo(QuestStatus.Active.ToString()));
             Assert.That(migrated.quest.quests[0].activeGroupIndex, Is.Zero);
             Assert.That(migrated.quest.quests[0].attempt, Is.EqualTo(1));

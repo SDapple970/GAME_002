@@ -19,6 +19,7 @@ namespace Game.Interaction
         private InputService _inputService;
         private bool _subscribedToInput;
         private Coroutine _messageRoutine;
+        private bool _interactionResolving;
 
         public InteractionPromptUI PromptUI => promptUI;
 
@@ -108,16 +109,32 @@ namespace Game.Interaction
 
         public bool TryInteractCurrent()
         {
-            if (!CanAcceptInteractionInput())
+            if (_interactionResolving || !CanAcceptInteractionInput())
                 return false;
 
             RefreshCurrentTarget();
             if (_current == null || !_current.CanInteract)
                 return false;
 
-            _current.Interact(gameObject);
-            RefreshCurrentTarget();
-            return true;
+            _interactionResolving = true;
+            try
+            {
+                _current.Interact(gameObject);
+                RefreshCurrentTarget();
+                return true;
+            }
+            finally
+            {
+                _interactionResolving = false;
+            }
+        }
+
+        public void PresentResult(InteractionResult result)
+        {
+            if (!string.IsNullOrWhiteSpace(result.Message))
+                ShowTemporaryMessage(result.Message, 1.5f);
+            else if (result.PromptRefreshRequired)
+                RefreshCurrentTarget();
         }
 
         public void ShowMessage(string message)
@@ -204,16 +221,18 @@ namespace Game.Interaction
             {
                 InteractableObject candidate = _candidates[i];
                 if (candidate == null || !candidate.isActiveAndEnabled)
-                {
                     _candidates.RemoveAt(i);
-                    continue;
-                }
+            }
 
+            for (int i = 0; i < _candidates.Count; i++)
+            {
+                InteractableObject candidate = _candidates[i];
                 if (!candidate.CanInteract)
                     continue;
 
                 float distance = ((Vector2)candidate.transform.position - (Vector2)transform.position).sqrMagnitude;
-                if (distance < nearestDistance)
+                if (distance < nearestDistance ||
+                    (Mathf.Approximately(distance, nearestDistance) && IsPreferredTie(candidate, nearest)))
                 {
                     nearestDistance = distance;
                     nearest = candidate;
@@ -221,6 +240,19 @@ namespace Game.Interaction
             }
 
             return nearest;
+        }
+
+        private static bool IsPreferredTie(InteractableObject candidate, InteractableObject current)
+        {
+            if (current == null)
+                return true;
+
+            string candidateId = candidate.InteractionId;
+            string currentId = current.InteractionId;
+            if (candidateId == null || currentId == null)
+                return false;
+
+            return string.CompareOrdinal(candidateId, currentId) < 0;
         }
 
         private static bool CanAcceptInteractionInput()

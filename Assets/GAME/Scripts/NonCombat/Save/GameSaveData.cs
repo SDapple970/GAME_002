@@ -130,7 +130,7 @@ namespace Game.NonCombat.Save
     public static class GameSaveDataFormat
     {
         public const string FormatId = "GAME_002";
-        public const int CurrentSchemaVersion = 4;
+        public const int CurrentSchemaVersion = 5;
     }
 
     [Serializable]
@@ -182,6 +182,22 @@ namespace Game.NonCombat.Save
     public sealed class WorldSaveData
     {
         public List<string> clearedEncounterIds = new();
+        public List<InteractionStateSaveData> interactions = new();
+    }
+
+    [Serializable]
+    public sealed class InteractionStateSaveData
+    {
+        public string interactionId;
+        public bool consumed;
+        public List<InteractionOutcomeSaveData> resolvedOutcomes = new();
+    }
+
+    [Serializable]
+    public sealed class InteractionOutcomeSaveData
+    {
+        public string actionId;
+        public string outcomeId;
     }
 
     [Serializable]

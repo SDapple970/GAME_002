@@ -203,6 +203,7 @@ namespace Game.Core
             if (name.Contains("DemoMission")) return 500;
             if (name.Contains("RewardService")) return 600;
             if (name.Contains("Encounter")) return 700;
+            if (name.Contains("InteractionRuntime")) return 750;
             return 800;
         }
 

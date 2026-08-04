@@ -42,6 +42,8 @@ namespace Game.NonCombat.Save
                     MigrateVersion2(data);
                 if (version <= 3)
                     MigrateVersion3(data);
+                if (version <= 4)
+                    MigrateVersion4(data);
             }
             else
             {
@@ -131,6 +133,14 @@ namespace Game.NonCombat.Save
             data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
         }
 
+        private static void MigrateVersion4(GameSaveData data)
+        {
+            data.header ??= new SaveHeaderData();
+            data.world ??= new WorldSaveData();
+            data.world.interactions ??= new List<InteractionStateSaveData>();
+            data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
+        }
+
         private static GameSaveData FromLegacy(SaveData old)
         {
             GameSaveData data = new();
@@ -181,6 +191,13 @@ namespace Game.NonCombat.Save
                 }
             }
 
+            identityRecords += data?.world?.interactions?.Count ?? 0;
+            if (data?.world?.interactions != null)
+            {
+                for (int i = 0; i < data.world.interactions.Count; i++)
+                    identityRecords += data.world.interactions[i]?.resolvedOutcomes?.Count ?? 0;
+            }
+
             if (identityRecords > MaxTotalIdentityRecords)
             {
                 error = $"Save contains {identityRecords} identity records; maximum supported is {MaxTotalIdentityRecords}.";
@@ -202,6 +219,7 @@ namespace Game.NonCombat.Save
             NormalizeIntEntries(data.inventory.items);
             NormalizeStrings(data.story.completedEventIds, MaxGeneralIdEntries);
             NormalizeStrings(data.world.clearedEncounterIds, MaxGeneralIdEntries);
+            NormalizeInteractionStates(data.world);
             NormalizeRewardLedger(data.reward);
             if (data.quest.quests != null)
                 foreach (QuestStateSaveData quest in data.quest.quests)
@@ -263,6 +281,68 @@ namespace Game.NonCombat.Save
             reward.ledger.Clear();
             reward.ledger.AddRange(unique.Values);
             reward.ledger.Sort(CompareLedgerEntries);
+        }
+
+        private static void NormalizeInteractionStates(WorldSaveData world)
+        {
+            world.interactions ??= new List<InteractionStateSaveData>();
+            Dictionary<string, InteractionStateSaveData> unique = new(StringComparer.Ordinal);
+            for (int i = 0; i < world.interactions.Count; i++)
+            {
+                InteractionStateSaveData entry = world.interactions[i];
+                string id = NormalizeId(entry?.interactionId);
+                if (id == null)
+                    continue;
+
+                if (!unique.TryGetValue(id, out InteractionStateSaveData normalized))
+                {
+                    normalized = new InteractionStateSaveData { interactionId = id };
+                    unique.Add(id, normalized);
+                }
+
+                normalized.consumed |= entry.consumed;
+                MergeOutcomes(normalized.resolvedOutcomes, entry.resolvedOutcomes);
+            }
+
+            world.interactions.Clear();
+            world.interactions.AddRange(unique.Values);
+            world.interactions.Sort((left, right) => string.CompareOrdinal(left.interactionId, right.interactionId));
+        }
+
+        private static void MergeOutcomes(
+            List<InteractionOutcomeSaveData> target,
+            List<InteractionOutcomeSaveData> source)
+        {
+            Dictionary<string, string> outcomes = new(StringComparer.Ordinal);
+            for (int i = 0; i < target.Count; i++)
+            {
+                string actionId = NormalizeId(target[i]?.actionId);
+                string outcomeId = NormalizeId(target[i]?.outcomeId);
+                if (actionId != null && outcomeId != null)
+                    outcomes[actionId] = outcomeId;
+            }
+
+            if (source != null)
+            {
+                for (int i = 0; i < source.Count; i++)
+                {
+                    string actionId = NormalizeId(source[i]?.actionId);
+                    string outcomeId = NormalizeId(source[i]?.outcomeId);
+                    if (actionId == null || outcomeId == null)
+                        continue;
+
+                    if (!outcomes.TryGetValue(actionId, out string current) ||
+                        string.CompareOrdinal(outcomeId, current) < 0)
+                    {
+                        outcomes[actionId] = outcomeId;
+                    }
+                }
+            }
+
+            target.Clear();
+            foreach (KeyValuePair<string, string> pair in outcomes)
+                target.Add(new InteractionOutcomeSaveData { actionId = pair.Key, outcomeId = pair.Value });
+            target.Sort((left, right) => string.CompareOrdinal(left.actionId, right.actionId));
         }
 
         private static int CompareLedgerEntries(RewardLedgerSaveData left, RewardLedgerSaveData right)
