@@ -24,17 +24,18 @@ namespace Game.Story.Data
                 if (choice == null)
                     continue;
 
-                string choiceId = choice.ChoiceId;
-                if (!string.IsNullOrEmpty(choiceId) && !authoredIds.Add(choiceId))
-                {
-                    Debug.LogWarning(
-                        $"[StoryChoiceResolver] Duplicate choiceId='{choiceId}' at authored index {authoredIndex}. Choice IDs must be unique within one node.",
-                        warningContext);
-                }
-
                 bool conditionsMet = choice.AreConditionsMet();
                 if (!conditionsMet && choice.HideIfConditionNotMet)
                     continue;
+
+                string effectiveChoiceId = choice.ChoiceId;
+                if (!string.IsNullOrEmpty(effectiveChoiceId) && !authoredIds.Add(effectiveChoiceId))
+                {
+                    Debug.LogWarning(
+                        $"[StoryChoiceResolver] Duplicate displayable choiceId='{effectiveChoiceId}' at authored index {authoredIndex}. This choice will use its authored-index compatibility identity instead.",
+                        warningContext);
+                    effectiveChoiceId = null;
+                }
 
                 if (resolved.Count >= MaxProductionChoices)
                 {
@@ -46,7 +47,8 @@ namespace Game.Story.Data
                     choice,
                     authoredIndex,
                     resolved.Count,
-                    conditionsMet));
+                    conditionsMet,
+                    effectiveChoiceId));
             }
 
             if (truncated)

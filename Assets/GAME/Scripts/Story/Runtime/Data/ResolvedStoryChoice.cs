@@ -14,11 +14,23 @@ namespace Game.Story.Data
             int authoredIndex,
             int visibleIndex,
             bool isEnabled)
+            : this(choice, authoredIndex, visibleIndex, isEnabled, choice?.ChoiceId)
+        {
+        }
+
+        public ResolvedStoryChoice(
+            StoryChoice choice,
+            int authoredIndex,
+            int visibleIndex,
+            bool isEnabled,
+            string effectiveChoiceId)
         {
             Choice = choice;
             AuthoredIndex = authoredIndex;
             VisibleIndex = visibleIndex;
-            ChoiceId = choice?.ChoiceId;
+            ChoiceId = string.IsNullOrWhiteSpace(effectiveChoiceId)
+                ? null
+                : effectiveChoiceId.Trim();
             IsEnabled = isEnabled;
             DisabledReason = isEnabled ? null : choice?.DisabledReason;
         }

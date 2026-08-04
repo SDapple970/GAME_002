@@ -22,6 +22,7 @@ namespace Game.Story.UI
 
         private readonly List<Button> _choiceButtons = new();
         private readonly Dictionary<Button, UnityAction> _ownedChoiceListeners = new();
+        private int _choiceGeneration;
 
         public bool IsPresentationReady =>
             (rootGroup != null || root != null) && speakerText != null && bodyText != null;
@@ -69,6 +70,8 @@ namespace Game.Story.UI
             {
                 nextButton.onClick.RemoveListener(HandleNextClicked);
             }
+
+            ClearChoices();
         }
 
         public void Show()
@@ -135,6 +138,7 @@ namespace Game.Story.UI
         public void BuildChoices(IReadOnlyList<ResolvedStoryChoice> choices, Action<ResolvedStoryChoice> onChoiceSelected)
         {
             ClearChoices();
+            int generation = _choiceGeneration;
 
             if (choices == null || choices.Count == 0) return;
 
@@ -171,7 +175,11 @@ namespace Game.Story.UI
                 if (resolved.IsEnabled)
                 {
                     ResolvedStoryChoice capturedChoice = resolved;
-                    UnityAction listener = () => onChoiceSelected?.Invoke(capturedChoice);
+                    UnityAction listener = () =>
+                    {
+                        if (generation == _choiceGeneration)
+                            onChoiceSelected?.Invoke(capturedChoice);
+                    };
                     _ownedChoiceListeners[button] = listener;
                     button.onClick.AddListener(listener);
                 }
@@ -182,13 +190,17 @@ namespace Game.Story.UI
 
         public void ClearChoices()
         {
+            _choiceGeneration++;
             foreach (Button button in _choiceButtons)
             {
                 if (button != null)
                 {
                     if (_ownedChoiceListeners.TryGetValue(button, out UnityAction listener))
                         button.onClick.RemoveListener(listener);
-                    Destroy(button.gameObject);
+                    if (Application.isPlaying)
+                        Destroy(button.gameObject);
+                    else
+                        DestroyImmediate(button.gameObject);
                 }
             }
 

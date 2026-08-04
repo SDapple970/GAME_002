@@ -80,7 +80,7 @@ namespace Game.Tests.Integration
         {
             CreateFlowState();
             StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
-            StoryEventDefinitionSO definition = CreateStoryEvent("event", true);
+            StoryEventDefinitionSO definition = CreateChoiceStory("event", out _);
             int completed = 0;
             runner.OnEventCompleted += _ => completed++;
 
@@ -90,6 +90,7 @@ namespace Game.Tests.Integration
 
             Assert.That(completed, Is.EqualTo(1));
             Assert.That(runner.IsRunning, Is.False);
+            Assert.That(runner.CurrentResolvedChoices, Is.Empty);
             Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Exploration));
         }
 
@@ -309,6 +310,130 @@ namespace Game.Tests.Integration
             timed.Clear();
             slots[0].onClick.Invoke();
             Assert.That(authoredListenerCalls, Is.EqualTo(1), "Panel cleanup must preserve unrelated authored listeners.");
+        }
+
+        [Test]
+        public void TimedChoicePanel_RepeatedCyclesOwnOnlyTheirRuntimeListeners()
+        {
+            TimedChoicePanel panel = CreateComponent<TimedChoicePanel>("Timed");
+            Button button = CreateGameObject("Choice", typeof(RectTransform), typeof(Button)).GetComponent<Button>();
+            SetField(panel, "choiceButtons", new[] { button });
+            List<ResolvedStoryChoice> choices = StoryChoiceResolver.Resolve(new[]
+            {
+                CreateStoryChoice("choice", "chosen")
+            });
+            int externalCalls = 0;
+            int firstRuntimeCalls = 0;
+            int secondRuntimeCalls = 0;
+            button.onClick.AddListener(() => externalCalls++);
+
+            panel.ShowChoices(choices, 0f, _ => firstRuntimeCalls++, null);
+            UnityEngine.Events.UnityAction staleListener =
+                GetField<UnityEngine.Events.UnityAction[]>(panel, "_ownedButtonListeners")[0];
+            button.onClick.Invoke();
+            panel.ShowChoices(choices, 0f, _ => secondRuntimeCalls++, null);
+            staleListener.Invoke();
+            button.onClick.Invoke();
+            InvokeIfPresent(panel, "OnDisable");
+            button.onClick.Invoke();
+
+            Assert.That(externalCalls, Is.EqualTo(3));
+            Assert.That(firstRuntimeCalls, Is.EqualTo(1));
+            Assert.That(secondRuntimeCalls, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void DialoguePanel_RebuildAndDisableRemoveOnlyOwnedChoiceListeners()
+        {
+            DialoguePanel panel = CreateComponent<DialoguePanel>("Dialogue");
+            Transform container = CreateGameObject("Container", typeof(RectTransform)).transform;
+            Button prefab = CreateGameObject("Prefab", typeof(RectTransform), typeof(Button)).GetComponent<Button>();
+            SetField(panel, "choiceContainer", container);
+            SetField(panel, "choiceButtonPrefab", prefab);
+            List<ResolvedStoryChoice> choices = StoryChoiceResolver.Resolve(new[]
+            {
+                CreateStoryChoice("choice", "chosen")
+            });
+            int externalCalls = 0;
+            int firstRuntimeCalls = 0;
+            int secondRuntimeCalls = 0;
+
+            panel.BuildChoices(choices, _ => firstRuntimeCalls++);
+            Button firstButton = GetField<List<Button>>(panel, "_choiceButtons")[0];
+            UnityEngine.Events.UnityAction staleListener =
+                GetField<Dictionary<Button, UnityEngine.Events.UnityAction>>(panel, "_ownedChoiceListeners")[firstButton];
+            firstButton.onClick.Invoke();
+
+            panel.BuildChoices(choices, _ => secondRuntimeCalls++);
+            staleListener.Invoke();
+            Button secondButton = GetField<List<Button>>(panel, "_choiceButtons")[0];
+            secondButton.onClick.Invoke();
+            prefab.onClick.AddListener(() => externalCalls++);
+            InvokeIfPresent(panel, "OnDisable");
+            prefab.onClick.Invoke();
+
+            Assert.That(externalCalls, Is.EqualTo(1));
+            Assert.That(firstRuntimeCalls, Is.EqualTo(1));
+            Assert.That(secondRuntimeCalls, Is.EqualTo(1));
+            Assert.That(panel.VisibleChoiceCount, Is.Zero);
+        }
+
+        [Test]
+        public void ChoiceIds_AreTrimmedAndUniqueIdsRemainAuthored()
+        {
+            List<ResolvedStoryChoice> resolved = StoryChoiceResolver.Resolve(new[]
+            {
+                CreateStoryChoice("one", "chosen", " first "),
+                CreateStoryChoice("two", "chosen", "second")
+            });
+
+            Assert.That(resolved.Select(choice => choice.ChoiceId), Is.EqualTo(new[] { "first", "second" }));
+        }
+
+        [Test]
+        public void DuplicateDisplayableChoiceId_WarnsAndFallsBackToAuthoredIndex()
+        {
+            LogAssert.Expect(
+                LogType.Warning,
+                "[StoryChoiceResolver] Duplicate displayable choiceId='duplicate' at authored index 1. This choice will use its authored-index compatibility identity instead.");
+
+            List<ResolvedStoryChoice> resolved = StoryChoiceResolver.Resolve(new[]
+            {
+                CreateStoryChoice("one", "chosen", " duplicate "),
+                CreateStoryChoice("two", "chosen", "duplicate")
+            });
+
+            Assert.That(resolved[0].ChoiceId, Is.EqualTo("duplicate"));
+            Assert.That(resolved[1].ChoiceId, Is.Null);
+            Assert.That(resolved[1].AuthoredIndex, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void DuplicateChoiceIds_CannotCollapseDistinctRewardIdentities()
+        {
+            CreateFlowState();
+            CurrencyWallet wallet = CreateWallet();
+            CreateRewardService(wallet);
+            StoryChoice first = CreateStoryChoice(
+                "first",
+                "chosen",
+                "duplicate",
+                effect: CreateRewardStoryEffect(3));
+            StoryChoice second = CreateStoryChoice(
+                "second",
+                "chosen",
+                " duplicate ",
+                effect: CreateRewardStoryEffect(5));
+            StoryEventDefinitionSO definition = CreateChoiceIdentityStory("duplicate-reward", first, second);
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+
+            runner.StartEvent(definition);
+            runner.SelectChoiceByIndex(0);
+            runner.EndEvent();
+            runner.StartEvent(definition);
+            runner.SelectChoiceByIndex(1);
+
+            Assert.That(wallet.Gold, Is.EqualTo(8));
         }
 
         [Test]
@@ -603,12 +728,14 @@ namespace Game.Tests.Integration
             CreateFlowState();
             StoryProgressManager progress = CreateComponent<StoryProgressManager>("Progress");
             StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
-            runner.StartEvent(CreateStoryEvent("cancelled", true));
+            runner.StartEvent(CreateChoiceStory("cancelled", out _));
+            Assert.That(runner.CurrentResolvedChoices, Is.Not.Empty);
 
             InvokeIfPresent(runner, "OnDisable");
 
             Assert.That(progress.IsEventCompleted("cancelled"), Is.False);
             Assert.That(runner.IsRunning, Is.False);
+            Assert.That(runner.CurrentResolvedChoices, Is.Empty);
         }
 
         [Test]

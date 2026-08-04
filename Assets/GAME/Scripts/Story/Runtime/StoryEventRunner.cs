@@ -431,7 +431,7 @@ namespace Game.Story
                 StoryOutcomeKind.Choice,
                 _currentEvent?.EventId,
                 _currentNode?.NodeId,
-                choice.ChoiceId,
+                resolved.ChoiceId,
                 resolved.AuthoredIndex,
                 isTimeoutSelection: isTimeoutSelection));
             if (!IsCurrentNode(nodeToken) || !IsRunning)
