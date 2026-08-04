@@ -322,7 +322,7 @@ namespace Game.Tests.Integration
         }
 
         [Test]
-        public void ExplicitReset_AllowsCompletedQuestToProgressAgain_AndClearsEventLedger()
+        public void ExplicitReset_CannotReactivateCompletedProductionQuest()
         {
             QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
             QuestDefinitionSO definition = CreateQuestDefinition("quest", QuestEventType.Kill, "kill", 1);
@@ -331,8 +331,8 @@ namespace Game.Tests.Integration
             runtime.ApplyEvent(questEvent);
             runtime.ResetQuestProgress("quest");
 
-            Assert.That(runtime.IsQuestActive("quest"), Is.True);
-            Assert.That(runtime.ApplyEvent(questEvent), Is.True);
+            Assert.That(runtime.IsQuestComplete("quest"), Is.True);
+            Assert.That(runtime.ApplyEvent(questEvent), Is.False);
         }
 
         [Test]
@@ -849,8 +849,10 @@ namespace Game.Tests.Integration
             Assert.That(restored.GetQuestAttempt("retry"), Is.EqualTo(2));
             Assert.That(restored.GetActiveGroupIndex("retry"), Is.Zero);
             Assert.That(restored.GetObjectiveProgress("retry", "kill"), Is.Zero);
-            Assert.That(restored.ApplyEvent(oldEvent), Is.False, "A retired old-attempt outcome must not replay.");
-            Assert.That(restored.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, "retry", "kill", "new-event")), Is.True);
+            Assert.That(restored.ApplyEvent(oldEvent), Is.True,
+                "The same authored gameplay source must be usable once in a new attempt.");
+            Assert.That(restored.ApplyEvent(oldEvent), Is.False,
+                "The same authored gameplay source must remain idempotent within the new attempt.");
             Assert.That(retries, Is.EqualTo(1));
         }
 

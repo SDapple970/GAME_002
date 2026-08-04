@@ -270,6 +270,11 @@ namespace Game.Quest
                 return;
             }
 
+            // Authored Production quests cannot repeat a Completed lifecycle.
+            // Definition-less compatibility states retain their existing reset path.
+            if (state.Status == QuestStatus.Completed && state.Definition != null)
+                return;
+
             state.ResetProgress();
             state.Status = QuestStatus.Active;
             OnQuestStarted?.Invoke(questId);
@@ -749,7 +754,7 @@ namespace Game.Quest
             public bool HasConsumedEventId(string eventId)
             {
                 return !string.IsNullOrWhiteSpace(eventId) &&
-                       (_rememberedEventIds.Contains(eventId) || _retiredEventIds.Contains(eventId));
+                       _rememberedEventIds.Contains(eventId);
             }
 
             public void RememberEventId(string eventId)
