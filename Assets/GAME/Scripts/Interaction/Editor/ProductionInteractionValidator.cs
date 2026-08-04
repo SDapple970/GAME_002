@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Game.Core;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -40,8 +41,14 @@ namespace Game.Interaction.Editor
                 {
                     Scene scene = EditorSceneManager.OpenScene(paths[i], OpenSceneMode.Single);
                     InteractionRunner[] runners = UnityEngine.Object.FindObjectsByType<InteractionRunner>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                    RuntimeBootstrapper[] bootstrappers = UnityEngine.Object.FindObjectsByType<RuntimeBootstrapper>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                    InteractionRuntime[] runtimes = UnityEngine.Object.FindObjectsByType<InteractionRuntime>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                    if (bootstrappers.Length != 1)
+                        issues.Add($"Scene '{paths[i]}' has {bootstrappers.Length} authored RuntimeBootstrapper instances; Interaction would use compatibility bootstrap when zero.");
                     if (runners.Length > 1)
                         issues.Add($"Scene '{paths[i]}' contains {runners.Length} InteractionRunner instances.");
+                    if (runners.Length == 1 && runtimes.Length != 1)
+                        issues.Add($"Scene '{paths[i]}' has an authored InteractionRunner without exactly one InteractionRuntime.");
 
                     InteractableObject[] objects = UnityEngine.Object.FindObjectsByType<InteractableObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
                     for (int j = 0; j < objects.Length; j++)

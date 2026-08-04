@@ -13,13 +13,15 @@ namespace Game.Interaction
         private bool _resolving;
         private int _lastExecutionFrame = -1;
         private string _lastExecutionId;
+        private bool _compatibilityFallback;
 
         public InteractionRuntime Runtime => runtime;
+        public bool IsCompatibilityFallback => _compatibilityFallback;
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void EnsureProductionOwnerAfterSceneLoad()
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticOwnership()
         {
-            ResolveOrCreate();
+            Instance = null;
         }
 
         private void Awake()
@@ -53,15 +55,32 @@ namespace Game.Interaction
             if (Instance != null)
                 return Instance;
 
-            InteractionRunner existing = FindFirstObjectByType<InteractionRunner>();
-            if (existing != null)
-                return existing;
+            InteractionRunner[] existing = FindObjectsByType<InteractionRunner>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None);
+            for (int i = 0; i < existing.Length; i++)
+            {
+                if (existing[i] == null || !existing[i].enabled)
+                    continue;
+
+                existing[i].ConfigureBootstrap(
+                    existing[i].runtime != null ? existing[i].runtime : InteractionRuntime.Instance,
+                    existing[i]._compatibilityFallback);
+                return existing[i];
+            }
 
             GameObject owner = new GameObject("InteractionRuntime");
             InteractionRuntime state = owner.AddComponent<InteractionRuntime>();
             InteractionRunner runner = owner.AddComponent<InteractionRunner>();
-            runner.runtime = state;
+            runner.ConfigureBootstrap(state, true);
             return runner;
+        }
+
+        internal void ConfigureBootstrap(InteractionRuntime installedRuntime, bool compatibilityFallback)
+        {
+            if (installedRuntime != null)
+                runtime = installedRuntime;
+            _compatibilityFallback = compatibilityFallback;
         }
 
         public InteractionResult Execute(InteractionRequest request)
@@ -194,7 +213,7 @@ namespace Game.Interaction
 
         internal static void ResetOwnershipForTests()
         {
-            Instance = null;
+            ResetStaticOwnership();
         }
     }
 }

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Game.Interaction;
 using Game.Reward;
 using Game.UI;
 
@@ -21,7 +22,7 @@ namespace Game.Core
 
         private void Awake()
         {
-            BootstrapCoreServices(createMissingCoreServices, logWarnings);
+            BootstrapCoreServices(createMissingCoreServices, logWarnings, false);
         }
 
         private void Start()
@@ -36,7 +37,7 @@ namespace Game.Core
             RuntimeBootstrapper existing = FindFirstObjectByType<RuntimeBootstrapper>();
             if (existing != null)
             {
-                existing.BootstrapCoreServices(existing.createMissingCoreServices, existing.logWarnings);
+                existing.BootstrapCoreServices(existing.createMissingCoreServices, existing.logWarnings, false);
                 if (existing.applyInitialStateOnStart)
                     ApplyInitialState(existing.ResolveInitialState());
                 return;
@@ -44,17 +45,26 @@ namespace Game.Core
 
             GameObject go = new GameObject("RuntimeBootstrapper");
             RuntimeBootstrapper bootstrapper = go.AddComponent<RuntimeBootstrapper>();
-            bootstrapper.BootstrapCoreServices(true, true);
+            bootstrapper.BootstrapCoreServices(true, true, true);
 
             ApplyInitialState(ResolveInitialStateForScene(SceneManager.GetActiveScene().name));
         }
 
-        private void BootstrapCoreServices(bool createMissing, bool warn)
+        private void BootstrapCoreServices(bool createMissing, bool warn, bool compatibilityFallback)
         {
             FindOrCreate<GameStateMachine>("GameStateMachine", createMissing, warn);
             FindOrCreate<global::GameInputInstaller>("GameInputInstaller", createMissing, warn);
             FindOrCreate<GameFlowController>("GameFlowController", createMissing, warn);
             FindOrCreate<SceneFlowController>("SceneFlowController", createMissing, warn);
+            InteractionRuntime interactionRuntime = FindOrCreate<InteractionRuntime>(
+                "InteractionRuntime",
+                createMissing,
+                warn);
+            InteractionRunner interactionRunner = FindOrCreate<InteractionRunner>(
+                "InteractionRunner",
+                createMissing,
+                warn);
+            interactionRunner?.ConfigureBootstrap(interactionRuntime, compatibilityFallback);
             FindOrCreate<SaveLoadService>("SaveLoadService", createMissing, warn);
             FindOrCreate<RewardService>("RewardService", createMissing, warn);
             FindOrCreate<GameUIRootController>("GameUIRootController", createMissing, warn);

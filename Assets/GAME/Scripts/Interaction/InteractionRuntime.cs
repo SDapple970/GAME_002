@@ -14,6 +14,12 @@ namespace Game.Interaction
 
         public event Action StateRestored;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticOwnership()
+        {
+            Instance = null;
+        }
+
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -167,7 +173,7 @@ namespace Game.Interaction
 
         internal static void ResetOwnershipForTests()
         {
-            Instance = null;
+            ResetStaticOwnership();
         }
 
         private RuntimeState GetOrCreate(string interactionId)

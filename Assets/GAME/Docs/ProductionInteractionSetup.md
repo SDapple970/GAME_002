@@ -13,7 +13,7 @@ Add `InteractableObject`, keep its trigger collider registered with the player c
 
 Use trimmed dotted IDs such as `dungeon.01.chest.entry.01`. Never derive an ID from a GameObject name, hierarchy, instance ID, or load order. When copying `Dungeon_Template`, replace the dungeon scope in every persistent ID before treating the copy as Production. `Testing_Dungeon_Template` is excluded from cross-Production duplicate checks.
 
-Each irreversible Event SO should author a stable `actionId`. Empty action IDs retain the compatibility fallback `event:<authored-index>`, so reordering such events changes their identity. `RewardInteractionEventSO` and `RandomLootInteractionEventSO` default to the field `interactionId`; a non-empty legacy `rewardSourceId` remains an explicit compatibility override.
+Each irreversible Event SO should author a stable `actionId`. Empty action IDs retain the compatibility fallback `event:<authored-index>`, so reordering such events changes their identity. `RewardInteractionEventSO` and `RandomLootInteractionEventSO` default to the field `interactionId`. A non-empty legacy `rewardSourceId` has priority and preserves the Schema 4 identity exactly: Interaction rewards keep an empty action ID, while Loot keeps the selected item ID as its action ID when the new authored `actionId` is empty.
 
 ## Consequence routing
 
@@ -30,4 +30,6 @@ Multi-event execution is authored-order deterministic. A blocked or no-effect re
 
 Optionally add `InteractionVisualStateAdapter` and wire available/consumed sprites, active objects, and the prompt collider. Restore applies visuals without executing events. Keep the root and `InteractableObject` alive so save restoration can find it.
 
-In Unity, place one explicit `InteractionRunner` with one `InteractionRuntime` in the Production bootstrap scene (the runtime fallback creates this pair for unchanged Legacy scenes). Verify Repeatable, session-only, and persistent objects; save/reload an opened object; temporarily remove RewardService and confirm random loot does not reroll; verify Dialogue/Combat/Reward/Pause block interaction; and confirm prompts refresh after consumption and Story ownership acceptance.
+`RuntimeBootstrapper` is the Production installation owner and creates or adopts exactly one `InteractionRuntime` followed by one `InteractionRunner` before `SaveLoadService`. Existing scenes with authored instances keep them. `InteractionRunner.ResolveOrCreate` remains only an on-demand compatibility fallback for callers that execute before the global bootstrap is available.
+
+In Unity, verify Repeatable, session-only, and persistent objects; save/reload an opened object; temporarily remove RewardService and confirm random loot does not reroll; verify Dialogue/Combat/Reward/Pause block interaction; and confirm prompts refresh after consumption and Story ownership acceptance.

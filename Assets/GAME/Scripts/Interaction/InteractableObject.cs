@@ -70,7 +70,6 @@ namespace Game.Interaction
         private void OnEnable()
         {
             BindRuntime(InteractionRuntime.Instance);
-            ApplyPersistentVisualState();
         }
 
         private void OnDisable()
@@ -160,12 +159,18 @@ namespace Game.Interaction
         internal void BindRuntime(InteractionRuntime runtime)
         {
             if (_boundRuntime == runtime)
+            {
+                ApplyPersistentVisualState();
                 return;
+            }
 
             UnbindRuntime();
             _boundRuntime = runtime;
             if (_boundRuntime != null)
+            {
                 _boundRuntime.StateRestored += ApplyPersistentVisualState;
+                ApplyPersistentVisualState();
+            }
         }
 
         internal void ApplyResult(InteractionResult result)
