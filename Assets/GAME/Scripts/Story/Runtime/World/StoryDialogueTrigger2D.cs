@@ -1,5 +1,6 @@
 // Assets/GAME/Scripts/Story/Runtime/World/StoryDialogueTrigger2D.cs
 using Game.Core;
+using Game.Input;
 using Game.Story.Core;
 using Game.Story.Data;
 using UnityEngine;
@@ -23,13 +24,21 @@ namespace Game.Story.World
 
         private bool _playerInside;
         private bool _hasTriggered;
+        private InputService _inputService;
+
+        private void OnEnable()
+        {
+            EnsureInputSubscription();
+        }
+
+        private void OnDisable()
+        {
+            UnsubscribeInput();
+        }
 
         private void Update()
         {
-            if (useDebugEKey && _playerInside && UnityEngine.Input.GetKeyDown(KeyCode.E))
-            {
-                TryStartEvent();
-            }
+            EnsureInputSubscription();
         }
 
         private void OnTriggerEnter2D(Collider2D other)
@@ -106,6 +115,34 @@ namespace Game.Story.World
 
             runner.StartDialogue(dialogue);
             _hasTriggered = true;
+        }
+
+        private void EnsureInputSubscription()
+        {
+            InputService service = GameInputInstaller.Instance != null
+                ? GameInputInstaller.Instance.Service
+                : null;
+            if (_inputService == service)
+                return;
+
+            UnsubscribeInput();
+            _inputService = service;
+            if (_inputService != null)
+                _inputService.ExplorationInteract += HandleInteractCommand;
+        }
+
+        private void UnsubscribeInput()
+        {
+            if (_inputService != null)
+                _inputService.ExplorationInteract -= HandleInteractCommand;
+            _inputService = null;
+        }
+
+        private void HandleInteractCommand()
+        {
+            // useDebugEKey is retained as a serialized compatibility enable switch.
+            if (useDebugEKey && _playerInside)
+                TryStartEvent();
         }
     }
 }

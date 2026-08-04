@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Game.Story.Data;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace Game.Story.UI
@@ -18,8 +19,9 @@ namespace Game.Story.UI
         [SerializeField] private KeyCode firstChoiceKey = KeyCode.Alpha1;
         [SerializeField] private KeyCode secondChoiceKey = KeyCode.Alpha2;
 
-        private readonly List<StoryChoice> _visibleChoices = new();
-        private Action<StoryChoice> _onChoiceSelected;
+        private readonly List<ResolvedStoryChoice> _visibleChoices = new();
+        private UnityAction[] _ownedButtonListeners;
+        private Action<ResolvedStoryChoice> _onChoiceSelected;
         private Action _onTimeout;
         private float _remainingTime;
         private float _duration;
@@ -29,6 +31,9 @@ namespace Game.Story.UI
 
         private void Awake()
         {
+            // Retained only so existing serialized two-key configurations remain loadable.
+            _ = firstChoiceKey;
+            _ = secondChoiceKey;
             Hide();
         }
 
@@ -39,21 +44,9 @@ namespace Game.Story.UI
 
         private void Update()
         {
-            if (_selectionLocked || _visibleChoices.Count == 0) return;
+            if (_selectionLocked) return;
 
             int generation = _generation;
-
-            if (UnityEngine.Input.GetKeyDown(firstChoiceKey))
-            {
-                SelectVisibleChoice(0, generation);
-                return;
-            }
-
-            if (UnityEngine.Input.GetKeyDown(secondChoiceKey))
-            {
-                SelectVisibleChoice(1, generation);
-                return;
-            }
 
             if (!_runningTimer) return;
 
@@ -71,6 +64,15 @@ namespace Game.Story.UI
 
         public void ShowChoices(IReadOnlyList<StoryChoice> choices, float timeLimitSeconds, Action<StoryChoice> onChoiceSelected, Action onTimeout)
         {
+            ShowChoices(
+                StoryChoiceResolver.Resolve(choices, this),
+                timeLimitSeconds,
+                resolved => onChoiceSelected?.Invoke(resolved.Choice),
+                onTimeout);
+        }
+
+        public void ShowChoices(IReadOnlyList<ResolvedStoryChoice> choices, float timeLimitSeconds, Action<ResolvedStoryChoice> onChoiceSelected, Action onTimeout)
+        {
             Clear();
 
             int generation = ++_generation;
@@ -82,10 +84,14 @@ namespace Game.Story.UI
             _runningTimer = _duration > 0f;
             _selectionLocked = false;
 
-            BuildVisibleChoices(choices);
+            if (choices != null)
+            {
+                for (int i = 0; i < choices.Count && i < StoryChoiceResolver.MaxProductionChoices; i++)
+                    _visibleChoices.Add(choices[i]);
+            }
             BindButtons(generation);
             UpdateTimerFill();
-            SetVisible(_visibleChoices.Count > 0);
+            SetVisible(_visibleChoices.Count > 0 || _runningTimer);
         }
 
         public void Hide()
@@ -108,13 +114,17 @@ namespace Game.Story.UI
 
             if (choiceButtons != null)
             {
-                foreach (Button button in choiceButtons)
+                for (int i = 0; i < choiceButtons.Length; i++)
                 {
+                    Button button = choiceButtons[i];
                     if (button == null) continue;
-                    button.onClick.RemoveAllListeners();
+                    if (_ownedButtonListeners != null && i < _ownedButtonListeners.Length && _ownedButtonListeners[i] != null)
+                        button.onClick.RemoveListener(_ownedButtonListeners[i]);
                     button.gameObject.SetActive(false);
                 }
             }
+
+            _ownedButtonListeners = null;
 
             if (timerFillImage != null)
             {
@@ -123,48 +133,33 @@ namespace Game.Story.UI
             }
         }
 
-        private void BuildVisibleChoices(IReadOnlyList<StoryChoice> choices)
-        {
-            if (choices == null) return;
-
-            int maxCount = Mathf.Min(2, choices.Count);
-            for (int i = 0; i < choices.Count && _visibleChoices.Count < maxCount; i++)
-            {
-                StoryChoice choice = choices[i];
-                if (choice == null) continue;
-
-                bool isMet = choice.AreConditionsMet();
-                if (!isMet && choice.HideIfConditionNotMet) continue;
-
-                _visibleChoices.Add(choice);
-            }
-        }
-
         private void BindButtons(int generation)
         {
             int buttonCount = choiceButtons != null ? choiceButtons.Length : 0;
             int textCount = choiceTexts != null ? choiceTexts.Length : 0;
-            int count = Mathf.Min(2, _visibleChoices.Count, buttonCount);
+            int count = Mathf.Min(StoryChoiceResolver.MaxProductionChoices, _visibleChoices.Count, buttonCount);
+            _ownedButtonListeners = new UnityAction[buttonCount];
 
             for (int i = 0; i < count; i++)
             {
-                StoryChoice choice = _visibleChoices[i];
+                ResolvedStoryChoice resolved = _visibleChoices[i];
                 Button button = choiceButtons[i];
                 if (button == null) continue;
 
-                bool isMet = choice.AreConditionsMet();
                 button.gameObject.SetActive(true);
-                button.interactable = isMet;
+                button.interactable = resolved.IsEnabled;
 
                 if (i < textCount && choiceTexts[i] != null)
                 {
-                    choiceTexts[i].text = GetChoiceLabel(choice, isMet);
+                    choiceTexts[i].text = GetChoiceLabel(resolved);
                 }
 
-                if (!isMet) continue;
+                if (!resolved.IsEnabled) continue;
 
                 int capturedIndex = i;
-                button.onClick.AddListener(() => SelectVisibleChoice(capturedIndex, generation));
+                UnityAction listener = () => SelectVisibleChoice(capturedIndex, generation);
+                _ownedButtonListeners[i] = listener;
+                button.onClick.AddListener(listener);
             }
         }
 
@@ -174,13 +169,13 @@ namespace Game.Story.UI
             if (_selectionLocked) return;
             if (index < 0 || index >= _visibleChoices.Count) return;
 
-            StoryChoice choice = _visibleChoices[index];
-            if (choice == null || !choice.AreConditionsMet()) return;
+            ResolvedStoryChoice resolved = _visibleChoices[index];
+            if (!resolved.IsEnabled || resolved.Choice == null || !resolved.Choice.AreConditionsMet()) return;
 
             _selectionLocked = true;
-            Action<StoryChoice> callback = _onChoiceSelected;
+            Action<ResolvedStoryChoice> callback = _onChoiceSelected;
             Hide();
-            callback?.Invoke(choice);
+            callback?.Invoke(resolved);
         }
 
         private void UpdateTimerFill()
@@ -206,11 +201,12 @@ namespace Game.Story.UI
             }
         }
 
-        private static string GetChoiceLabel(StoryChoice choice, bool isMet)
+        private static string GetChoiceLabel(ResolvedStoryChoice resolved)
         {
+            StoryChoice choice = resolved.Choice;
             string text = choice.Text ?? string.Empty;
-            if (isMet || string.IsNullOrEmpty(choice.DisabledReason)) return text;
-            return $"{text} ({choice.DisabledReason})";
+            if (resolved.IsEnabled || string.IsNullOrEmpty(resolved.DisabledReason)) return text;
+            return $"{text} ({resolved.DisabledReason})";
         }
     }
 }

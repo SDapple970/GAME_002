@@ -41,6 +41,7 @@ namespace Game.Story
 
         private StoryEventDefinitionSO _currentEvent;
         private StoryNode _currentNode;
+        private readonly List<ResolvedStoryChoice> _resolvedChoices = new();
         private StorySpeakerAnchor _currentSpeakerAnchor;
         private StoryRunLifecycle _lifecycle;
         private PresenterKind _presenter;
@@ -51,6 +52,8 @@ namespace Game.Story
         private int _generation;
         private int _nodeToken;
         private int _lastAdvanceFrame = -1;
+        private float _choiceTimeoutAt;
+        private bool _choiceTimerRunning;
         private GameInputInstaller _inputInstaller;
         private InputService _inputService;
         private bool _inputSubscribed;
@@ -63,6 +66,8 @@ namespace Game.Story
             _lifecycle == StoryRunLifecycle.ShowingDialogue ||
             _lifecycle == StoryRunLifecycle.WaitingForChoice ||
             _lifecycle == StoryRunLifecycle.Ending;
+
+        public IReadOnlyList<ResolvedStoryChoice> CurrentResolvedChoices => _resolvedChoices;
 
         public event Action<StoryEventDefinitionSO> OnEventStarted;
         public event Action<StoryEventDefinitionSO> OnEventCompleted;
@@ -96,6 +101,13 @@ namespace Game.Story
         {
             // Late bootstrap recovery uses only the persistent installer reference.
             EnsureInputSubscription();
+            if (_choiceTimerRunning &&
+                _lifecycle == StoryRunLifecycle.WaitingForChoice &&
+                Time.unscaledTime >= _choiceTimeoutAt)
+            {
+                _choiceTimerRunning = false;
+                TryAcceptTimeout(_generation, _nodeToken);
+            }
         }
 
         public void StartEvent(StoryEventDefinitionSO eventDefinition)
@@ -160,6 +172,18 @@ namespace Game.Story
             TryAcceptChoice(choice, _generation, _nodeToken);
         }
 
+        public void SelectChoiceByIndex(int visibleIndex)
+        {
+            if (_lifecycle != StoryRunLifecycle.WaitingForChoice ||
+                !IsChoiceState() ||
+                visibleIndex < 0 || visibleIndex >= _resolvedChoices.Count)
+            {
+                return;
+            }
+
+            TryAcceptResolvedChoice(_resolvedChoices[visibleIndex], _generation, _nodeToken, false);
+        }
+
         public void EndEvent()
         {
             if (!IsRunning || _lifecycle == StoryRunLifecycle.Ending)
@@ -187,6 +211,14 @@ namespace Game.Story
             if (eventDefinition == null)
             {
                 Debug.LogWarning("[StoryEventRunner] Cannot start a null story event.", this);
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(eventDefinition.EventId))
+            {
+                Debug.LogWarning(
+                    $"[StoryEventRunner] Cannot start Story asset='{eventDefinition.name}' because eventId is empty.",
+                    this);
                 return false;
             }
 
@@ -262,6 +294,15 @@ namespace Game.Story
             if (!IsRunning || node == null)
                 return;
 
+            if (string.IsNullOrWhiteSpace(node.NodeId))
+            {
+                Debug.LogWarning(
+                    $"[StoryEventRunner] Story node has an empty nodeId. event='{_currentEvent?.EventId}'.",
+                    this);
+                CancelActiveRun("node id missing");
+                return;
+            }
+
             if (!RequestNarrativeState(GameState.Dialogue, "ShowStoryNode"))
             {
                 CancelActiveRun("dialogue state request rejected");
@@ -312,16 +353,16 @@ namespace Game.Story
 
         private void ShowChoices(StoryNode node, int nodeToken)
         {
-            List<StoryChoice> availableChoices = GetAvailableChoices(node.Choices, 2);
-            if (availableChoices.Count == 0)
+            _resolvedChoices.Clear();
+            _resolvedChoices.AddRange(StoryChoiceResolver.Resolve(node.Choices, this));
+            bool hasSelectableChoice = HasSelectableChoice(_resolvedChoices);
+            bool hasValidTimerRoute = HasValidTimerRoute(node, _resolvedChoices);
+            if (!hasSelectableChoice && !hasValidTimerRoute)
             {
                 Debug.LogWarning(
-                    $"[StoryEventRunner] No selectable choices. Falling back to Next. event='{_currentEvent?.EventId}' node='{node.NodeId}'.",
+                    $"[StoryEventRunner] No selectable choice or valid timeout route. Continuing deterministically. event='{_currentEvent?.EventId}' node='{node.NodeId}'.",
                     this);
-                _lifecycle = StoryRunLifecycle.ShowingDialogue;
-                HideChoices();
-                if (_presenter == PresenterKind.DialoguePanel)
-                    dialoguePanel?.SetNextVisible(true);
+                ContinueWithoutChoice(node);
                 return;
             }
 
@@ -332,13 +373,17 @@ namespace Game.Story
             }
 
             _lifecycle = StoryRunLifecycle.WaitingForChoice;
+            _choiceTimerRunning = node.UseTimedChoices && node.ChoiceTimeLimitSeconds > 0f;
+            _choiceTimeoutAt = _choiceTimerRunning
+                ? Time.unscaledTime + node.ChoiceTimeLimitSeconds
+                : 0f;
             int generation = _generation;
             if (_presenter == PresenterKind.StoryDialogueHud && storyDialogueHUD.CanPresentChoices)
             {
                 storyDialogueHUD.ShowTimedChoices(
                     node,
-                    availableChoices,
-                    choice => TryAcceptChoice(choice, generation, nodeToken),
+                    _resolvedChoices,
+                    choice => TryAcceptResolvedChoice(choice, generation, nodeToken, false),
                     () => TryAcceptTimeout(generation, nodeToken));
                 return;
             }
@@ -347,32 +392,48 @@ namespace Game.Story
             {
                 dialoguePanel.SetNextVisible(false);
                 dialoguePanel.BuildChoices(
-                    availableChoices,
-                    choice => TryAcceptChoice(choice, generation, nodeToken));
+                    _resolvedChoices,
+                    choice => TryAcceptResolvedChoice(choice, generation, nodeToken, false));
                 return;
             }
 
             Debug.LogWarning(
-                $"[StoryEventRunner] No active choice presenter. Waiting for an explicit compatibility selection. event='{_currentEvent?.EventId}' node='{node.NodeId}'.",
+                $"[StoryEventRunner] No active choice presenter. Waiting for an explicit routed selection command. event='{_currentEvent?.EventId}' node='{node.NodeId}'.",
                 this);
         }
 
         private void TryAcceptChoice(StoryChoice choice, int generation, int nodeToken)
         {
-            if (_lifecycle != StoryRunLifecycle.WaitingForChoice ||
-                generation != _generation || !IsCurrentNode(nodeToken) || choice == null ||
-                !ContainsCurrentChoice(choice) || !choice.AreConditionsMet())
-            {
+            if (!TryFindResolvedChoice(choice, out ResolvedStoryChoice resolved))
                 return;
-            }
+
+            TryAcceptResolvedChoice(resolved, generation, nodeToken, false);
+        }
+
+        private void TryAcceptResolvedChoice(
+            ResolvedStoryChoice resolved,
+            int generation,
+            int nodeToken,
+            bool isTimeoutSelection)
+        {
+            StoryChoice choice = resolved.Choice;
+            if (_lifecycle != StoryRunLifecycle.WaitingForChoice ||
+                !IsChoiceState() || generation != _generation || !IsCurrentNode(nodeToken) || choice == null ||
+                !resolved.IsEnabled || !ContainsCurrentChoice(choice) || !choice.AreConditionsMet())
+                return;
 
             // Claim the outcome before effects so a reentrant click/timeout cannot win.
             _lifecycle = StoryRunLifecycle.ShowingDialogue;
+            _choiceTimerRunning = false;
             HideChoices();
-            int choiceIndex = GetCurrentChoiceIndex(choice);
             choice.ApplyEffects(new StoryEffectContext(
                 gameObject,
-                BuildStoryActionId($"choice:{choiceIndex}")));
+                StoryOutcomeKind.Choice,
+                _currentEvent?.EventId,
+                _currentNode?.NodeId,
+                choice.ChoiceId,
+                resolved.AuthoredIndex,
+                isTimeoutSelection: isTimeoutSelection));
             if (!IsCurrentNode(nodeToken) || !IsRunning)
                 return;
 
@@ -382,13 +443,14 @@ namespace Game.Story
         private void TryAcceptTimeout(int generation, int nodeToken)
         {
             if (_lifecycle != StoryRunLifecycle.WaitingForChoice ||
-                generation != _generation || !IsCurrentNode(nodeToken))
+                !IsChoiceState() || generation != _generation || !IsCurrentNode(nodeToken))
             {
                 return;
             }
 
             StoryNode timeoutSource = _currentNode;
             _lifecycle = StoryRunLifecycle.ShowingDialogue;
+            _choiceTimerRunning = false;
             HideChoices();
 
             if (!string.IsNullOrEmpty(timeoutSource.TimeoutNodeId))
@@ -405,19 +467,23 @@ namespace Game.Story
                     this);
             }
 
-            List<StoryChoice> availableChoices = GetAvailableChoices(timeoutSource.Choices, 2);
             int choiceIndex = timeoutSource.TimeoutChoiceIndex;
-            if (choiceIndex >= 0 && choiceIndex < availableChoices.Count)
+            if (choiceIndex >= 0 && choiceIndex < _resolvedChoices.Count)
             {
-                StoryChoice choice = availableChoices[choiceIndex];
-                choice.ApplyEffects(new StoryEffectContext(
-                    gameObject,
-                    BuildStoryActionId($"timeout:{choiceIndex}")));
-                ContinueAfterChoice(choice.NextNodeId);
-                return;
+                ResolvedStoryChoice resolved = _resolvedChoices[choiceIndex];
+                if (resolved.IsEnabled && resolved.Choice != null && resolved.Choice.AreConditionsMet())
+                {
+                    // Restore the waiting lifecycle so selection uses the same single-winner path.
+                    _lifecycle = StoryRunLifecycle.WaitingForChoice;
+                    TryAcceptResolvedChoice(resolved, generation, nodeToken, true);
+                    return;
+                }
             }
 
-            EndEvent();
+            Debug.LogWarning(
+                $"[StoryEventRunner] Timeout target is missing or disabled. Continuing deterministically. event='{_currentEvent?.EventId}' node='{timeoutSource.NodeId}' index={choiceIndex}.",
+                this);
+            ContinueWithoutChoice(timeoutSource);
         }
 
         private void ContinueAfterChoice(string nextNodeId)
@@ -451,7 +517,10 @@ namespace Game.Story
                 StoryEffect effect = node.Effects[i];
                 effect?.Apply(new StoryEffectContext(
                     gameObject,
-                    BuildStoryActionId($"effect:{i}")));
+                    StoryOutcomeKind.Story,
+                    _currentEvent?.EventId,
+                    node.NodeId,
+                    effectIndex: i));
             }
         }
 
@@ -625,6 +694,9 @@ namespace Game.Story
             _currentEvent = null;
             _currentNode = null;
             _currentSpeakerAnchor = null;
+            _resolvedChoices.Clear();
+            _choiceTimerRunning = false;
+            _choiceTimeoutAt = 0f;
             _nodeToken++;
         }
 
@@ -645,21 +717,19 @@ namespace Game.Story
             return false;
         }
 
-        private int GetCurrentChoiceIndex(StoryChoice choice)
+        private bool TryFindResolvedChoice(StoryChoice choice, out ResolvedStoryChoice resolved)
         {
-            if (_currentNode?.Choices == null)
-                return -1;
-            for (int i = 0; i < _currentNode.Choices.Count; i++)
+            for (int i = 0; i < _resolvedChoices.Count; i++)
             {
-                if (ReferenceEquals(_currentNode.Choices[i], choice))
-                    return i;
+                if (ReferenceEquals(_resolvedChoices[i].Choice, choice))
+                {
+                    resolved = _resolvedChoices[i];
+                    return true;
+                }
             }
-            return -1;
-        }
 
-        private string BuildStoryActionId(string action)
-        {
-            return $"story:{_currentEvent?.EventId}:node:{_currentNode?.NodeId}:{action}";
+            resolved = default;
+            return false;
         }
 
         private static bool EventRequiresChoices(StoryEventDefinitionSO eventDefinition)
@@ -677,20 +747,41 @@ namespace Game.Story
             return false;
         }
 
-        private static List<StoryChoice> GetAvailableChoices(IReadOnlyList<StoryChoice> choices, int maxCount)
+        private static bool HasSelectableChoice(IReadOnlyList<ResolvedStoryChoice> choices)
         {
-            List<StoryChoice> availableChoices = new();
-            if (choices == null)
-                return availableChoices;
+            if (choices == null) return false;
+            for (int i = 0; i < choices.Count; i++)
+                if (choices[i].IsEnabled) return true;
+            return false;
+        }
 
-            for (int i = 0; i < choices.Count && availableChoices.Count < maxCount; i++)
+        private bool HasValidTimerRoute(StoryNode node, IReadOnlyList<ResolvedStoryChoice> choices)
+        {
+            if (node == null || !node.UseTimedChoices || node.ChoiceTimeLimitSeconds <= 0f)
+                return false;
+
+            if (!string.IsNullOrEmpty(node.TimeoutNodeId) && _currentEvent?.GetNode(node.TimeoutNodeId) != null)
+                return true;
+
+            int index = node.TimeoutChoiceIndex;
+            return index >= 0 && index < choices.Count && choices[index].IsEnabled;
+        }
+
+        private void ContinueWithoutChoice(StoryNode sourceNode)
+        {
+            _lifecycle = StoryRunLifecycle.ShowingDialogue;
+            HideChoices();
+            if (sourceNode != null && !string.IsNullOrEmpty(sourceNode.NextNodeId))
             {
-                StoryChoice choice = choices[i];
-                if (choice != null && choice.AreConditionsMet())
-                    availableChoices.Add(choice);
+                StoryNode next = _currentEvent?.GetNode(sourceNode.NextNodeId);
+                if (next != null)
+                {
+                    ShowNode(next);
+                    return;
+                }
             }
 
-            return availableChoices;
+            EndEvent();
         }
 
         private bool IsNarrativeAdvanceState()
@@ -736,13 +827,17 @@ namespace Game.Story
             _inputInstaller = installer;
             _inputService = service;
             _inputService.DialogueAdvance += HandleAdvanceInput;
+            _inputService.NarrativeChoiceSelected += HandleChoiceInput;
             _inputSubscribed = true;
         }
 
         private void UnsubscribeInput()
         {
             if (_inputSubscribed && _inputService != null)
+            {
                 _inputService.DialogueAdvance -= HandleAdvanceInput;
+                _inputService.NarrativeChoiceSelected -= HandleChoiceInput;
+            }
             _inputSubscribed = false;
             _inputInstaller = null;
             _inputService = null;
@@ -751,6 +846,16 @@ namespace Game.Story
         private void HandleAdvanceInput()
         {
             Advance();
+        }
+
+        private void HandleChoiceInput(int visibleIndex)
+        {
+            SelectChoiceByIndex(visibleIndex);
+        }
+
+        private static bool IsChoiceState()
+        {
+            return GameStateMachine.Instance != null && GameStateMachine.Instance.Current == GameState.Choice;
         }
 
         internal static void ResetActiveOwnershipForTests()

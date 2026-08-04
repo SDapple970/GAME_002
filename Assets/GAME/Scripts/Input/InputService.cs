@@ -13,6 +13,7 @@ namespace Game.Input
         public event Action Parry;
         public event Action ExplorationInteract;
         public event Action DialogueAdvance;
+        public event Action<int> NarrativeChoiceSelected;
         public event Action PauseRequested;
 
         internal void EmitMove(Vector2 value)
@@ -34,6 +35,7 @@ namespace Game.Input
         internal void EmitParry() => Parry?.Invoke();
         internal void EmitExplorationInteract() => ExplorationInteract?.Invoke();
         internal void EmitDialogueAdvance() => DialogueAdvance?.Invoke();
+        public void SelectNarrativeChoice(int visibleIndex) => NarrativeChoiceSelected?.Invoke(visibleIndex);
         internal void EmitPauseRequested() => PauseRequested?.Invoke();
     }
 }

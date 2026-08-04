@@ -1,6 +1,7 @@
 #if UNITY_INCLUDE_TESTS
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using Game.Core;
 using Game.Input;
@@ -337,6 +338,22 @@ namespace Game.Tests.Input
             Assert.That(received, Is.EqualTo(Vector2.up));
             Assert.That(exploration, Is.EqualTo(1));
             Assert.That(dialogue, Is.Zero);
+        }
+
+        [Test]
+        public void ProductionNarrativeRuntime_DoesNotPollLegacyInput()
+        {
+            string[] files = Directory.GetFiles(
+                "Assets/GAME/Scripts/Story/Runtime",
+                "*.cs",
+                SearchOption.AllDirectories);
+
+            foreach (string file in files)
+            {
+                string source = File.ReadAllText(file);
+                Assert.That(source, Does.Not.Contain("UnityEngine.Input"), file);
+                Assert.That(source, Does.Not.Contain("Input.GetKeyDown"), file);
+            }
         }
 
         private void EnterCombatResolving()

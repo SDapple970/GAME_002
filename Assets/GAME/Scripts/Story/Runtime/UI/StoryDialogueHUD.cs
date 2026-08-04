@@ -29,6 +29,15 @@ namespace Game.Story.UI
 
         public void ShowTimedChoices(StoryNode node, IReadOnlyList<StoryChoice> choices, Action<StoryChoice> onChoiceSelected, Action onTimeout)
         {
+            ShowTimedChoices(
+                node,
+                StoryChoiceResolver.Resolve(choices, this),
+                resolved => onChoiceSelected?.Invoke(resolved.Choice),
+                onTimeout);
+        }
+
+        public void ShowTimedChoices(StoryNode node, IReadOnlyList<ResolvedStoryChoice> choices, Action<ResolvedStoryChoice> onChoiceSelected, Action onTimeout)
+        {
             if (node != null && node.HideBubbleAfterChoice)
             {
                 worldBubble?.Hide();

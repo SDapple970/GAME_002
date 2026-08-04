@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Game.Story.Data;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace Game.Story.UI
@@ -20,6 +21,7 @@ namespace Game.Story.UI
         [SerializeField] private Button choiceButtonPrefab;
 
         private readonly List<Button> _choiceButtons = new();
+        private readonly Dictionary<Button, UnityAction> _ownedChoiceListeners = new();
 
         public bool IsPresentationReady =>
             (rootGroup != null || root != null) && speakerText != null && bodyText != null;
@@ -125,6 +127,13 @@ namespace Game.Story.UI
 
         public void BuildChoices(IReadOnlyList<StoryChoice> choices, Action<StoryChoice> onChoiceSelected)
         {
+            BuildChoices(
+                StoryChoiceResolver.Resolve(choices, this),
+                resolved => onChoiceSelected?.Invoke(resolved.Choice));
+        }
+
+        public void BuildChoices(IReadOnlyList<ResolvedStoryChoice> choices, Action<ResolvedStoryChoice> onChoiceSelected)
+        {
             ClearChoices();
 
             if (choices == null || choices.Count == 0) return;
@@ -141,32 +150,30 @@ namespace Game.Story.UI
                 return;
             }
 
-            foreach (StoryChoice choice in choices)
+            for (int i = 0; i < choices.Count && i < StoryChoiceResolver.MaxProductionChoices; i++)
             {
+                ResolvedStoryChoice resolved = choices[i];
+                StoryChoice choice = resolved.Choice;
                 if (choice == null) continue;
-
-                bool isMet = choice.AreConditionsMet();
-                if (!isMet && choice.HideIfConditionNotMet)
-                {
-                    continue;
-                }
 
                 Button button = Instantiate(choiceButtonPrefab, choiceContainer);
                 TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
                 if (label != null)
                 {
-                    label.text = GetChoiceLabel(choice, isMet);
+                    label.text = GetChoiceLabel(resolved);
                 }
                 else
                 {
                     Debug.LogWarning("[DialoguePanel] Choice button prefab has no TMP_Text child.");
                 }
 
-                button.interactable = isMet;
-                if (isMet)
+                button.interactable = resolved.IsEnabled;
+                if (resolved.IsEnabled)
                 {
-                    StoryChoice capturedChoice = choice;
-                    button.onClick.AddListener(() => onChoiceSelected?.Invoke(capturedChoice));
+                    ResolvedStoryChoice capturedChoice = resolved;
+                    UnityAction listener = () => onChoiceSelected?.Invoke(capturedChoice);
+                    _ownedChoiceListeners[button] = listener;
+                    button.onClick.AddListener(listener);
                 }
 
                 _choiceButtons.Add(button);
@@ -179,12 +186,14 @@ namespace Game.Story.UI
             {
                 if (button != null)
                 {
-                    button.onClick.RemoveAllListeners();
+                    if (_ownedChoiceListeners.TryGetValue(button, out UnityAction listener))
+                        button.onClick.RemoveListener(listener);
                     Destroy(button.gameObject);
                 }
             }
 
             _choiceButtons.Clear();
+            _ownedChoiceListeners.Clear();
         }
 
         private void SetRootVisible(bool visible)
@@ -205,14 +214,15 @@ namespace Game.Story.UI
             }
         }
 
-        private static string GetChoiceLabel(StoryChoice choice, bool isMet)
+        private static string GetChoiceLabel(ResolvedStoryChoice resolved)
         {
+            StoryChoice choice = resolved.Choice;
             string text = choice.Text ?? string.Empty;
-            if (isMet) return text;
+            if (resolved.IsEnabled) return text;
 
-            if (!string.IsNullOrEmpty(choice.DisabledReason))
+            if (!string.IsNullOrEmpty(resolved.DisabledReason))
             {
-                return $"{text} ({choice.DisabledReason})";
+                return $"{text} ({resolved.DisabledReason})";
             }
 
             return text;

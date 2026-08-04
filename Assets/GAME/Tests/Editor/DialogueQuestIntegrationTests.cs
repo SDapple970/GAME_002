@@ -159,6 +159,17 @@ namespace Game.Tests.Integration
             Assert.That(runner.IsRunning, Is.False);
         }
 
+        [Test]
+        public void EmptyEventId_IsRejectedBeforeEffectsOrPersistence()
+        {
+            CreateFlowState();
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            StoryEventDefinitionSO definition = CreateStoryEvent(" ", true);
+            Assert.That(runner.TryStartEvent(definition), Is.False);
+            Assert.That(runner.IsRunning, Is.False);
+            Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Exploration));
+        }
+
         [TestCase(GameState.Reward)]
         [TestCase(GameState.CombatPlanning)]
         [TestCase(GameState.CombatResolving)]
@@ -243,6 +254,326 @@ namespace Game.Tests.Integration
             Assert.That(GetField<StoryNode>(runner, "_currentNode").NodeId, Is.EqualTo("chosen"));
         }
 
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(4)]
+        public void ProductionChoiceResolution_PresentsUpToThreeInAuthoredOrder(int authoredCount)
+        {
+            CreateFlowState();
+            List<StoryChoice> choices = new();
+            for (int i = 0; i < authoredCount; i++)
+                choices.Add(CreateStoryChoice($"choice-{i}", "chosen"));
+
+            StoryNode start = CreateNode("start", null, false);
+            SetField(start, "choices", choices);
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            runner.StartEvent(CreateStoryDefinition("choice-count", start, CreateNode("chosen", null, true)));
+
+            Assert.That(runner.CurrentResolvedChoices, Has.Count.EqualTo(Math.Min(authoredCount, StoryChoiceResolver.MaxProductionChoices)));
+            for (int i = 0; i < runner.CurrentResolvedChoices.Count; i++)
+                Assert.That(runner.CurrentResolvedChoices[i].Choice.Text, Is.EqualTo($"choice-{i}"));
+        }
+
+        [Test]
+        public void ProductionPresenters_AcceptTheSameThreeResolvedChoices()
+        {
+            List<ResolvedStoryChoice> resolved = StoryChoiceResolver.Resolve(new List<StoryChoice>
+            {
+                CreateStoryChoice("one", "chosen"),
+                CreateStoryChoice("two", "chosen"),
+                CreateStoryChoice("three", "chosen")
+            });
+
+            TimedChoicePanel timed = CreateComponent<TimedChoicePanel>("Timed");
+            Button[] slots =
+            {
+                CreateGameObject("Choice1", typeof(RectTransform), typeof(Button)).GetComponent<Button>(),
+                CreateGameObject("Choice2", typeof(RectTransform), typeof(Button)).GetComponent<Button>(),
+                CreateGameObject("Choice3", typeof(RectTransform), typeof(Button)).GetComponent<Button>()
+            };
+            int authoredListenerCalls = 0;
+            slots[0].onClick.AddListener(() => authoredListenerCalls++);
+            SetField(timed, "choiceButtons", slots);
+            timed.ShowChoices(resolved, 0f, _ => { }, null);
+
+            DialoguePanel dialogue = CreateComponent<DialoguePanel>("Dialogue");
+            Transform container = CreateGameObject("ChoiceContainer", typeof(RectTransform)).transform;
+            Button prefab = CreateGameObject("ChoicePrefab", typeof(RectTransform), typeof(Button)).GetComponent<Button>();
+            SetField(dialogue, "choiceContainer", container);
+            SetField(dialogue, "choiceButtonPrefab", prefab);
+            dialogue.BuildChoices(resolved, _ => { });
+
+            Assert.That(GetField<List<ResolvedStoryChoice>>(timed, "_visibleChoices"), Has.Count.EqualTo(3));
+            Assert.That(dialogue.VisibleChoiceCount, Is.EqualTo(3));
+            timed.Clear();
+            slots[0].onClick.Invoke();
+            Assert.That(authoredListenerCalls, Is.EqualTo(1), "Panel cleanup must preserve unrelated authored listeners.");
+        }
+
+        [Test]
+        public void ChoiceConditions_AreResolvedOnceAsHiddenDisabledAndEnabled()
+        {
+            CreateFlowState();
+            CreateComponent<StoryProgressManager>("Progress");
+            StoryCondition unmet = CreateUnmetEventCondition("missing-event");
+            StoryChoice hidden = CreateStoryChoice("hidden", "chosen", condition: unmet, hideWhenUnmet: true);
+            StoryChoice disabled = CreateStoryChoice("disabled", "chosen", condition: unmet, hideWhenUnmet: false, disabledReason: "Locked");
+            StoryChoice enabled = CreateStoryChoice("enabled", "chosen");
+            StoryNode start = CreateNode("start", null, false);
+            SetField(start, "choices", new List<StoryChoice> { hidden, disabled, enabled });
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            runner.StartEvent(CreateStoryDefinition("conditions", start, CreateNode("chosen", null, true)));
+
+            Assert.That(runner.CurrentResolvedChoices, Has.Count.EqualTo(2));
+            Assert.That(runner.CurrentResolvedChoices[0].Choice, Is.SameAs(disabled));
+            Assert.That(runner.CurrentResolvedChoices[0].IsEnabled, Is.False);
+            Assert.That(runner.CurrentResolvedChoices[0].DisabledReason, Is.EqualTo("Locked"));
+            Assert.That(runner.CurrentResolvedChoices[1].Choice, Is.SameAs(enabled));
+            Assert.That(runner.CurrentResolvedChoices[1].IsEnabled, Is.True);
+
+            runner.SelectChoiceByIndex(0);
+            Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Choice));
+            runner.SelectChoiceByIndex(1);
+            Assert.That(GetField<StoryNode>(runner, "_currentNode").NodeId, Is.EqualTo("chosen"));
+        }
+
+        [Test]
+        public void NoSelectableChoiceWithoutValidTimer_ContinuesToNextNode()
+        {
+            CreateFlowState();
+            CreateComponent<StoryProgressManager>("Progress");
+            StoryChoice disabled = CreateStoryChoice(
+                "disabled",
+                "unused",
+                condition: CreateUnmetEventCondition("missing-event"),
+                hideWhenUnmet: false);
+            StoryNode start = CreateNode("start", "fallback", false);
+            SetField(start, "choices", new List<StoryChoice> { disabled });
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            runner.StartEvent(CreateStoryDefinition("fallback", start, CreateNode("fallback", null, true)));
+
+            Assert.That(GetField<StoryNode>(runner, "_currentNode").NodeId, Is.EqualTo("fallback"));
+            Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Dialogue));
+        }
+
+        [Test]
+        public void Timeout_CanSelectThirdResolvedChoice()
+        {
+            CreateFlowState();
+            StoryNode start = CreateNode("start", null, false);
+            SetField(start, "choices", new List<StoryChoice>
+            {
+                CreateStoryChoice("one", "one"),
+                CreateStoryChoice("two", "two"),
+                CreateStoryChoice("three", "three")
+            });
+            SetField(start, "useTimedChoices", true);
+            SetField(start, "choiceTimeLimitSeconds", 5f);
+            SetField(start, "timeoutChoiceIndex", 2);
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            runner.StartEvent(CreateStoryDefinition(
+                "timeout-third",
+                start,
+                CreateNode("one", null, true),
+                CreateNode("two", null, true),
+                CreateNode("three", null, true)));
+
+            Invoke(runner, "TryAcceptTimeout", GetField<int>(runner, "_generation"), GetField<int>(runner, "_nodeToken"));
+
+            Assert.That(GetField<StoryNode>(runner, "_currentNode").NodeId, Is.EqualTo("three"));
+        }
+
+        [Test]
+        public void TimeoutNode_TakesPrecedenceOverChoiceFallback()
+        {
+            CreateFlowState();
+            StoryNode start = CreateNode("start", null, false);
+            SetField(start, "choices", new List<StoryChoice> { CreateStoryChoice("choice", "choice") });
+            SetField(start, "useTimedChoices", true);
+            SetField(start, "choiceTimeLimitSeconds", 5f);
+            SetField(start, "timeoutChoiceIndex", 0);
+            SetField(start, "timeoutNodeId", "timeout");
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            runner.StartEvent(CreateStoryDefinition(
+                "timeout-node",
+                start,
+                CreateNode("choice", null, true),
+                CreateNode("timeout", null, true)));
+
+            Invoke(runner, "TryAcceptTimeout", GetField<int>(runner, "_generation"), GetField<int>(runner, "_nodeToken"));
+
+            Assert.That(GetField<StoryNode>(runner, "_currentNode").NodeId, Is.EqualTo("timeout"));
+        }
+
+        [Test]
+        public void RunnerOwnedTimer_ResolvesWithoutPresenterSpecificPolling()
+        {
+            CreateFlowState();
+            StoryNode start = CreateNode("start", null, false);
+            SetField(start, "choices", new List<StoryChoice> { CreateStoryChoice("choice", "chosen") });
+            SetField(start, "useTimedChoices", true);
+            SetField(start, "choiceTimeLimitSeconds", 5f);
+            SetField(start, "timeoutChoiceIndex", 0);
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            runner.StartEvent(CreateStoryDefinition("runner-timer", start, CreateNode("chosen", null, true)));
+            SetField(runner, "_choiceTimeoutAt", Time.unscaledTime - 1f);
+
+            InvokeIfPresent(runner, "Update");
+
+            Assert.That(GetField<StoryNode>(runner, "_currentNode").NodeId, Is.EqualTo("chosen"));
+        }
+
+        [Test]
+        public void DisabledTimeoutTarget_AppliesNothingAndUsesNextFallback()
+        {
+            CreateFlowState();
+            CreateComponent<StoryProgressManager>("Progress");
+            StoryNode start = CreateNode("start", "fallback", false);
+            SetField(start, "choices", new List<StoryChoice>
+            {
+                CreateStoryChoice(
+                    "disabled",
+                    "wrong",
+                    condition: CreateUnmetEventCondition("missing"),
+                    hideWhenUnmet: false),
+                CreateStoryChoice("enabled", "enabled")
+            });
+            SetField(start, "useTimedChoices", true);
+            SetField(start, "choiceTimeLimitSeconds", 5f);
+            SetField(start, "timeoutChoiceIndex", 0);
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            runner.StartEvent(CreateStoryDefinition(
+                "disabled-timeout",
+                start,
+                CreateNode("wrong", null, true),
+                CreateNode("enabled", null, true),
+                CreateNode("fallback", null, true)));
+
+            Invoke(runner, "TryAcceptTimeout", GetField<int>(runner, "_generation"), GetField<int>(runner, "_nodeToken"));
+
+            Assert.That(GetField<StoryNode>(runner, "_currentNode").NodeId, Is.EqualTo("fallback"));
+        }
+
+        [Test]
+        public void RoutedChoiceIndex_AcceptsThirdChoiceOnceOnlyInChoiceState()
+        {
+            CreateFlowState();
+            GameInputInstaller installer = CreateComponent<GameInputInstaller>("InputInstaller");
+            InvokeIfPresent(installer, "OnEnable");
+            StoryNode start = CreateNode("start", null, false);
+            SetField(start, "choices", new List<StoryChoice>
+            {
+                CreateStoryChoice("one", "one"),
+                CreateStoryChoice("two", "two"),
+                CreateStoryChoice("three", "three")
+            });
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            InvokeIfPresent(runner, "OnEnable");
+            runner.StartEvent(CreateStoryDefinition(
+                "input-choice",
+                start,
+                CreateNode("one", null, true),
+                CreateNode("two", null, true),
+                CreateNode("three", null, true)));
+
+            installer.Service.SelectNarrativeChoice(2);
+            installer.Service.SelectNarrativeChoice(0);
+
+            Assert.That(GetField<StoryNode>(runner, "_currentNode").NodeId, Is.EqualTo("three"));
+            Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Dialogue));
+        }
+
+        [Test]
+        public void AuthoredChoiceId_RemainsStableWhenChoicePositionChanges()
+        {
+            CreateFlowState();
+            StoryEffect effect = CreateQuestStoryEffect("quest", "talk", QuestEventType.Talk, 1);
+            StoryChoice stable = CreateStoryChoice("stable", "chosen", "stable-id", effect: effect);
+            List<string> sourceIds = new();
+            void Handler(QuestEvent questEvent) => sourceIds.Add(questEvent.Identity.SourceId);
+            QuestEventChannel.OnEventRaised += Handler;
+            try
+            {
+                StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+                runner.StartEvent(CreateChoiceIdentityStory("stable-event", stable));
+                runner.SelectChoiceByIndex(0);
+                runner.EndEvent();
+
+                StoryChoice prefix = CreateStoryChoice("prefix", "chosen");
+                runner.StartEvent(CreateChoiceIdentityStory("stable-event", prefix, stable));
+                runner.SelectChoiceByIndex(1);
+
+                Assert.That(sourceIds, Has.Count.EqualTo(2));
+                Assert.That(sourceIds[0], Is.EqualTo("story:stable-event:node:start:choice-id:stable-id:effect:0"));
+                Assert.That(sourceIds[1], Is.EqualTo(sourceIds[0]));
+            }
+            finally
+            {
+                QuestEventChannel.OnEventRaised -= Handler;
+            }
+        }
+
+        [Test]
+        public void BlankChoiceId_PreservesIndexCompatibilityIdentity()
+        {
+            CreateFlowState();
+            StoryChoice choice = CreateStoryChoice(
+                "compat",
+                "chosen",
+                effect: CreateQuestStoryEffect("quest", "talk", QuestEventType.Talk, 1));
+            QuestEvent received = default;
+            void Handler(QuestEvent questEvent) => received = questEvent;
+            QuestEventChannel.OnEventRaised += Handler;
+            try
+            {
+                StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+                runner.StartEvent(CreateChoiceIdentityStory("compat-event", choice));
+                runner.SelectChoiceByIndex(0);
+                Assert.That(received.Identity.SourceType, Is.EqualTo(GameplayOutcomeSourceType.Story));
+                Assert.That(received.Identity.SourceId, Is.EqualTo("story:compat-event:node:start:choice:0:effect:0"));
+            }
+            finally
+            {
+                QuestEventChannel.OnEventRaised -= Handler;
+            }
+        }
+
+        [Test]
+        public void AuthoredChoiceReward_GrantsOnceAndSaveLoadBlocksReplay()
+        {
+            CreateFlowState();
+            CurrencyWallet wallet = CreateWallet();
+            RewardService service = CreateRewardService(wallet);
+            StoryChoice choice = CreateStoryChoice(
+                "reward",
+                "chosen",
+                "reward-choice",
+                effect: CreateRewardStoryEffect(gold: 7));
+            StoryEventDefinitionSO definition = CreateChoiceIdentityStory("reward-event", choice);
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+
+            runner.StartEvent(definition);
+            runner.SelectChoiceByIndex(0);
+            runner.EndEvent();
+            runner.StartEvent(definition);
+            runner.SelectChoiceByIndex(0);
+            Assert.That(wallet.Gold, Is.EqualTo(7));
+
+            GameSaveData save = new();
+            service.CaptureSaveData(save);
+            UnityEngine.Object.DestroyImmediate(service.gameObject);
+            UnityEngine.Object.DestroyImmediate(wallet.gameObject);
+            CurrencyWallet restoredWallet = CreateWallet();
+            RewardService restoredService = CreateRewardService(restoredWallet);
+            restoredService.RestoreSaveData(save);
+
+            runner.EndEvent();
+            runner.StartEvent(definition);
+            runner.SelectChoiceByIndex(0);
+            Assert.That(restoredWallet.Gold, Is.Zero);
+        }
+
         [Test]
         public void StoryCompletionFlag_IsWrittenOnce()
         {
@@ -264,6 +595,38 @@ namespace Game.Tests.Integration
             Assert.That(runner.IsRunning, Is.True);
             runner.EndEvent();
             Assert.That(runner.IsRunning, Is.False);
+        }
+
+        [Test]
+        public void CancellingRun_DoesNotMarkStoryCompleted()
+        {
+            CreateFlowState();
+            StoryProgressManager progress = CreateComponent<StoryProgressManager>("Progress");
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            runner.StartEvent(CreateStoryEvent("cancelled", true));
+
+            InvokeIfPresent(runner, "OnDisable");
+
+            Assert.That(progress.IsEventCompleted("cancelled"), Is.False);
+            Assert.That(runner.IsRunning, Is.False);
+        }
+
+        [Test]
+        public void ProductionStoryInteractable_RequestsRunnerWithoutOwningStateOrUi()
+        {
+            CreateFlowState();
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            StoryEventDefinitionSO definition = CreateStoryEvent("npc-request", true);
+            GameObject actorObject = CreateGameObject("NPC", typeof(BoxCollider2D));
+            StoryInteractable2D actor = actorObject.AddComponent<StoryInteractable2D>();
+            SetField(actor, "runner", runner);
+            SetField(actor, "eventDefinition", definition);
+
+            actor.StartLinkedEvent();
+
+            Assert.That(runner.IsRunning, Is.True);
+            Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Dialogue));
+            Assert.That(typeof(StoryInteractable2D).GetField("dialoguePanel", BindingFlags.Instance | BindingFlags.NonPublic), Is.Null);
         }
 
         [Test]
@@ -981,6 +1344,44 @@ namespace Game.Tests.Integration
             return CreateStoryDefinition(id, start, chosen);
         }
 
+        private StoryEventDefinitionSO CreateChoiceIdentityStory(string id, params StoryChoice[] choices)
+        {
+            StoryNode start = CreateNode("start", null, false);
+            SetField(start, "choices", new List<StoryChoice>(choices));
+            StoryNode chosen = CreateNode("chosen", null, true);
+            return CreateStoryDefinition(id, start, chosen);
+        }
+
+        private static StoryChoice CreateStoryChoice(
+            string text,
+            string nextNodeId,
+            string choiceId = null,
+            StoryCondition condition = null,
+            bool hideWhenUnmet = true,
+            string disabledReason = null,
+            StoryEffect effect = null)
+        {
+            StoryChoice choice = new();
+            SetField(choice, "choiceId", choiceId);
+            SetField(choice, "text", text);
+            SetField(choice, "nextNodeId", nextNodeId);
+            SetField(choice, "hideIfConditionNotMet", hideWhenUnmet);
+            SetField(choice, "disabledReason", disabledReason);
+            if (condition != null)
+                SetField(choice, "conditions", new List<StoryCondition> { condition });
+            if (effect != null)
+                SetField(choice, "effects", new List<StoryEffect> { effect });
+            return choice;
+        }
+
+        private static StoryCondition CreateUnmetEventCondition(string eventId)
+        {
+            StoryCondition condition = new();
+            SetField(condition, "type", StoryConditionType.EventCompleted);
+            SetField(condition, "key", eventId);
+            return condition;
+        }
+
         private StoryEventDefinitionSO CreateStoryDefinition(string id, params StoryNode[] nodes)
         {
             StoryEventDefinitionSO definition = ScriptableObject.CreateInstance<StoryEventDefinitionSO>();
@@ -1010,6 +1411,14 @@ namespace Game.Tests.Integration
             SetField(effect, "objectiveId", objectiveId);
             SetField(effect, "questEventType", type);
             SetField(effect, "intValue", amount);
+            return effect;
+        }
+
+        private static StoryEffect CreateRewardStoryEffect(int gold)
+        {
+            StoryEffect effect = new();
+            SetField(effect, "type", StoryEffectType.GrantReward);
+            SetField(effect, "rewardGold", gold);
             return effect;
         }
 

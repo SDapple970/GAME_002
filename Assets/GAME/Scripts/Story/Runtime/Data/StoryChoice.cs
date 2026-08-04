@@ -7,6 +7,7 @@ namespace Game.Story.Data
     [System.Serializable]
     public sealed class StoryChoice
     {
+        [SerializeField] private string choiceId;
         [SerializeField] private string text;
         [SerializeField] private string nextNodeId;
         [SerializeField] private List<StoryCondition> conditions = new();
@@ -14,6 +15,7 @@ namespace Game.Story.Data
         [SerializeField] private bool hideIfConditionNotMet = true;
         [SerializeField] private string disabledReason;
 
+        public string ChoiceId => string.IsNullOrWhiteSpace(choiceId) ? null : choiceId.Trim();
         public string Text => text;
         public string NextNodeId => nextNodeId;
         public IReadOnlyList<StoryCondition> Conditions => conditions;
@@ -48,9 +50,7 @@ namespace Game.Story.Data
             for (int i = 0; i < effects.Count; i++)
             {
                 StoryEffect effect = effects[i];
-                effect?.Apply(new StoryEffectContext(
-                    context.Source,
-                    string.IsNullOrWhiteSpace(context.EventId) ? null : $"{context.EventId}:effect:{i}"));
+                effect?.Apply(context.WithEffectIndex(i));
             }
         }
     }

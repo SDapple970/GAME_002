@@ -137,7 +137,7 @@ namespace Game.Story.Data
             }
 
             string sourceId = string.IsNullOrWhiteSpace(rewardSourceId)
-                ? context.EventId
+                ? context.OutcomeId
                 : rewardSourceId.Trim();
             if (string.IsNullOrWhiteSpace(rewardSourceId))
             {
@@ -145,9 +145,7 @@ namespace Game.Story.Data
                     $"[StoryEffect] Using story action compatibility identity '{sourceId}'. New production reward effects should author rewardSourceId.");
             }
 
-            RewardSourceType sourceType = context.EventId != null &&
-                                          (context.EventId.Contains(":choice:") ||
-                                           context.EventId.Contains(":timeout:"))
+            RewardSourceType sourceType = context.OutcomeKind == StoryOutcomeKind.Choice
                 ? RewardSourceType.Choice
                 : RewardSourceType.Story;
             service.GrantReward(new RewardGrantRequest(
@@ -176,8 +174,10 @@ namespace Game.Story.Data
                 missionId,
                 objectiveId,
                 new GameplayOutcomeIdentity(
+                    // Choice Quest events intentionally retain the established Story
+                    // source type so Schema 4 processed identities remain compatible.
                     GameplayOutcomeSourceType.Story,
-                    context.EventId),
+                    context.OutcomeId),
                 intValue,
                 context.Source));
         }
@@ -213,15 +213,70 @@ namespace Game.Story.Data
         }
     }
 
+    internal enum StoryOutcomeKind
+    {
+        Story,
+        Choice
+    }
+
     internal readonly struct StoryEffectContext
     {
         public readonly GameObject Source;
-        public readonly string EventId;
+        public readonly StoryOutcomeKind OutcomeKind;
+        public readonly string StoryEventId;
+        public readonly string NodeId;
+        public readonly string ChoiceId;
+        public readonly int AuthoredChoiceIndex;
+        public readonly int EffectIndex;
+        public readonly bool IsTimeoutSelection;
 
-        public StoryEffectContext(GameObject source, string eventId)
+        public string OutcomeId
+        {
+            get
+            {
+                string prefix = $"story:{StoryEventId}:node:{NodeId}:";
+                if (OutcomeKind == StoryOutcomeKind.Story)
+                    return $"{prefix}effect:{EffectIndex}";
+
+                if (!string.IsNullOrEmpty(ChoiceId))
+                    return $"{prefix}choice-id:{ChoiceId}:effect:{EffectIndex}";
+
+                string compatibilityKind = IsTimeoutSelection ? "timeout" : "choice";
+                return $"{prefix}{compatibilityKind}:{AuthoredChoiceIndex}:effect:{EffectIndex}";
+            }
+        }
+
+        public StoryEffectContext(
+            GameObject source,
+            StoryOutcomeKind outcomeKind,
+            string storyEventId,
+            string nodeId,
+            string choiceId = null,
+            int authoredChoiceIndex = -1,
+            int effectIndex = -1,
+            bool isTimeoutSelection = false)
         {
             Source = source;
-            EventId = eventId;
+            OutcomeKind = outcomeKind;
+            StoryEventId = storyEventId;
+            NodeId = nodeId;
+            ChoiceId = choiceId;
+            AuthoredChoiceIndex = authoredChoiceIndex;
+            EffectIndex = effectIndex;
+            IsTimeoutSelection = isTimeoutSelection;
+        }
+
+        public StoryEffectContext WithEffectIndex(int effectIndex)
+        {
+            return new StoryEffectContext(
+                Source,
+                OutcomeKind,
+                StoryEventId,
+                NodeId,
+                ChoiceId,
+                AuthoredChoiceIndex,
+                effectIndex,
+                IsTimeoutSelection);
         }
     }
 }
