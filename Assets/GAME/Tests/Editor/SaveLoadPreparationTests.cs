@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Game.Common.Identity;
 using Game.Core;
 using Game.NonCombat.Inventory;
 using Game.NonCombat.Save;
@@ -59,6 +60,29 @@ namespace Game.Tests.Integration
             Assert.That(restored.header.formatId, Is.EqualTo(GameSaveDataFormat.FormatId));
             Assert.That(restored.header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion));
             Assert.That(restored.currency.gold, Is.EqualTo(42));
+        }
+
+        [TestCase(GameplayOutcomeSourceType.Unknown)]
+        [TestCase((GameplayOutcomeSourceType)(-1))]
+        [TestCase((GameplayOutcomeSourceType)999)]
+        public void GameplayOutcomeIdentity_RejectsUndefinedSourceValues(GameplayOutcomeSourceType sourceType)
+        {
+            Assert.That(GameplayOutcomeIdentity.TryCreate(sourceType, "source", "action", out GameplayOutcomeIdentity identity), Is.False);
+            Assert.That(identity.IsValid, Is.False);
+            Assert.That(identity.CanonicalId, Is.Empty);
+        }
+
+        [Test]
+        public void GameplayOutcomeIdentity_AllDeclaredProductionSourcesRemainCanonicalAndStable()
+        {
+            foreach (GameplayOutcomeSourceType sourceType in Enum.GetValues(typeof(GameplayOutcomeSourceType)))
+            {
+                if (sourceType == GameplayOutcomeSourceType.Unknown)
+                    continue;
+
+                Assert.That(GameplayOutcomeIdentity.TryCreate(sourceType, " source ", " action ", out GameplayOutcomeIdentity identity), Is.True, sourceType.ToString());
+                Assert.That(identity.CanonicalId, Is.EqualTo($"{(int)sourceType}|6:source|6:action"), sourceType.ToString());
+            }
         }
 
         [TestCase("")]
@@ -222,12 +246,96 @@ namespace Game.Tests.Integration
                 gold = 99
             });
             data.reward.ledger.Add(new RewardLedgerSaveData { sourceType = "Invalid", sourceId = "bad" });
+            data.reward.ledger.Add(new RewardLedgerSaveData { sourceType = "999", sourceId = "undefined-enum" });
             data.reward.ledger.Add(new RewardLedgerSaveData { sourceType = RewardSourceType.Choice.ToString(), sourceId = "" });
 
             GameSaveData normalized = ReadSnapshotFromLegacyJson(SaveSerializer.ToJson(data));
 
             Assert.That(normalized.reward.ledger, Has.Count.EqualTo(1));
             Assert.That(normalized.reward.ledger[0].gold, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void RewardLedger_MoreThan256EntriesRoundTripsAndBlocksEarlyMiddleAndLateDuplicates()
+        {
+            CurrencyWallet wallet = new GameObject("Wallet").AddComponent<CurrencyWallet>();
+            InventoryService inventory = new GameObject("Inventory").AddComponent<InventoryService>();
+            RewardService source = new GameObject("RewardSource").AddComponent<RewardService>();
+            SetField(source, "currencyWallet", wallet);
+            SetField(source, "inventoryService", inventory);
+
+            for (int i = 0; i < 300; i++)
+            {
+                RewardGrantResult result = source.GrantReward(new RewardGrantRequest(
+                    RewardSourceType.Story, $"story-{i:D3}", 1, 2, "token", 1, "grant"));
+                Assert.That(result.DuplicateBlocked, Is.False, i.ToString());
+            }
+
+            GameSaveData save = new();
+            source.CaptureSaveData(save);
+            Assert.That(save.reward.ledger, Has.Count.EqualTo(300));
+            UnityEngine.Object.DestroyImmediate(source.gameObject);
+
+            RewardService restored = new GameObject("RewardRestored").AddComponent<RewardService>();
+            SetField(restored, "currencyWallet", wallet);
+            SetField(restored, "inventoryService", inventory);
+            restored.RestoreSaveData(ReadSnapshotFromLegacyJson(SaveSerializer.ToJson(save)));
+            foreach (int index in new[] { 0, 150, 299 })
+            {
+                RewardGrantResult duplicate = restored.GrantReward(new RewardGrantRequest(
+                    RewardSourceType.Story, $"story-{index:D3}", 1, 2, "token", 1, "grant"));
+                Assert.That(duplicate.DuplicateBlocked, Is.True, index.ToString());
+                Assert.That(duplicate.Gold, Is.Zero);
+                Assert.That(duplicate.Exp, Is.Zero);
+                Assert.That(duplicate.ItemCount, Is.Zero);
+            }
+
+            Assert.That(wallet.Gold, Is.EqualTo(300));
+            Assert.That(inventory.GetCount("token"), Is.EqualTo(300));
+        }
+
+        [Test]
+        public void SaveNormalization_PreservesAllValidIdentityEntriesAndRequestedUnappliedExp()
+        {
+            GameSaveData data = new();
+            QuestStateSaveData quest = new() { questId = "quest", status = QuestStatus.Active.ToString() };
+            data.quest.quests.Add(quest);
+            for (int i = 0; i < 300; i++)
+            {
+                quest.processedEventIds.Add($"quest-event-{i:D3}");
+                data.reward.ledger.Add(new RewardLedgerSaveData
+                {
+                    sourceType = RewardSourceType.QuestCompletion.ToString(),
+                    sourceId = $"quest-{i:D3}",
+                    actionId = "complete",
+                    requestedExp = 7,
+                    exp = 0,
+                    partialFailure = true
+                });
+            }
+
+            GameSaveData normalized = ReadSnapshotFromLegacyJson(SaveSerializer.ToJson(data));
+
+            Assert.That(normalized.quest.quests.Single().processedEventIds, Has.Count.EqualTo(300));
+            Assert.That(normalized.reward.ledger, Has.Count.EqualTo(300));
+            Assert.That(normalized.reward.ledger.All(entry => entry.requestedExp == 7 && entry.exp == 0), Is.True);
+        }
+
+        [Test]
+        public void OversizedIdentityCollection_IsRejectedExplicitlyInsteadOfTruncated()
+        {
+            GameSaveData data = new();
+            QuestStateSaveData quest = new() { questId = "hostile", status = QuestStatus.Active.ToString() };
+            data.quest.quests.Add(quest);
+            quest.processedEventIds.AddRange(Enumerable.Repeat("identity", 100001));
+
+            Type validator = typeof(GameSaveData).Assembly.GetType("Game.NonCombat.Save.GameSaveDataValidator");
+            MethodInfo method = validator.GetMethod("TryValidateCollectionSizes", BindingFlags.Static | BindingFlags.NonPublic);
+            object[] args = { data, null };
+
+            Assert.That((bool)method.Invoke(null, args), Is.False);
+            Assert.That(args[1] as string, Does.Contain("100001 identity records"));
+            Assert.That(quest.processedEventIds, Has.Count.EqualTo(100001));
         }
 
         [Test]
@@ -278,6 +386,13 @@ namespace Game.Tests.Integration
         private static object Invoke(object target, string method, params object[] args)
         {
             return target.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(target, args);
+        }
+
+        private static void SetField(object target, string fieldName, object value)
+        {
+            FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, $"Missing field {target.GetType().Name}.{fieldName}");
+            field.SetValue(target, value);
         }
 
         private static string ProjectPath(string relative) => Path.Combine(Directory.GetParent(Application.dataPath).FullName, relative.Replace('/', Path.DirectorySeparatorChar));

@@ -9,8 +9,6 @@ namespace Game.Quest
 {
     public sealed class QuestRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
     {
-        private const int MaxRememberedEventIdsPerQuest = 256;
-
         [SerializeField] private MissionManager missionManager;
         [SerializeField] private QuestDefinitionSO[] questDefinitions;
 
@@ -111,7 +109,7 @@ namespace Game.Quest
 
             if (persistentEventId == null)
                 WarnUntrackedCompatibilityEvent(questEvent);
-            else if (!state.TryRememberEventId(persistentEventId, MaxRememberedEventIdsPerQuest))
+            else if (!state.TryRememberEventId(persistentEventId))
             {
                 return false;
             }
@@ -352,7 +350,7 @@ namespace Game.Quest
                     ? status
                     : questState.completed ? QuestStatus.Completed : QuestStatus.Active;
                 state.ApplyObjectiveSaveData(questState.objectives);
-                state.ApplyRememberedEventIds(questState.processedEventIds, MaxRememberedEventIdsPerQuest);
+                state.ApplyRememberedEventIds(questState.processedEventIds);
             }
         }
 
@@ -497,14 +495,12 @@ namespace Game.Quest
                     : 0;
             }
 
-            public bool TryRememberEventId(string eventId, int limit)
+            public bool TryRememberEventId(string eventId)
             {
                 if (!_rememberedEventIds.Add(eventId))
                     return false;
 
                 _eventIdOrder.Enqueue(eventId);
-                while (_eventIdOrder.Count > Mathf.Max(1, limit))
-                    _rememberedEventIds.Remove(_eventIdOrder.Dequeue());
                 return true;
             }
 
@@ -519,12 +515,12 @@ namespace Game.Quest
                 if (destination != null) destination.AddRange(_eventIdOrder);
             }
 
-            public void ApplyRememberedEventIds(List<string> source, int limit)
+            public void ApplyRememberedEventIds(List<string> source)
             {
                 ClearRememberedEventIds();
                 if (source == null) return;
                 for (int i = 0; i < source.Count; i++)
-                    if (!string.IsNullOrWhiteSpace(source[i])) TryRememberEventId(source[i], limit);
+                    if (!string.IsNullOrWhiteSpace(source[i])) TryRememberEventId(source[i]);
             }
 
             public void ResetProgress()

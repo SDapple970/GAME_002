@@ -55,6 +55,9 @@ namespace Game.NonCombat.Save
                 legacy = true;
             }
 
+            if (!GameSaveDataValidator.TryValidateCollectionSizes(data, out error))
+                return false;
+
             GameSaveDataValidator.Normalize(data);
             return GameSaveDataValidator.TryValidate(data, out error);
         }
@@ -135,7 +138,31 @@ namespace Game.NonCombat.Save
 
     internal static class GameSaveDataValidator
     {
-        internal const int MaxLedgerEntries = 256;
+        internal const int MaxGeneralIdEntries = 256;
+        // Valid canonical identities are never truncated. Reject an implausibly large
+        // external snapshot before normalization so load failure is explicit instead.
+        internal const int MaxTotalIdentityRecords = 100000;
+
+        internal static bool TryValidateCollectionSizes(GameSaveData data, out string error)
+        {
+            long identityRecords = Math.Max(
+                data?.reward?.ledger?.Count ?? 0,
+                data?.reward?.combatLedger?.Count ?? 0);
+            if (data?.quest?.quests != null)
+            {
+                for (int i = 0; i < data.quest.quests.Count; i++)
+                    identityRecords += data.quest.quests[i]?.processedEventIds?.Count ?? 0;
+            }
+
+            if (identityRecords > MaxTotalIdentityRecords)
+            {
+                error = $"Save contains {identityRecords} identity records; maximum supported is {MaxTotalIdentityRecords}.";
+                return false;
+            }
+
+            error = null;
+            return true;
+        }
 
         internal static void Normalize(GameSaveData data)
         {
@@ -146,12 +173,12 @@ namespace Game.NonCombat.Save
             data.reward ??= new RewardSaveData(); data.world ??= new WorldSaveData(); data.location ??= new PlayerLocationSaveData();
             data.currency.gold = Mathf.Max(0, data.currency.gold);
             NormalizeIntEntries(data.inventory.items);
-            NormalizeStrings(data.story.completedEventIds, MaxLedgerEntries);
-            NormalizeStrings(data.world.clearedEncounterIds, MaxLedgerEntries);
+            NormalizeStrings(data.story.completedEventIds, MaxGeneralIdEntries);
+            NormalizeStrings(data.world.clearedEncounterIds, MaxGeneralIdEntries);
             NormalizeRewardLedger(data.reward);
             if (data.quest.quests != null)
                 foreach (QuestStateSaveData quest in data.quest.quests)
-                    if (quest != null) NormalizeStrings(quest.processedEventIds, MaxLedgerEntries);
+                    if (quest != null) NormalizeStrings(quest.processedEventIds);
         }
 
         private static void NormalizeRewardLedger(RewardSaveData reward)
@@ -186,8 +213,6 @@ namespace Game.NonCombat.Save
             reward.ledger.Clear();
             reward.ledger.AddRange(unique.Values);
             reward.ledger.Sort(CompareLedgerEntries);
-            if (reward.ledger.Count > MaxLedgerEntries)
-                reward.ledger.RemoveRange(MaxLedgerEntries, reward.ledger.Count - MaxLedgerEntries);
         }
 
         private static int CompareLedgerEntries(RewardLedgerSaveData left, RewardLedgerSaveData right)
@@ -253,6 +278,14 @@ namespace Game.NonCombat.Save
             values.RemoveAll(value => string.IsNullOrWhiteSpace(value) || !unique.Add(value));
             values.Sort(StringComparer.Ordinal);
             if (values.Count > maximum) values.RemoveRange(maximum, values.Count - maximum);
+        }
+
+        private static void NormalizeStrings(List<string> values)
+        {
+            if (values == null) return;
+            HashSet<string> unique = new(StringComparer.Ordinal);
+            values.RemoveAll(value => string.IsNullOrWhiteSpace(value) || !unique.Add(value));
+            values.Sort(StringComparer.Ordinal);
         }
     }
 }

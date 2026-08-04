@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using Game.Core;
 using Game.Common.Identity;
@@ -720,6 +721,37 @@ namespace Game.Tests.Integration
             Assert.That(restored.GetQuestStatus("quest"), Is.EqualTo(QuestStatus.Active));
             Assert.That(restored.GetObjectiveProgress("quest", "kill"), Is.EqualTo(1));
             Assert.That(completed, Is.Zero);
+        }
+
+        [Test]
+        public void MoreThan256CanonicalQuestEvents_RemainConsumedAfterSaveAndRestore()
+        {
+            QuestRuntime source = CreateComponent<QuestRuntime>("Source");
+            source.StartQuest(CreateQuestDefinition("retention", QuestEventType.Kill, "kill", 400));
+            for (int i = 0; i < 300; i++)
+            {
+                GameplayOutcomeIdentity identity = new(GameplayOutcomeSourceType.Interaction, $"enemy-{i:D3}", "defeated");
+                Assert.That(source.ApplyEvent(new QuestEvent(QuestEventType.Kill, "retention", "kill", identity)), Is.True, i.ToString());
+            }
+
+            GameSaveData save = new();
+            source.CaptureSaveData(save);
+            Assert.That(save.quest.quests.Single(item => item.questId == "retention").processedEventIds, Has.Count.EqualTo(300));
+            UnityEngine.Object.DestroyImmediate(source.gameObject);
+
+            QuestRuntime restored = CreateComponent<QuestRuntime>("Restored");
+            int completions = 0;
+            restored.OnQuestCompleted += _ => completions++;
+            restored.RestoreSaveData(save);
+            foreach (int index in new[] { 0, 150, 299 })
+            {
+                GameplayOutcomeIdentity identity = new(GameplayOutcomeSourceType.Interaction, $"enemy-{index:D3}", "defeated");
+                Assert.That(restored.ApplyEvent(new QuestEvent(QuestEventType.Kill, "retention", "kill", identity)), Is.False, index.ToString());
+            }
+
+            Assert.That(restored.GetObjectiveProgress("retention", "kill"), Is.EqualTo(300));
+            Assert.That(restored.GetQuestStatus("retention"), Is.EqualTo(QuestStatus.Active));
+            Assert.That(completions, Is.Zero);
         }
 
         private (GameStateMachine, GameFlowController) CreateFlowState()

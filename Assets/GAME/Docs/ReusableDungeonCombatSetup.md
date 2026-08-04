@@ -1,6 +1,8 @@
 # Reusable Dungeon Combat Setup
 
-This setup is verified from `Assets/GAME/Scenes/Dungeon 1.unity` and the current runtime code. It preserves the production flow:
+`Assets/GAME/Scenes/Dungeon_Template.unity` is the canonical Production source scene for new dungeons. Create a dungeon by copying that scene and preserving its single-owner setup. `Assets/GAME/Scenes/Testing_Dungeon_Template.unity` is a test/validation copy only and must not be used by Production runtime or included in a Production build. `Assets/GAME/Scenes/Dungeon 1.unity` remains an old Demo/compatibility reference, not the reusable template source of truth.
+
+The template and current runtime code preserve the production flow:
 
 `Field encounter -> CombatStartRequest -> CombatEntryPoint -> FieldCombatantAdapter -> CombatSession -> CombatPlanning -> CombatResolving -> CombatResult -> CombatRewardUIBinder -> Reward -> GameFlowController -> Exploration`
 
@@ -52,7 +54,7 @@ Demo/Debug components, and Legacy battle components.
 
 ## Required combat UI
 
-Dungeon 1's UI remains scene-authored. The reusable subset is now stored in
+The reusable Production UI subset is stored in
 `Assets/GAME/Prefabs/UI/ProductionDungeonUI.prefab`:
 
 - One `CombatPlanningHUD` with its planning panel, skill list root, target list root, choice-button prefab, confirm button, and error text.
@@ -95,7 +97,7 @@ For multiple enemies, create an encounter root with `CombatEncounterGroup`:
 - Put/retain `CombatEncounterTrigger2D` on an enemy or trigger collider and connect its `encounterGroup` to the group root.
 - A player field attack resolves a parent `CombatEncounterGroup` automatically.
 
-Dungeon 1 currently has three independent single-enemy triggers and no serialized `CombatEncounterGroup`. The code copies all active group members into the request and `FieldCombatantFactory` adapts every member, but multi-enemy scene behavior still requires Play Mode validation.
+The current compatibility example has three independent single-enemy triggers and no serialized `CombatEncounterGroup`. The code copies all active group members into the request and `FieldCombatantFactory` adapts every member, but multi-enemy scene behavior still requires Play Mode validation.
 
 ## Inspector reference table
 
@@ -103,7 +105,7 @@ Dungeon 1 currently has three independent single-enemy triggers and no serialize
 |---|---|---|
 | `CombatEntryPoint.director` | Prefab `CombatDirector` | Connected inside prefab |
 | `CombatEntryPoint.flowOrchestrator` | Prefab `CombatFlowOrchestrator` | Connected inside prefab |
-| `CombatEntryPoint.skillDefinitions` | Dungeon 1's verified Basic Attack, Skill 2, Angel Skill, Angel Skill 2 assets | Stored in prefab |
+| `CombatEntryPoint.skillDefinitions` | Template's verified Basic Attack, Skill 2, Angel Skill, Angel Skill 2 assets | Stored in prefab |
 | `CombatEntryPoint.deactivateDefeatedEnemies` | `true` | Stored in prefab |
 | `CombatEntryPoint.destroyDefeatedEnemies` | `false` | Stored in prefab |
 | `CombatFlowOrchestrator.entryPoint` | Same prefab `CombatEntryPoint` | Connected inside prefab |
@@ -131,22 +133,23 @@ Dungeon 1 currently has three independent single-enemy triggers and no serialize
 
 ## Create a new dungeon
 
-1. Enter the dungeon through the existing production bootstrap/scene flow. Do not copy Dungeon 1's `Systems` object into the new scene.
-2. Add exactly one `CombatRuntime` prefab instance.
-3. Add or reuse one `ProductionDungeonUI` instance. Remove it only when a bootstrap scene demonstrably supplies one persistent HUD, reward panel, and EventSystem.
-4. Connect `CombatPlanningHUD` to the prefab instance's entry point and flow orchestrator. Verify all HUD child references.
-5. Ensure exactly one `CombatRewardUIBinder` is active. Assign the reward panel/service or verify auto-binding finds the intended single instances.
-6. Connect the prefab camera fields only if the dungeon needs explicit camera-follow suspension. Enable formation placement only when authored for that dungeon.
-7. Add the player HP/loadout/field-attack bindings and connect field attack to the same entry point.
-8. Configure each enemy for a single encounter or place enemies under a `CombatEncounterGroup`; connect every trigger to the same entry point.
-9. Confirm no `CombatDemoFlowController`, Debug start helper, Legacy battle manager/trigger, or second combat entry point is active.
-10. Run the single- and multi-enemy Play Mode checks below before shipping the scene.
+1. Copy `Assets/GAME/Scenes/Dungeon_Template.unity` to the new authored dungeon path. Never copy from `Testing_Dungeon_Template` or treat Dungeon 1 as the template.
+2. Enter the dungeon through the existing Production bootstrap/scene flow. Do not copy Dungeon 1's old `Systems` hierarchy into the new scene.
+3. Keep exactly one dungeon-local `CombatRuntime` prefab instance and one `CombatEntryPoint`.
+4. Add or reuse one `ProductionDungeonUI` instance. Remove it only when a bootstrap scene demonstrably supplies one persistent HUD, reward panel, and EventSystem.
+5. Connect `CombatPlanningHUD` to the prefab instance's entry point and flow orchestrator. Verify all HUD child references.
+6. Ensure exactly one `CombatRewardUIBinder` is active. Assign the reward panel/service or verify auto-binding finds the intended single instances.
+7. Connect the prefab camera fields only if the dungeon needs explicit camera-follow suspension. Enable formation placement only when authored for that dungeon.
+8. Add the player HP/loadout/field-attack bindings and connect field attack to the same entry point.
+9. Configure each enemy for a single encounter or place enemies under a `CombatEncounterGroup`; connect every trigger to the same entry point.
+10. Confirm no Demo, Debug, Legacy, compatibility combat entry path, or second Production manager is active. Preserve one Production owner per system.
+11. Use `Testing_Dungeon_Template` only for validation, and run the single- and multi-enemy Play Mode checks below before shipping the authored copy.
 
 ## Play Mode validation
 
 Single enemy:
 
-1. Open Dungeon 1 (or the new dungeon) and enter Play Mode.
+1. Open `Dungeon_Template` (or the new dungeon copy) and enter Play Mode.
 2. Confirm one active `GameStateMachine`, `GameFlowController`, `RewardService`, `GameInputInstaller`, `GameUIRootController`, `UIScreenRouter`, and `CombatEntryPoint`.
 3. Contact an enemy, then repeat using a field attack after resetting the run. Confirm both paths start through the same entry point.
 4. Confirm global state becomes `CombatPlanning`, movement/field attack stop, and the planning UI appears.
@@ -179,6 +182,6 @@ Multiple enemies:
 
 ## Verified limitations
 
-- Dungeon 1's single-enemy path is serialized; a multi-enemy group is supported by current code but not authored in the scene and must be validated manually.
+- The template's single-enemy path is serialized; a multi-enemy group is supported by current code but not authored in the scene and must be validated manually.
 - The reusable prefab intentionally leaves scene camera and reward UI/service references empty. Their documented auto-bind/manual connections are the only remaining Inspector work.
 - No combat calculation, state machine, resolver, reward-flow, input, or UI-routing code is changed by this setup.

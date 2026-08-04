@@ -21,7 +21,7 @@ namespace Game.Common.Identity
         public string SourceId { get; }
         public string ActionId { get; }
 
-        public bool IsValid => SourceType != GameplayOutcomeSourceType.Unknown &&
+        public bool IsValid => IsProductionSourceType(SourceType) &&
                                !string.IsNullOrWhiteSpace(SourceId);
 
         public string CanonicalId => IsValid
@@ -46,6 +46,22 @@ namespace Game.Common.Identity
         {
             identity = new GameplayOutcomeIdentity(sourceType, sourceId, actionId);
             return identity.IsValid;
+        }
+
+        private static bool IsProductionSourceType(GameplayOutcomeSourceType sourceType)
+        {
+            return sourceType switch
+            {
+                GameplayOutcomeSourceType.Combat => true,
+                GameplayOutcomeSourceType.QuestCompletion => true,
+                GameplayOutcomeSourceType.MissionCompletion => true,
+                GameplayOutcomeSourceType.Interaction => true,
+                GameplayOutcomeSourceType.Story => true,
+                GameplayOutcomeSourceType.Choice => true,
+                GameplayOutcomeSourceType.Loot => true,
+                GameplayOutcomeSourceType.Tutorial => true,
+                _ => false
+            };
         }
 
         public bool Equals(GameplayOutcomeIdentity other)

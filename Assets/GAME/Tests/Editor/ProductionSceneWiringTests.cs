@@ -24,6 +24,8 @@ namespace Game.Tests.Integration
     public sealed class ProductionSceneWiringTests
     {
         private const string Dungeon = "Assets/GAME/Scenes/Dungeon 1.unity";
+        private const string DungeonTemplate = "Assets/GAME/Scenes/Dungeon_Template.unity";
+        private const string TestingDungeonTemplate = "Assets/GAME/Scenes/Testing_Dungeon_Template.unity";
         private const string Title = "Assets/GAME/Scenes/TitleScene.unity";
 
         [TearDown]
@@ -125,6 +127,36 @@ namespace Game.Tests.Integration
             string[] enabled = EditorBuildSettings.scenes.Where(scene => scene.enabled).Select(scene => scene.path).ToArray();
             Assert.That(enabled, Does.Contain(Title));
             Assert.That(enabled, Does.Contain(Dungeon));
+        }
+
+        [Test]
+        public void DungeonTemplate_IsCanonicalSingleOwnerProductionSource()
+        {
+            Assert.That(System.IO.File.Exists(DungeonTemplate), Is.True);
+            Open(DungeonTemplate);
+            Assert.That(FindAll<CombatEntryPoint>(), Has.Length.EqualTo(1));
+            MonoBehaviour[] components = FindAll<MonoBehaviour>();
+            Assert.That(components.Any(component => component != null && component.gameObject.name == "CombatRuntime"), Is.True);
+            Assert.That(components.Any(component =>
+                component != null &&
+                (component.GetType().Name == "CombatDemoFlowController" ||
+                 component.GetType().Name == "SeamlessBattleManager" ||
+                 component.GetType().Name == "BattleTrigger2D" ||
+                 component.GetType().Namespace?.Contains("Debugging") == true ||
+                 component.GetType().Namespace?.Contains("Legacy") == true)), Is.False);
+        }
+
+        [Test]
+        public void BuildSettings_ExcludeTestDeletedAndRecoveryScenes()
+        {
+            Assert.That(System.IO.File.Exists(TestingDungeonTemplate), Is.True);
+            string[] paths = EditorBuildSettings.scenes.Select(scene => scene.path).ToArray();
+            Assert.That(paths, Does.Not.Contain(TestingDungeonTemplate));
+            Assert.That(paths.Any(path => path.Contains("Assets/_Recovery/")), Is.False);
+            Assert.That(paths.Any(path => path.EndsWith("/Dungeon 2.unity")), Is.False);
+            Assert.That(paths.Any(path => path.EndsWith("/Dungeon 3.unity")), Is.False);
+            Assert.That(paths.Any(path => path.EndsWith("/Dungeon 5.unity")), Is.False);
+            Assert.That(paths.Any(path => path.EndsWith("/TutorialScene.unity")), Is.False);
         }
 
         private static void Open(string path) => EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
