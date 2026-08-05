@@ -16,7 +16,12 @@ namespace Game.NonCombat.Inventory
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics() => Instance = null;
 
-        private void Awake() { if (Instance != null && Instance != this) { Destroy(gameObject); return; } Instance = this; }
+        private void Awake()
+        {
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+            Instance = this;
+            if (Application.isPlaying) DontDestroyOnLoad(gameObject);
+        }
         private void OnDestroy() { if (Instance == this) Instance = null; }
 
         public void AddGold(int amount) => TryAddGold(amount);

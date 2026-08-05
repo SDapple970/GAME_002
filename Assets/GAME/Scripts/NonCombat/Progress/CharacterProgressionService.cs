@@ -21,7 +21,13 @@ namespace Game.NonCombat.Progress
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics() => Instance = null;
 
-        private void Awake() { if (Instance != null && Instance != this) { Destroy(gameObject); return; } Instance = this; BuildAuthoredStates(); }
+        private void Awake()
+        {
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+            Instance = this;
+            BuildAuthoredStates();
+            if (Application.isPlaying) DontDestroyOnLoad(gameObject);
+        }
         private void OnDestroy() { if (Instance == this) Instance = null; }
 
         public bool TryGetState(string characterId, out int level, out int experience)
@@ -39,19 +45,11 @@ namespace Game.NonCombat.Progress
             int previousLevel = state.Level; int previousExperience = state.Experience;
             if (state.Definition == null) return Result(id, amount, 0, state, previousLevel, previousExperience, ExperienceApplyStatus.Pending);
             if (state.Level >= state.Definition.MaximumLevel) return Result(id, amount, 0, state, previousLevel, previousExperience, ExperienceApplyStatus.Settled);
-            if (state.Experience > int.MaxValue - amount) return Result(id, amount, 0, state, previousLevel, previousExperience, ExperienceApplyStatus.OverflowPrevented);
+            if (!TryApplyToCanonicalState(state.Definition, state.Level, state.Experience, amount, out int level, out int experience, out int applied))
+                return Result(id, amount, 0, state, previousLevel, previousExperience, ExperienceApplyStatus.InvalidDefinition);
 
-            int remaining = amount;
-            while (remaining > 0 && state.Level < state.Definition.MaximumLevel)
-            {
-                if (!state.Definition.TryGetRequiredExperience(state.Level, out int required))
-                    return Result(id, amount, amount - remaining, state, previousLevel, previousExperience, ExperienceApplyStatus.InvalidDefinition);
-                int needed = required - state.Experience;
-                if (remaining < needed) { state.Experience += remaining; remaining = 0; break; }
-                remaining -= needed; state.Level++; state.Experience = 0;
-            }
-
-            int applied = amount - remaining;
+            state.Level = level;
+            state.Experience = experience;
             // EXP that cannot change a valid max-level target is terminally settled.
             ExperienceApplyResult result = Result(id, amount, applied, state, previousLevel, previousExperience, ExperienceApplyStatus.Settled);
             if (applied > 0) ProgressionChanged?.Invoke(result);
@@ -90,8 +88,15 @@ namespace Game.NonCombat.Progress
             foreach (KeyValuePair<string, CharacterProgressionStateSaveData> pair in normalized)
             {
                 CharacterProgressionDefinitionSO definition = FindDefinition(pair.Key);
-                int maximum = definition != null ? definition.MaximumLevel : int.MaxValue;
-                _states[pair.Key] = new State { Definition = definition, Level = Mathf.Clamp(pair.Value.level, 1, maximum), Experience = Mathf.Max(0, pair.Value.experience) };
+                if (definition != null)
+                {
+                    NormalizeRestoredState(definition, pair.Value.level, pair.Value.experience, out int level, out int experience);
+                    _states[pair.Key] = new State { Definition = definition, Level = level, Experience = experience };
+                }
+                else
+                {
+                    _states[pair.Key] = new State { Definition = null, Level = Mathf.Max(1, pair.Value.level), Experience = Mathf.Max(0, pair.Value.experience) };
+                }
             }
             Refreshed?.Invoke();
         }
@@ -111,6 +116,48 @@ namespace Game.NonCombat.Progress
             foreach (CharacterProgressionDefinitionSO definition in definitions)
                 if (definition != null && string.Equals(NormalizeId(definition.CharacterId), id, StringComparison.Ordinal)) return definition;
             return null;
+        }
+
+        private static void NormalizeRestoredState(CharacterProgressionDefinitionSO definition, int savedLevel, int savedExperience, out int level, out int experience)
+        {
+            level = Mathf.Clamp(savedLevel, 1, definition.MaximumLevel);
+            long remaining = Math.Max(0L, savedExperience);
+            while (level < definition.MaximumLevel)
+            {
+                if (!definition.TryGetRequiredExperience(level, out int required))
+                {
+                    experience = 0;
+                    return;
+                }
+                if (remaining < required)
+                {
+                    experience = (int)remaining;
+                    return;
+                }
+                remaining -= required;
+                level++;
+            }
+            experience = 0;
+        }
+
+        private static bool TryApplyToCanonicalState(CharacterProgressionDefinitionSO definition, int currentLevel, int currentExperience, int requested, out int level, out int experience, out int applied)
+        {
+            level = currentLevel;
+            experience = currentExperience;
+            applied = 0;
+            int remaining = requested;
+            while (remaining > 0 && level < definition.MaximumLevel)
+            {
+                if (!definition.TryGetRequiredExperience(level, out int required) || experience < 0 || experience >= required)
+                    return false;
+                int accepted = Math.Min(remaining, required - experience);
+                experience += accepted;
+                remaining -= accepted;
+                applied += accepted;
+                if (experience == required) { level++; experience = 0; }
+            }
+            if (level >= definition.MaximumLevel) experience = 0;
+            return true;
         }
 
         internal void ConfigureForTests(string defaultTargetId, params CharacterProgressionDefinitionSO[] authoredDefinitions)

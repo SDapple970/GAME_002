@@ -62,6 +62,7 @@ namespace Game.Core
             FindOrCreate<CurrencyWallet>("CurrencyWallet", createMissing, warn);
             FindOrCreate<InventoryService>("InventoryService", createMissing, warn);
             FindOrCreate<CharacterProgressionService>("CharacterProgressionService", createMissing, warn);
+            FindOrCreate<PersonaStatusManager>("PersonaStatusManager", createMissing, warn);
             FindOrCreate<PersonaSaveAdapter>("PersonaSaveAdapter", createMissing, warn);
             InteractionRuntime interactionRuntime = FindOrCreate<InteractionRuntime>(
                 "InteractionRuntime",

@@ -40,6 +40,8 @@ namespace Game.Reward
             }
 
             Instance = this;
+            if (Application.isPlaying)
+                DontDestroyOnLoad(gameObject);
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]

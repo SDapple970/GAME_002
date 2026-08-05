@@ -24,6 +24,7 @@ namespace Game.NonCombat.Inventory
         {
             if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
+            if (Application.isPlaying) DontDestroyOnLoad(gameObject);
         }
 
         private void OnDestroy() { if (Instance == this) Instance = null; }

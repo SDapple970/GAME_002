@@ -11,7 +11,7 @@ namespace Game.Systems.Persona
 
         public void CaptureSaveData(GameSaveData saveData)
         {
-            PersonaStatusManager persona = personaStatusManager != null ? personaStatusManager : PersonaStatusManager.Instance;
+            PersonaStatusManager persona = ResolvePersona();
             if (saveData == null || persona == null) return;
             saveData.progression ??= new ProgressionSaveData();
             saveData.progression.personaStats.Clear();
@@ -21,10 +21,20 @@ namespace Game.Systems.Persona
 
         public void RestoreSaveData(GameSaveData saveData)
         {
-            PersonaStatusManager persona = personaStatusManager != null ? personaStatusManager : PersonaStatusManager.Instance;
+            PersonaStatusManager persona = ResolvePersona();
             if (persona == null || saveData?.progression?.personaStats == null) return;
             foreach (PersonaStatSaveData entry in saveData.progression.personaStats)
                 if (entry != null && Enum.TryParse(entry.stat, out PersonaStat stat)) persona.SetStat(stat, entry.level, entry.xp);
+        }
+
+        private PersonaStatusManager ResolvePersona()
+        {
+            if (personaStatusManager != null)
+                return personaStatusManager;
+            personaStatusManager = PersonaStatusManager.Instance != null
+                ? PersonaStatusManager.Instance
+                : FindFirstObjectByType<PersonaStatusManager>(FindObjectsInactive.Include);
+            return personaStatusManager;
         }
     }
 }
