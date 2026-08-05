@@ -3,6 +3,9 @@ using UnityEngine.SceneManagement;
 using Game.Interaction;
 using Game.Reward;
 using Game.UI;
+using Game.NonCombat.Inventory;
+using Game.NonCombat.Progress;
+using Game.Systems.Persona;
 
 namespace Game.Core
 {
@@ -56,6 +59,10 @@ namespace Game.Core
             FindOrCreate<global::GameInputInstaller>("GameInputInstaller", createMissing, warn);
             FindOrCreate<GameFlowController>("GameFlowController", createMissing, warn);
             FindOrCreate<SceneFlowController>("SceneFlowController", createMissing, warn);
+            FindOrCreate<CurrencyWallet>("CurrencyWallet", createMissing, warn);
+            FindOrCreate<InventoryService>("InventoryService", createMissing, warn);
+            FindOrCreate<CharacterProgressionService>("CharacterProgressionService", createMissing, warn);
+            FindOrCreate<PersonaSaveAdapter>("PersonaSaveAdapter", createMissing, warn);
             InteractionRuntime interactionRuntime = FindOrCreate<InteractionRuntime>(
                 "InteractionRuntime",
                 createMissing,

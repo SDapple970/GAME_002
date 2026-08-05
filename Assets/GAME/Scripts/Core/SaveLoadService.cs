@@ -198,6 +198,7 @@ namespace Game.Core
             string name = type.FullName ?? type.Name;
             if (name.Contains("StoryProgress") || name.Contains("StoryFlag") || name.Contains("Chapter")) return 100;
             if (name.Contains("Inventory") || name.Contains("Currency")) return 200;
+            if (name.Contains("CharacterProgression")) return 250;
             if (name.Contains("Persona")) return 300;
             if (name.Contains("QuestRuntime")) return 400;
             if (name.Contains("DemoMission")) return 500;

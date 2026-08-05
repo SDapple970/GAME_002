@@ -83,7 +83,16 @@ namespace Game.NonCombat.Save
     public sealed class ProgressionSaveData
     {
         public List<PersonaStatSaveData> personaStats = new();
+        public List<CharacterProgressionStateSaveData> characters = new();
         public List<string> completedObjectiveIds = new();
+    }
+
+    [Serializable]
+    public sealed class CharacterProgressionStateSaveData
+    {
+        public string characterId;
+        public int level;
+        public int experience;
     }
 
     [Serializable]
@@ -130,7 +139,7 @@ namespace Game.NonCombat.Save
     public static class GameSaveDataFormat
     {
         public const string FormatId = "GAME_002";
-        public const int CurrentSchemaVersion = 5;
+        public const int CurrentSchemaVersion = 6;
     }
 
     [Serializable]
@@ -171,6 +180,8 @@ namespace Game.NonCombat.Save
         public string itemId;
         public int itemCount;
         public bool partialFailure;
+        public string progressionTargetId;
+        public bool expSettled;
 
         public RewardLedgerSaveData Clone()
         {

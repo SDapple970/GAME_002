@@ -44,6 +44,8 @@ namespace Game.NonCombat.Save
                     MigrateVersion3(data);
                 if (version <= 4)
                     MigrateVersion4(data);
+                if (version <= 5)
+                    MigrateVersion5(data);
             }
             else
             {
@@ -141,6 +143,21 @@ namespace Game.NonCombat.Save
             data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
         }
 
+        private static void MigrateVersion5(GameSaveData data)
+        {
+            data.header ??= new SaveHeaderData();
+            data.progression ??= new ProgressionSaveData();
+            data.progression.characters ??= new List<CharacterProgressionStateSaveData>();
+            if (data.party?.memberLevels != null)
+                foreach (SaveIntEntry member in data.party.memberLevels)
+                    if (member != null && !string.IsNullOrWhiteSpace(member.id) && member.value > 0)
+                        data.progression.characters.Add(new CharacterProgressionStateSaveData { characterId = member.id, level = member.value, experience = 0 });
+            if (data.reward?.ledger != null)
+                foreach (RewardLedgerSaveData entry in data.reward.ledger)
+                    if (entry != null) entry.expSettled = entry.requestedExp <= entry.exp;
+            data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
+        }
+
         private static GameSaveData FromLegacy(SaveData old)
         {
             GameSaveData data = new();
@@ -192,6 +209,7 @@ namespace Game.NonCombat.Save
             }
 
             identityRecords += data?.world?.interactions?.Count ?? 0;
+            identityRecords += data?.progression?.characters?.Count ?? 0;
             if (data?.world?.interactions != null)
             {
                 for (int i = 0; i < data.world.interactions.Count; i++)
@@ -217,6 +235,7 @@ namespace Game.NonCombat.Save
             data.reward ??= new RewardSaveData(); data.world ??= new WorldSaveData(); data.location ??= new PlayerLocationSaveData();
             data.currency.gold = Mathf.Max(0, data.currency.gold);
             NormalizeIntEntries(data.inventory.items);
+            NormalizeCharacterProgression(data.progression);
             NormalizeStrings(data.story.completedEventIds, MaxGeneralIdEntries);
             NormalizeStrings(data.world.clearedEncounterIds, MaxGeneralIdEntries);
             NormalizeInteractionStates(data.world);
@@ -224,6 +243,24 @@ namespace Game.NonCombat.Save
             if (data.quest.quests != null)
                 foreach (QuestStateSaveData quest in data.quest.quests)
                     if (quest != null) NormalizeQuestState(quest);
+        }
+
+        private static void NormalizeCharacterProgression(ProgressionSaveData progression)
+        {
+            progression.characters ??= new List<CharacterProgressionStateSaveData>();
+            Dictionary<string, CharacterProgressionStateSaveData> unique = new(StringComparer.Ordinal);
+            foreach (CharacterProgressionStateSaveData entry in progression.characters)
+            {
+                string id = NormalizeId(entry?.characterId);
+                if (id == null) continue;
+                int level = Mathf.Max(1, entry.level);
+                int experience = Mathf.Max(0, entry.experience);
+                if (!unique.TryGetValue(id, out CharacterProgressionStateSaveData current) || level > current.level || level == current.level && experience > current.experience)
+                    unique[id] = new CharacterProgressionStateSaveData { characterId = id, level = level, experience = experience };
+            }
+            progression.characters.Clear();
+            progression.characters.AddRange(unique.Values);
+            progression.characters.Sort((a, b) => string.CompareOrdinal(a.characterId, b.characterId));
         }
 
         private static void NormalizeQuestState(QuestStateSaveData quest)
@@ -275,6 +312,8 @@ namespace Game.NonCombat.Save
                 entry.exp = Mathf.Max(0, entry.exp);
                 entry.itemId = NormalizeId(entry.itemId);
                 entry.itemCount = entry.itemId == null ? 0 : Mathf.Max(0, entry.itemCount);
+                entry.progressionTargetId = NormalizeId(entry.progressionTargetId);
+                entry.expSettled = entry.expSettled || entry.requestedExp <= entry.exp;
                 unique.TryAdd(identity.CanonicalId, entry);
             }
 

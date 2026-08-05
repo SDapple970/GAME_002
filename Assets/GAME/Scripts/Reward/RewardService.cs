@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Game.NonCombat.Save;
+using Game.NonCombat.Progress;
 
 namespace Game.Reward
 {
@@ -16,6 +17,7 @@ namespace Game.Reward
 
         [SerializeField] private CurrencyWallet currencyWallet;
         [SerializeField] private InventoryService inventoryService;
+        [SerializeField] private CharacterProgressionService characterProgressionService;
 
         private readonly Dictionary<string, RewardGrantResult> _grantLedger = new();
 
@@ -39,6 +41,9 @@ namespace Game.Reward
 
             Instance = this;
         }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics() => Instance = null;
 
         private void OnDestroy()
         {
@@ -113,14 +118,20 @@ namespace Game.Reward
             int appliedGold = 0;
             int appliedExp = 0;
             int appliedItemCount = 0;
-            if (requestedGold > 0 && GrantGold(requestedGold, request, identity.CanonicalId))
-                appliedGold = requestedGold;
+            if (requestedGold > 0)
+                appliedGold = GrantGold(requestedGold, request, identity.CanonicalId);
 
-            if (requestedItemCount > 0 && GrantItem(requestedItemId, requestedItemCount, request, identity.CanonicalId))
-                appliedItemCount = requestedItemCount;
+            if (requestedItemCount > 0)
+                appliedItemCount = GrantItem(requestedItemId, requestedItemCount, request, identity.CanonicalId);
 
+            string progressionTargetId = ResolveProgressionTarget(request.ProgressionTargetId);
+            bool expSettled = requestedExp == 0;
             if (requestedExp > 0)
-                WarnMissingProgressionOnce(requestedExp, request, identity.CanonicalId);
+            {
+                ExperienceApplyResult experience = GrantExperience(progressionTargetId, requestedExp, request, identity.CanonicalId);
+                appliedExp = experience.AppliedExperience;
+                expSettled = experience.Settled;
+            }
 
             bool partialFailure = appliedGold != requestedGold ||
                                   appliedExp != requestedExp ||
@@ -140,7 +151,9 @@ namespace Game.Reward
                 false,
                 partialFailure,
                 false,
-                identity.ActionId);
+                identity.ActionId,
+                progressionTargetId,
+                expSettled);
 
             // All sources use a permanently-consumed attempt. This is intentionally not
             // resumable: retrying a partial multi-channel grant could duplicate a channel
@@ -203,7 +216,9 @@ namespace Game.Reward
                     exp = result.Exp,
                     itemId = result.ItemId,
                     itemCount = result.ItemCount,
-                    partialFailure = result.PartialFailure
+                    partialFailure = result.PartialFailure,
+                    progressionTargetId = result.ProgressionTargetId,
+                    expSettled = result.ExpSettled
                 };
                 saveData.reward.ledger.Add(entry);
 
@@ -256,8 +271,12 @@ namespace Game.Reward
                     false,
                     partial,
                     false,
-                    identity.ActionId);
+                    identity.ActionId,
+                    entry.progressionTargetId,
+                    entry.expSettled);
             }
+
+            ReconcilePendingExperience();
         }
 
         private static bool IsVictory(CombatResult result)
@@ -296,20 +315,19 @@ namespace Game.Reward
             return TryCreateIdentity(request.SourceType, sourceId, request.ActionId, out identity);
         }
 
-        private bool GrantGold(int amount, RewardGrantRequest request, string sourceId)
+        private int GrantGold(int amount, RewardGrantRequest request, string sourceId)
         {
             CurrencyWallet wallet = currencyWallet != null ? currencyWallet : CurrencyWallet.Instance;
             if (wallet != null)
             {
                 try
                 {
-                    wallet.AddGold(amount);
-                    return true;
+                    return wallet.TryAddGold(amount).AppliedAmount;
                 }
                 catch (Exception exception)
                 {
                     Debug.LogError($"[RewardService] CurrencyWallet failed while applying combat-safe reward. source={request.SourceType}, sourceId={sourceId}, exception={exception}", this);
-                    return false;
+                    return 0;
                 }
             }
 
@@ -319,23 +337,22 @@ namespace Game.Reward
                 Debug.LogWarning($"[RewardService] CurrencyWallet is missing. Gold reward was not granted. source={request.SourceType}, sourceId={sourceId}", this);
             }
 
-            return false;
+            return 0;
         }
 
-        private bool GrantItem(string itemId, int count, RewardGrantRequest request, string sourceId)
+        private int GrantItem(string itemId, int count, RewardGrantRequest request, string sourceId)
         {
             InventoryService inventory = inventoryService != null ? inventoryService : InventoryService.Instance;
             if (inventory != null)
             {
                 try
                 {
-                    inventory.AddItem(itemId, count);
-                    return true;
+                    return inventory.TryAddItem(itemId, count).AppliedAmount;
                 }
                 catch (Exception exception)
                 {
                     Debug.LogError($"[RewardService] InventoryService failed while applying combat-safe reward. source={request.SourceType}, sourceId={sourceId}, exception={exception}", this);
-                    return false;
+                    return 0;
                 }
             }
 
@@ -345,7 +362,53 @@ namespace Game.Reward
                 Debug.LogWarning($"[RewardService] InventoryService is missing. Item reward was not granted. source={request.SourceType}, sourceId={sourceId}", this);
             }
 
-            return false;
+            return 0;
+        }
+
+        public int ReconcilePendingExperience()
+        {
+            int settledCount = 0;
+            List<string> keys = new(_grantLedger.Keys);
+            foreach (string key in keys)
+            {
+                RewardGrantResult recorded = _grantLedger[key];
+                int pending = Mathf.Max(0, recorded.RequestedExp - recorded.Exp);
+                if (pending == 0 || recorded.ExpSettled) continue;
+                string target = ResolveProgressionTarget(recorded.ProgressionTargetId);
+                ExperienceApplyResult applied = GrantExperience(target, pending, default, key);
+                if (!applied.Settled) continue;
+                int totalApplied = recorded.Exp > int.MaxValue - applied.AppliedExperience ? int.MaxValue : recorded.Exp + applied.AppliedExperience;
+                _grantLedger[key] = new RewardGrantResult(recorded.SourceType, recorded.SourceId, recorded.RequestedGold, recorded.RequestedExp,
+                    recorded.Gold, totalApplied, recorded.RequestedItemId, recorded.RequestedItemCount, recorded.ItemId, recorded.ItemCount,
+                    false, recorded.Gold != recorded.RequestedGold || totalApplied != recorded.RequestedExp || recorded.ItemCount != recorded.RequestedItemCount,
+                    false, recorded.ActionId, target, true);
+                settledCount++;
+            }
+            return settledCount;
+        }
+
+        private ExperienceApplyResult GrantExperience(string targetId, int amount, RewardGrantRequest request, string sourceId)
+        {
+            CharacterProgressionService progression = characterProgressionService != null ? characterProgressionService : CharacterProgressionService.Instance;
+            if (progression == null || string.IsNullOrWhiteSpace(targetId))
+            {
+                WarnMissingProgressionOnce(amount, request, sourceId);
+                return new ExperienceApplyResult(targetId, amount, 0, 0, 0, 0, 0, 0, ExperienceApplyStatus.Pending);
+            }
+            try { return progression.ApplyExperience(targetId, amount); }
+            catch (Exception exception)
+            {
+                Debug.LogError($"[RewardService] Character progression failed. sourceId={sourceId}, target={targetId}, exception={exception}", this);
+                return new ExperienceApplyResult(targetId, amount, 0, 0, 0, 0, 0, 0, ExperienceApplyStatus.Pending);
+            }
+        }
+
+        private string ResolveProgressionTarget(string requestedTarget)
+        {
+            string normalized = CharacterProgressionService.NormalizeId(requestedTarget);
+            if (normalized != null) return normalized;
+            CharacterProgressionService progression = characterProgressionService != null ? characterProgressionService : CharacterProgressionService.Instance;
+            return progression != null ? progression.DefaultRewardTargetId : null;
         }
 
         private void WarnMissingProgressionOnce(int exp, RewardGrantRequest request, string sourceId)
@@ -354,7 +417,7 @@ namespace Game.Reward
                 return;
 
             _missingProgressionWarned = true;
-            Debug.Log($"[RewardService] EXP {exp} received from {request.SourceType} ({sourceId}). CharacterProgressionService is not implemented yet.", this);
+            Debug.LogWarning($"[RewardService] EXP {exp} remains pending because the progression service or stable target is unavailable. source={request.SourceType}, sourceId={sourceId}", this);
         }
 
         private static bool TryCreateIdentity(
@@ -394,7 +457,9 @@ namespace Game.Reward
                 true,
                 recorded.PartialFailure,
                 false,
-                recorded.ActionId);
+                recorded.ActionId,
+                recorded.ProgressionTargetId,
+                recorded.ExpSettled);
         }
 
         private static string NormalizeItemId(string itemId)

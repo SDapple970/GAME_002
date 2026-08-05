@@ -29,6 +29,8 @@ namespace Game.Reward
         public readonly bool DuplicateBlocked;
         public readonly bool PartialFailure;
         public readonly bool InvalidRequest;
+        public readonly string ProgressionTargetId;
+        public readonly bool ExpSettled;
 
         public RewardGrantResult(
             RewardSourceType sourceType,
@@ -51,7 +53,10 @@ namespace Game.Reward
                 itemCount,
                 duplicateBlocked,
                 false,
-                false)
+                false,
+                null,
+                null,
+                true)
         {
         }
 
@@ -69,7 +74,9 @@ namespace Game.Reward
             bool duplicateBlocked,
             bool partialFailure,
             bool invalidRequest,
-            string actionId = null)
+            string actionId = null,
+            string progressionTargetId = null,
+            bool expSettled = false)
         {
             SourceType = sourceType;
             SourceId = sourceId;
@@ -85,6 +92,8 @@ namespace Game.Reward
             DuplicateBlocked = duplicateBlocked;
             PartialFailure = partialFailure;
             InvalidRequest = invalidRequest;
+            ProgressionTargetId = progressionTargetId;
+            ExpSettled = expSettled;
         }
 
         public bool HasAnyReward => Gold > 0 || Exp > 0 || ItemCount > 0;
