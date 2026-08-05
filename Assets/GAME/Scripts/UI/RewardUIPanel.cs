@@ -28,6 +28,7 @@ namespace Game.UI
         [SerializeField] private Text simpleMessageText;
         [SerializeField] private float fieldRewardAutoHideSeconds = 1.5f;
         [SerializeField] private RewardApplier rewardApplier;
+        [SerializeField] private FieldRewardToast fieldRewardToast;
 
         [Header("Combat Result")]
         [SerializeField] private string victoryTitle = "전투 승리";
@@ -97,7 +98,7 @@ namespace Game.UI
             else
                 AddConfiguredRewardRows(isWin);
 
-            if (root != null)
+            if (CanToggleOwnRoot())
                 root.SetActive(true);
         }
 
@@ -109,7 +110,7 @@ namespace Game.UI
             _closeRaised = true;
             ClearRewardRows();
 
-            if (root != null)
+            if (CanToggleOwnRoot())
                 root.SetActive(false);
 
             if (simpleMessageText != null)
@@ -118,10 +119,16 @@ namespace Game.UI
 
         public bool TryShowFieldRewardMessage(string message)
         {
-            if (string.IsNullOrEmpty(message) || simpleMessageText == null)
+            if (string.IsNullOrEmpty(message))
                 return false;
 
             if (_presentationOpen)
+                return false;
+
+            if (fieldRewardToast != null)
+                return fieldRewardToast.Show(message);
+
+            if (simpleMessageText == null)
                 return false;
 
             StopFieldRewardMessage();
@@ -162,7 +169,7 @@ namespace Game.UI
 
             StopFieldRewardMessage();
             ClearRewardRows();
-            if (root != null)
+            if (CanToggleOwnRoot())
                 root.SetActive(false);
             if (simpleMessageText != null)
                 simpleMessageText.text = string.Empty;
@@ -299,17 +306,24 @@ namespace Game.UI
         {
             simpleMessageText.text = message;
 
-            if (root != null)
+            if (CanToggleOwnRoot())
                 root.SetActive(true);
 
             yield return new WaitForSeconds(Mathf.Max(0.1f, fieldRewardAutoHideSeconds));
 
             simpleMessageText.text = string.Empty;
 
-            if (_pendingResult == null && root != null)
+            if (_pendingResult == null && CanToggleOwnRoot())
                 root.SetActive(false);
 
             _fieldRewardRoutine = null;
+        }
+
+        private bool CanToggleOwnRoot()
+        {
+            if (root == null) return false;
+            GameUIRootController roots = FindFirstObjectByType<GameUIRootController>(FindObjectsInactive.Include);
+            return roots == null || !roots.IsGlobalRoot(root);
         }
     }
 }

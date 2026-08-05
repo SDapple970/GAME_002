@@ -14,6 +14,8 @@ namespace Game.UI
         private GameStateMachine _subscribedStateMachine;
         private bool _missingUiRootWarned;
         private bool _missingStateMachineWarned;
+        private bool _ambiguousUiRootWarned;
+        private bool _ambiguousStateMachineWarned;
         private GameState? _lastState;
         private GameState? _lastContentState;
 
@@ -140,16 +142,28 @@ namespace Game.UI
         private void ResolveReferences()
         {
             if (uiRoot == null)
-                uiRoot = FindFirstObjectByType<GameUIRootController>(FindObjectsInactive.Include);
+                uiRoot = FindUnique<GameUIRootController>(ref _ambiguousUiRootWarned);
 
             GameStateMachine singleton = GameStateMachine.Instance;
             if (singleton != null && stateMachine != singleton)
                 stateMachine = singleton;
             else if (stateMachine == null)
-                stateMachine = FindFirstObjectByType<GameStateMachine>(FindObjectsInactive.Include);
+                stateMachine = FindUnique<GameStateMachine>(ref _ambiguousStateMachineWarned);
 
             WarnIfMissingStateMachine();
             WarnIfMissingUiRoot();
+        }
+
+        private T FindUnique<T>(ref bool warned) where T : Component
+        {
+            T[] candidates = FindObjectsByType<T>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (candidates.Length == 1) return candidates[0];
+            if (candidates.Length > 1 && !warned)
+            {
+                warned = true;
+                Debug.LogWarning($"[UIScreenRouter] Multiple {typeof(T).Name} candidates were found. Assign the Production reference explicitly in the Inspector.", this);
+            }
+            return null;
         }
 
         private static string DescribeRoute(GameState state)

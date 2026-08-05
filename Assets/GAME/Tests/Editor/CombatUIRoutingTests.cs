@@ -496,6 +496,26 @@ namespace Game.Tests.UI
         }
 
         [Test]
+        public void RewardPanel_CannotBypassGlobalRewardRoute()
+        {
+            RewardUIPanel panel = CreateRewardPanel(out _);
+            SetField(panel, "root", _rootObjects["rewardRoot"]);
+            _router.ApplyState(GameState.Exploration);
+
+            panel.Show(null);
+
+            Assert.That(_roots.RewardVisible, Is.False);
+        }
+
+        [Test]
+        public void DuplicateGlobalRootAssignment_IsRejected()
+        {
+            SetField(_roots, "choiceRoot", _rootObjects["dialogueRoot"]);
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("dialogueRoot and choiceRoot reference the same"));
+            Assert.That(_roots.ValidateRootGraph(true), Is.False);
+        }
+
+        [Test]
         public void CombatDemoFlow_DoesNotCompeteWhenCanonicalRoutingExists()
         {
             CombatUIFixture fixture = CreateCombatUIFixture(true);

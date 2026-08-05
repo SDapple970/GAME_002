@@ -631,7 +631,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 17ee971cdce4314498298e805db7b100, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Adapters.CombatSkillLoadoutComponent
-  skillIds: 
+  skillIds:
 --- !u!114 &775279493
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1305,6 +1305,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 189927634}
     m_Modifications:
+    - target: {fileID: 2231473697581713873, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
+      propertyPath: combatRoot
+      value:
+      objectReference: {fileID: 1742702639}
+    - target: {fileID: 2231473697581713873, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
+      propertyPath: rewardRoot
+      value:
+      objectReference: {fileID: 1742702640}
     - target: {fileID: 6362913734919457618, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
       propertyPath: entryPoint
       value: 
@@ -1353,6 +1361,14 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7527817107024574644, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8031276687471048632, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 8818006848880418195, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
       propertyPath: m_Name
       value: ProductionDungeonUI
@@ -1367,7 +1383,7 @@ MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 5511575462278059725, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
   m_PrefabInstance: {fileID: 1742702636}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
+  m_GameObject: {fileID: 1742702640}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 161f0608b7c2dfd46a69cffcc4fd3b84, type: 3}
@@ -1376,6 +1392,16 @@ MonoBehaviour:
 --- !u!4 &1742702638 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 7437917416060292992, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
+  m_PrefabInstance: {fileID: 1742702636}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &1742702639 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 8031276687471048632, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
+  m_PrefabInstance: {fileID: 1742702636}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &1742702640 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 7527817107024574644, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
   m_PrefabInstance: {fileID: 1742702636}
   m_PrefabAsset: {fileID: 0}
 --- !u!1 &1805323963

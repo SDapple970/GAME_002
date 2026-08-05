@@ -13,21 +13,32 @@ namespace Game.UI
         [SerializeField] private GameObject rewardRoot;
         [SerializeField] private GameObject pauseRoot;
         [SerializeField] private GameObject loadingRoot;
+        [SerializeField] private bool allowCompatibilityAutoBinding = true;
 
         private readonly HashSet<string> _warnings = new();
 
-        internal bool TitleVisible => IsVisible(titleRoot);
-        internal bool FieldVisible => IsVisible(fieldRoot);
-        internal bool DialogueVisible => IsVisible(dialogueRoot);
-        internal bool ChoiceVisible => IsVisible(choiceRoot);
-        internal bool CombatVisible => IsVisible(combatRoot);
-        internal bool RewardVisible => IsVisible(rewardRoot);
-        internal bool PauseVisible => IsVisible(pauseRoot);
-        internal bool LoadingVisible => IsVisible(loadingRoot);
+        public bool TitleVisible => IsVisible(titleRoot);
+        public bool FieldVisible => IsVisible(fieldRoot);
+        public bool DialogueVisible => IsVisible(dialogueRoot);
+        public bool ChoiceVisible => IsVisible(choiceRoot);
+        public bool CombatVisible => IsVisible(combatRoot);
+        public bool RewardVisible => IsVisible(rewardRoot);
+        public bool PauseVisible => IsVisible(pauseRoot);
+        public bool LoadingVisible => IsVisible(loadingRoot);
+        public bool UsedCompatibilityAutoBinding { get; private set; }
+        public bool HasAllRequiredRoots => titleRoot != null && fieldRoot != null && dialogueRoot != null &&
+                                           choiceRoot != null && combatRoot != null && rewardRoot != null &&
+                                           pauseRoot != null && loadingRoot != null;
+        public bool IsGlobalRoot(GameObject candidate) => candidate != null &&
+            (candidate == titleRoot || candidate == fieldRoot || candidate == dialogueRoot || candidate == choiceRoot ||
+             candidate == combatRoot || candidate == rewardRoot || candidate == pauseRoot || candidate == loadingRoot);
 
         private void Awake()
         {
-            AutoBindMissingReferences();
+            if (allowCompatibilityAutoBinding)
+                AutoBindMissingReferences();
+
+            ValidateRootGraph(true);
         }
 
         public void SetTitleVisible(bool visible) => SetVisible(titleRoot, visible, nameof(titleRoot));
@@ -41,6 +52,7 @@ namespace Game.UI
 
         public void AutoBindMissingReferences()
         {
+            int assignedBefore = CountAssignedRoots();
             titleRoot ??= FindUniqueByName("TitleRoot", "TitleGroup");
             fieldRoot ??= FindUniqueObjectRoot<OverworldHUDRoot>();
             dialogueRoot ??= FindUniqueObjectRoot<Game.Story.UI.DialoguePanel>();
@@ -53,6 +65,32 @@ namespace Game.UI
             rewardRoot ??= FindUniqueObjectRoot<RewardUIPanel>();
             pauseRoot ??= FindUniqueByName("PauseMenu");
             loadingRoot ??= FindUniqueByName("LoadingPanel");
+            UsedCompatibilityAutoBinding |= CountAssignedRoots() > assignedBefore;
+        }
+
+        public bool ValidateRootGraph(bool logWarnings)
+        {
+            bool valid = true;
+            GameObject[] roots = { titleRoot, fieldRoot, dialogueRoot, choiceRoot, combatRoot, rewardRoot, pauseRoot, loadingRoot };
+            string[] names = { nameof(titleRoot), nameof(fieldRoot), nameof(dialogueRoot), nameof(choiceRoot), nameof(combatRoot), nameof(rewardRoot), nameof(pauseRoot), nameof(loadingRoot) };
+            Dictionary<GameObject, string> assigned = new();
+            for (int i = 0; i < roots.Length; i++)
+            {
+                GameObject root = roots[i];
+                if (root == null) continue;
+                if (transform.IsChildOf(root.transform))
+                {
+                    valid = false;
+                    if (logWarnings) WarnOnce(names[i] + ":owner", $"[GameUIRootController] {names[i]} contains the routing owner and cannot be toggled safely. Assign a child content root instead.");
+                }
+                if (assigned.TryGetValue(root, out string first))
+                {
+                    valid = false;
+                    if (logWarnings) WarnOnce(names[i] + ":duplicate", $"[GameUIRootController] {first} and {names[i]} reference the same incompatible global root '{root.name}'.");
+                }
+                else assigned.Add(root, names[i]);
+            }
+            return valid;
         }
 
         private void SetVisible(GameObject root, bool visible, string rootName)
@@ -130,6 +168,20 @@ namespace Game.UI
         private static bool IsVisible(GameObject root)
         {
             return root != null && root.activeSelf;
+        }
+
+        private int CountAssignedRoots()
+        {
+            int count = 0;
+            if (titleRoot != null) count++;
+            if (fieldRoot != null) count++;
+            if (dialogueRoot != null) count++;
+            if (choiceRoot != null) count++;
+            if (combatRoot != null) count++;
+            if (rewardRoot != null) count++;
+            if (pauseRoot != null) count++;
+            if (loadingRoot != null) count++;
+            return count;
         }
     }
 }

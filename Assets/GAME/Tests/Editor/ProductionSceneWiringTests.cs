@@ -15,6 +15,7 @@ using Game.Reward;
 using Game.Story;
 using Game.Story.Interaction;
 using Game.UI;
+using Game.UI.Editor;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -167,6 +168,12 @@ namespace Game.Tests.Integration
         public void ProductionBuildScenes_PassInteractionAuthoringValidation()
         {
             Assert.That(ProductionInteractionValidator.ValidateBuildScenes(), Is.Empty);
+        }
+
+        [Test]
+        public void ProductionUIAssets_PassExplicitRoutingValidation()
+        {
+            Assert.That(ProductionUIRoutingValidator.ValidateProductionAssets(), Is.Empty);
         }
 
         [Test]
