@@ -27,7 +27,7 @@ namespace Game.NonCombat.Progress
 
         private void OnValidate()
         {
-            characterId = string.IsNullOrWhiteSpace(characterId) ? characterId : characterId.Trim();
+            characterId = CharacterIdentity.Normalize(characterId);
             maximumLevel = Mathf.Max(1, maximumLevel);
             startingLevel = Mathf.Clamp(startingLevel, 1, maximumLevel);
         }

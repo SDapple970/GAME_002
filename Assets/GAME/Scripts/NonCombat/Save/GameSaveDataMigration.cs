@@ -46,6 +46,8 @@ namespace Game.NonCombat.Save
                     MigrateVersion4(data);
                 if (version <= 5)
                     MigrateVersion5(data);
+                if (version <= 6)
+                    MigrateVersion6(data);
             }
             else
             {
@@ -158,6 +160,21 @@ namespace Game.NonCombat.Save
             data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
         }
 
+        private static void MigrateVersion6(GameSaveData data)
+        {
+            data.header ??= new SaveHeaderData();
+            data.party ??= new PartySaveData();
+            data.party.memberIds ??= new List<string>();
+            data.party.selectedCombatMemberIds ??= new List<string>();
+            // Compatibility: old parties use their first valid member as leader and all
+            // owned members as the initial combat lineup.
+            if (string.IsNullOrWhiteSpace(data.party.leaderCharacterId) && data.party.memberIds.Count > 0)
+                data.party.leaderCharacterId = data.party.memberIds[0];
+            if (data.party.selectedCombatMemberIds.Count == 0)
+                data.party.selectedCombatMemberIds.AddRange(data.party.memberIds);
+            data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
+        }
+
         private static GameSaveData FromLegacy(SaveData old)
         {
             GameSaveData data = new();
@@ -210,6 +227,8 @@ namespace Game.NonCombat.Save
 
             identityRecords += data?.world?.interactions?.Count ?? 0;
             identityRecords += data?.progression?.characters?.Count ?? 0;
+            identityRecords += data?.party?.memberIds?.Count ?? 0;
+            identityRecords += data?.party?.selectedCombatMemberIds?.Count ?? 0;
             if (data?.world?.interactions != null)
             {
                 for (int i = 0; i < data.world.interactions.Count; i++)
@@ -236,6 +255,7 @@ namespace Game.NonCombat.Save
             data.currency.gold = Mathf.Max(0, data.currency.gold);
             NormalizeIntEntries(data.inventory.items);
             NormalizeCharacterProgression(data.progression);
+            NormalizeParty(data.party);
             NormalizeStrings(data.story.completedEventIds, MaxGeneralIdEntries);
             NormalizeStrings(data.world.clearedEncounterIds, MaxGeneralIdEntries);
             NormalizeInteractionStates(data.world);
@@ -243,6 +263,37 @@ namespace Game.NonCombat.Save
             if (data.quest.quests != null)
                 foreach (QuestStateSaveData quest in data.quest.quests)
                     if (quest != null) NormalizeQuestState(quest);
+        }
+
+        private static void NormalizeParty(PartySaveData party)
+        {
+            party.memberIds ??= new List<string>();
+            party.selectedCombatMemberIds ??= new List<string>();
+            NormalizeStableIds(party.memberIds);
+            HashSet<string> owned = new(party.memberIds, StringComparer.Ordinal);
+            party.leaderCharacterId = NormalizeId(party.leaderCharacterId);
+            if (party.leaderCharacterId == null || !owned.Contains(party.leaderCharacterId))
+                party.leaderCharacterId = party.memberIds.Count > 0 ? party.memberIds[0] : null;
+            HashSet<string> selected = new(StringComparer.Ordinal);
+            party.selectedCombatMemberIds.RemoveAll(value =>
+            {
+                string id = NormalizeId(value);
+                return id == null || !owned.Contains(id) || !selected.Add(id);
+            });
+            for (int i = 0; i < party.selectedCombatMemberIds.Count; i++)
+                party.selectedCombatMemberIds[i] = party.selectedCombatMemberIds[i].Trim();
+        }
+
+        private static void NormalizeStableIds(List<string> values)
+        {
+            HashSet<string> unique = new(StringComparer.Ordinal);
+            for (int i = values.Count - 1; i >= 0; i--)
+            {
+                string id = NormalizeId(values[i]);
+                if (id == null || !unique.Add(id)) values.RemoveAt(i);
+                else values[i] = id;
+            }
+            values.Sort(StringComparer.Ordinal);
         }
 
         private static void NormalizeCharacterProgression(ProgressionSaveData progression)

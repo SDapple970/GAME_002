@@ -36,6 +36,12 @@ namespace Game.NonCombat.Progress
             level = 0; experience = 0; return false;
         }
 
+        public bool TryGetDefinition(string characterId, out CharacterProgressionDefinitionSO definition)
+        {
+            definition = FindDefinition(NormalizeId(characterId));
+            return definition != null;
+        }
+
         public ExperienceApplyResult ApplyExperience(string characterId, int amount)
         {
             string id = NormalizeId(characterId);
@@ -163,7 +169,7 @@ namespace Game.NonCombat.Progress
         internal void ConfigureForTests(string defaultTargetId, params CharacterProgressionDefinitionSO[] authoredDefinitions)
         { defaultRewardTargetId = defaultTargetId; definitions = authoredDefinitions != null ? new List<CharacterProgressionDefinitionSO>(authoredDefinitions) : new List<CharacterProgressionDefinitionSO>(); BuildAuthoredStates(); }
 
-        public static string NormalizeId(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        public static string NormalizeId(string value) => CharacterIdentity.Normalize(value);
         private static ExperienceApplyResult Empty(string id, int amount, ExperienceApplyStatus status) => new(id, amount, 0, 0, 0, 0, 0, 0, status);
         private static ExperienceApplyResult Result(string id, int amount, int applied, State state, int previousLevel, int previousExperience, ExperienceApplyStatus status) => new(id, amount, applied, previousLevel, state.Level, previousExperience, state.Experience, state.Level - previousLevel, status);
     }

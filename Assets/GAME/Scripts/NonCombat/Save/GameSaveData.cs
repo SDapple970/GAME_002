@@ -77,6 +77,8 @@ namespace Game.NonCombat.Save
     {
         public List<string> memberIds = new();
         public List<SaveIntEntry> memberLevels = new();
+        public string leaderCharacterId;
+        public List<string> selectedCombatMemberIds = new();
     }
 
     [Serializable]
@@ -139,7 +141,7 @@ namespace Game.NonCombat.Save
     public static class GameSaveDataFormat
     {
         public const string FormatId = "GAME_002";
-        public const int CurrentSchemaVersion = 6;
+        public const int CurrentSchemaVersion = 7;
     }
 
     [Serializable]

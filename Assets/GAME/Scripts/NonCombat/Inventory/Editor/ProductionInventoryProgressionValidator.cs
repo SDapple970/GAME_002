@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Game.NonCombat.Progress;
+using Game.NonCombat.Party;
 using UnityEditor;
 using UnityEngine;
 
@@ -28,6 +29,7 @@ namespace Game.NonCombat.Inventory.Editor
             ValidateSingletonCount<InventoryService>(issues);
             ValidateSingletonCount<CurrencyWallet>(issues);
             ValidateSingletonCount<CharacterProgressionService>(issues);
+            ValidateSingletonCount<PartyRuntime>(issues);
             CharacterProgressionService[] progressionServices = Resources.FindObjectsOfTypeAll<CharacterProgressionService>();
             foreach (CharacterProgressionService service in progressionServices)
                 if (service != null && string.IsNullOrWhiteSpace(service.DefaultRewardTargetId))

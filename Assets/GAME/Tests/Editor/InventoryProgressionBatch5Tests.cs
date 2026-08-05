@@ -119,7 +119,7 @@ namespace Game.Tests.Integration
             object[] args = { json, null, false, null };
             Assert.That((bool)migrator.GetMethod("TryMigrate", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, args), Is.True, args[3] as string);
             GameSaveData data = (GameSaveData)args[1];
-            Assert.That(data.header.schemaVersion, Is.EqualTo(6));
+            Assert.That(data.header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion));
             Assert.That(data.progression.characters[0].characterId, Is.EqualTo("hero"));
             Assert.That(data.progression.characters[0].level, Is.EqualTo(4));
             Assert.That(data.reward.ledger[0].expSettled, Is.False);
