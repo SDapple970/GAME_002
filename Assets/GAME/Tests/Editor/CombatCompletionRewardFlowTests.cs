@@ -824,6 +824,35 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void PanelShowBeforeAwake_PreservesPresentationAndClosesOnce()
+        {
+            RewardUIPanel panel = CreatePanel(out Button close, out GameObject root);
+            panel.gameObject.SetActive(false);
+            root.SetActive(false);
+            int count = 0;
+            panel.OnClosed += () => count++;
+
+            panel.Show(CreateResult(CombatEndReason.Victory));
+
+            Assert.That(panel.IsOpen, Is.True);
+            Assert.That(root.activeSelf, Is.True);
+
+            Invoke(panel, "Awake");
+            panel.gameObject.SetActive(true);
+            Invoke(panel, "OnEnable");
+
+            Assert.That(panel.IsOpen, Is.True);
+            Assert.That(root.activeSelf, Is.True);
+
+            close.onClick.Invoke();
+            close.onClick.Invoke();
+
+            Assert.That(count, Is.EqualTo(1));
+            Assert.That(panel.IsOpen, Is.False);
+            Assert.That(root.activeSelf, Is.False);
+        }
+
+        [Test]
         public void PanelDoubleClose_InvokesClosedOnce()
         {
             RewardUIPanel panel = CreatePanel(out Button close, out _);

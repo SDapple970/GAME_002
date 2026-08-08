@@ -56,7 +56,8 @@ namespace Game.UI
             if (rewardApplier == null)
                 rewardApplier = RewardApplier.Instance;
 
-            Hide();
+            if (!_presentationOpen)
+                Hide();
         }
 
         private void OnEnable()

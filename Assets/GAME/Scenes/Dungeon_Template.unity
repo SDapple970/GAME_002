@@ -631,7 +631,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 17ee971cdce4314498298e805db7b100, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Adapters.CombatSkillLoadoutComponent
-  skillIds:
+  skillIds: 
 --- !u!114 &775279493
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1307,12 +1307,16 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 2231473697581713873, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
       propertyPath: combatRoot
-      value:
+      value: 
       objectReference: {fileID: 1742702639}
     - target: {fileID: 2231473697581713873, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
       propertyPath: rewardRoot
-      value:
+      value: 
       objectReference: {fileID: 1742702640}
+    - target: {fileID: 4997521456342289384, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
+      propertyPath: logRouteChanges
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 6362913734919457618, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
       propertyPath: entryPoint
       value: 
@@ -1365,9 +1369,17 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7563869612474158559, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 8031276687471048632, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
       propertyPath: m_IsActive
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8312378188833497605, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
+      propertyPath: m_IsActive
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8818006848880418195, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
       propertyPath: m_Name
@@ -1796,6 +1808,30 @@ PrefabInstance:
       propertyPath: 'behavioursToDisable.Array.data[2]'
       value: 
       objectReference: {fileID: 2122203422}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: skillDefinitions.Array.size
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: 'skillDefinitions.Array.data[0]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 762d0613f18cd424eba3e68f2b4e1bf5, type: 2}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: 'skillDefinitions.Array.data[1]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: 'skillDefinitions.Array.data[2]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 6f96b5e4d3eb64c4bb134d957906ad97, type: 2}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: 'skillDefinitions.Array.data[3]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 3f33bab0ec4af6c4db0b827917ba147d, type: 2}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: 'skillDefinitions.Array.data[4]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 1f9d7ebdbd0b7fd48ace84c03839d87e, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
