@@ -35,6 +35,13 @@ namespace Game.UI
             ApplyCurrentRoute();
         }
 
+        private void Start()
+        {
+            ResolveAndSubscribe();
+            WarnIfMissingStateMachine();
+            ApplyCurrentRoute();
+        }
+
         private void OnDisable()
         {
             SceneManager.sceneLoaded -= HandleSceneLoaded;
@@ -150,7 +157,6 @@ namespace Game.UI
             else if (stateMachine == null)
                 stateMachine = FindUnique<GameStateMachine>(ref _ambiguousStateMachineWarned);
 
-            WarnIfMissingStateMachine();
             WarnIfMissingUiRoot();
         }
 

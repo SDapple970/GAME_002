@@ -125,6 +125,26 @@ namespace Game.Tests.UI
         }
 
         [Test]
+        public void Start_RecoversStateMachineCreatedAfterOnEnable()
+        {
+            Object.DestroyImmediate(_stateMachine.gameObject);
+            _stateMachine = null;
+            SetField(_router, "stateMachine", null);
+
+            Invoke(_router, "OnEnable");
+
+            _stateMachine = CreateComponent<GameStateMachine>("LateStateMachine");
+            Invoke(_stateMachine, "Awake");
+            Assert.That(_stateMachine.TrySetState(GameState.CombatPlanning, "late bootstrap test"), Is.True);
+
+            Invoke(_router, "Start");
+
+            Assert.That(_roots.CombatVisible, Is.True);
+            Assert.That(_router.CurrentRoutedState, Is.EqualTo(GameState.CombatPlanning));
+            Assert.That(GetField<GameStateMachine>(_router, "_subscribedStateMachine"), Is.SameAs(_stateMachine));
+        }
+
+        [Test]
         public void MissingOptionalRoot_DoesNotThrow()
         {
             SetField(_roots, "pauseRoot", null);
