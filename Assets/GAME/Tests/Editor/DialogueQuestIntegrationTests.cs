@@ -883,7 +883,7 @@ namespace Game.Tests.Integration
         }
 
         [Test]
-        public void QuestMissionDayCost_AppliesOnceAndRestoreDoesNotRecharge()
+        public void QuestStartDoesNotCharge_ExplicitDayCostAppliesOnceAndRestoreDoesNotRecharge()
         {
             CalendarService calendar = CreateComponent<CalendarService>("Calendar");
             QuestRuntime firstRuntime = CreateComponent<QuestRuntime>("FirstRuntime");
@@ -894,6 +894,9 @@ namespace Game.Tests.Integration
             firstRuntime.StartQuest(definition);
             firstRuntime.StartQuest(definition);
 
+            Assert.That(calendar.CurrentDay, Is.EqualTo(1));
+            Assert.That(firstIntegration.TryApplyMissionDayCost("mission"), Is.True);
+            Assert.That(firstIntegration.TryApplyMissionDayCost("mission"), Is.False);
             Assert.That(calendar.CurrentDay, Is.EqualTo(4));
             GameSaveData save = new();
             firstIntegration.CaptureSaveData(save);
@@ -905,6 +908,8 @@ namespace Game.Tests.Integration
             restoredRuntime.StartQuest(definition);
 
             Assert.That(calendar.CurrentDay, Is.EqualTo(4));
+            Assert.That(restoredIntegration.TryApplyMissionDayCost("mission"), Is.False);
+            Assert.That(calendar.CurrentDay, Is.EqualTo(4));
             Assert.That(save.futureDaily.appliedQuestDayCostIds, Is.EquivalentTo(new[] { "mission" }));
         }
 
@@ -913,11 +918,12 @@ namespace Game.Tests.Integration
         {
             CalendarService calendar = CreateComponent<CalendarService>("Calendar");
             QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
-            CreateCalendarIntegration(runtime, calendar, "Integration");
+            QuestCalendarIntegration integration = CreateCalendarIntegration(runtime, calendar, "Integration");
             QuestDefinitionSO definition = CreateQuestDefinition("retry-mission", QuestEventType.Kill, "kill", 1);
             SetField(definition, "missionDayCost", 2);
             SetField(definition, "retryPolicy", QuestRetryPolicy.RestartFromBeginning);
             runtime.StartQuest(definition);
+            Assert.That(integration.TryApplyMissionDayCost("retry-mission"), Is.True);
 
             Assert.That(runtime.FailQuest(
                 "retry-mission",
@@ -925,6 +931,25 @@ namespace Game.Tests.Integration
             Assert.That(runtime.RetryQuest("retry-mission"), Is.True);
 
             Assert.That(calendar.CurrentDay, Is.EqualTo(3));
+            Assert.That(integration.TryApplyMissionDayCost("retry-mission"), Is.False);
+            Assert.That(calendar.CurrentDay, Is.EqualTo(3));
+        }
+
+        [TestCase(0)]
+        [TestCase(-1)]
+        public void ExplicitMissionDayCost_InvalidOrZeroCostDoesNotMutate(int dayCost)
+        {
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            QuestCalendarIntegration integration = CreateCalendarIntegration(runtime, calendar, "Integration");
+            QuestDefinitionSO definition = CreateQuestDefinition("mission", QuestEventType.Kill, "kill", 1);
+            SetField(definition, "missionDayCost", dayCost);
+            runtime.StartQuest(definition);
+
+            Assert.That(integration.TryApplyMissionDayCost("mission"), Is.False);
+            Assert.That(integration.TryApplyMissionDayCost("missing"), Is.False);
+            Assert.That(integration.TryApplyMissionDayCost(null), Is.False);
+            Assert.That(calendar.CurrentDay, Is.EqualTo(1));
         }
 
         [Test]
@@ -932,14 +957,17 @@ namespace Game.Tests.Integration
         {
             CalendarService calendar = CreateComponent<CalendarService>("Calendar");
             QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
-            CreateCalendarIntegration(runtime, calendar, "FirstIntegration");
+            QuestCalendarIntegration first = CreateCalendarIntegration(runtime, calendar, "FirstIntegration");
             LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Duplicate calendar integration blocked"));
-            CreateCalendarIntegration(runtime, calendar, "DuplicateIntegration");
+            QuestCalendarIntegration duplicate = CreateCalendarIntegration(runtime, calendar, "DuplicateIntegration");
             QuestDefinitionSO definition = CreateQuestDefinition("mission", QuestEventType.Kill, "kill", 1);
             SetField(definition, "missionDayCost", 2);
 
             runtime.StartQuest(definition);
 
+            Assert.That(calendar.CurrentDay, Is.EqualTo(1));
+            Assert.That(first.TryApplyMissionDayCost("mission"), Is.True);
+            Assert.That(duplicate.TryApplyMissionDayCost("mission"), Is.False);
             Assert.That(calendar.CurrentDay, Is.EqualTo(3));
         }
 

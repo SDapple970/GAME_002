@@ -14,7 +14,6 @@ namespace Game.Quest
         [SerializeField] private CalendarService calendarService;
 
         private readonly HashSet<string> _appliedQuestIds = new();
-        private QuestRuntime _subscribedRuntime;
         private bool _ownsRuntime;
         private bool _missingCalendarWarned;
         private bool _duplicateOwnerWarned;
@@ -27,14 +26,40 @@ namespace Game.Quest
         private void OnEnable()
         {
             ResolveReferences();
-            if (TryClaimRuntime())
-                Subscribe();
+            TryClaimRuntime();
         }
 
         private void OnDisable()
         {
-            Unsubscribe();
             ReleaseRuntime();
+        }
+
+        public bool TryApplyMissionDayCost(string questId)
+        {
+            questId = string.IsNullOrWhiteSpace(questId) ? null : questId.Trim();
+            if (questId == null || _appliedQuestIds.Contains(questId))
+                return false;
+
+            ResolveReferences();
+            if ((!_ownsRuntime && !TryClaimRuntime()) ||
+                questRuntime == null ||
+                !questRuntime.TryGetDefinition(questId, out QuestDefinitionSO definition) ||
+                definition.MissionDayCost <= 0)
+            {
+                return false;
+            }
+
+            if (calendarService == null)
+            {
+                WarnMissingCalendar(questId);
+                return false;
+            }
+
+            if (!calendarService.TryAdvanceDays(definition.MissionDayCost))
+                return false;
+
+            _appliedQuestIds.Add(questId);
+            return true;
         }
 
         public void CaptureSaveData(GameSaveData saveData)
@@ -65,29 +90,6 @@ namespace Game.Quest
             }
         }
 
-        private void HandleQuestStarted(string questId)
-        {
-            if (string.IsNullOrWhiteSpace(questId) || _appliedQuestIds.Contains(questId))
-                return;
-
-            if (questRuntime == null ||
-                !questRuntime.TryGetDefinition(questId, out QuestDefinitionSO definition) ||
-                definition.MissionDayCost <= 0)
-            {
-                return;
-            }
-
-            ResolveReferences();
-            if (calendarService == null)
-            {
-                WarnMissingCalendar(questId);
-                return;
-            }
-
-            if (calendarService.TryAdvanceDays(definition.MissionDayCost))
-                _appliedQuestIds.Add(questId);
-        }
-
         private void ResolveReferences()
         {
             if (questRuntime == null)
@@ -97,17 +99,6 @@ namespace Game.Quest
                 calendarService = CalendarService.Instance != null
                     ? CalendarService.Instance
                     : FindFirstObjectByType<CalendarService>();
-        }
-
-        private void Subscribe()
-        {
-            if (_subscribedRuntime == questRuntime)
-                return;
-
-            Unsubscribe();
-            _subscribedRuntime = questRuntime;
-            if (_subscribedRuntime != null)
-                _subscribedRuntime.OnQuestStarted += HandleQuestStarted;
         }
 
         private bool TryClaimRuntime()
@@ -148,14 +139,6 @@ namespace Game.Quest
                 OwnersByRuntimeId.Remove(key);
 
             _ownsRuntime = false;
-        }
-
-        private void Unsubscribe()
-        {
-            if (_subscribedRuntime != null)
-                _subscribedRuntime.OnQuestStarted -= HandleQuestStarted;
-
-            _subscribedRuntime = null;
         }
 
         private void WarnMissingCalendar(string questId)
