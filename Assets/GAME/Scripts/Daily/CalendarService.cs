@@ -44,6 +44,22 @@ namespace Game.Daily
 
         public void AdvanceDay()
         {
+            AdvanceOneDay();
+        }
+
+        public bool TryAdvanceDays(int dayCount)
+        {
+            if (dayCount <= 0)
+                return false;
+
+            for (int i = 0; i < dayCount; i++)
+                AdvanceOneDay();
+
+            return true;
+        }
+
+        private void AdvanceOneDay()
+        {
             currentDay = Mathf.Max(1, currentDay + 1);
             currentWeek = Mathf.Max(1, ((currentDay - 1) / 7) + 1);
             OnDayAdvanced?.Invoke(currentDay);

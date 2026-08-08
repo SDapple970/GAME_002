@@ -9,6 +9,11 @@ namespace Game.Quest
         Rescue = 40,
         Inspect = 50,
         Interact = 60,
-        MissionCompleted = 70
+        MissionCompleted = 70,
+        Collect = 80,
+        Escort = 90,
+        Explore = 100,
+        Capture = 110,
+        Survive = 120
     }
 }

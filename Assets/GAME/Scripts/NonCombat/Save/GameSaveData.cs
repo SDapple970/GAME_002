@@ -129,6 +129,7 @@ namespace Game.NonCombat.Save
         public List<int> selectedSupplyItemCounts = new();
         public List<string> completedDailyActionIds = new();
         public List<string> completedSettlementIds = new();
+        public List<string> appliedQuestDayCostIds = new();
     }
 
     [Serializable]

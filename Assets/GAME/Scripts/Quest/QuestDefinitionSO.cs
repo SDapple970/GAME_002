@@ -10,6 +10,9 @@ namespace Game.Quest
         [SerializeField] private string questTitle;
         [TextArea(3, 8)]
         [SerializeField] private string description;
+        [SerializeField] private QuestCategory category = QuestCategory.Unspecified;
+        [Min(0)]
+        [SerializeField] private int missionDayCost;
         [SerializeField] private QuestObjectiveDefinition[] objectives;
         [SerializeField] private int rewardGold;
         [SerializeField] private int rewardExp;
@@ -18,6 +21,8 @@ namespace Game.Quest
         public string QuestId => questId;
         public string QuestTitle => questTitle;
         public string Description => description;
+        public QuestCategory Category => category;
+        public int MissionDayCost => Mathf.Max(0, missionDayCost);
         public QuestObjectiveDefinition[] Objectives => objectives;
         public int RewardGold => rewardGold;
         public int RewardExp => rewardExp;

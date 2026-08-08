@@ -258,6 +258,8 @@ namespace Game.NonCombat.Save
             NormalizeParty(data.party);
             NormalizeStrings(data.story.completedEventIds, MaxGeneralIdEntries);
             NormalizeStrings(data.world.clearedEncounterIds, MaxGeneralIdEntries);
+            data.futureDaily.appliedQuestDayCostIds ??= new List<string>();
+            NormalizeStrings(data.futureDaily.appliedQuestDayCostIds, MaxGeneralIdEntries);
             NormalizeInteractionStates(data.world);
             NormalizeRewardLedger(data.reward);
             if (data.quest.quests != null)

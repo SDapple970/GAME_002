@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using Game.Core;
 using Game.Common.Identity;
+using Game.Daily;
 using Game.DemoMission.Data;
 using Game.DemoMission.Runtime;
 using Game.NonCombat.Inventory;
@@ -800,6 +801,149 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void ProductionQuest_DoesNotRequireMissionManager()
+        {
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            QuestDefinitionSO definition = CreateQuestDefinition("quest", QuestEventType.Kill, "kill", 1);
+
+            runtime.StartQuest(definition);
+
+            Assert.That(runtime.IsQuestActive("quest"), Is.True);
+            Assert.That(UnityEngine.Object.FindFirstObjectByType<Game.Mission.MissionManager>(), Is.Null);
+        }
+
+        [Test]
+        public void QuestSerializedEnumValues_RemainStable()
+        {
+            Assert.That((int)QuestCategory.Unspecified, Is.EqualTo(0));
+            Assert.That((int)QuestCategory.Main, Is.EqualTo(10));
+            Assert.That((int)QuestCategory.Side, Is.EqualTo(20));
+            Assert.That((int)QuestCategory.Personal, Is.EqualTo(30));
+            Assert.That((int)QuestCategory.Bounty, Is.EqualTo(40));
+            Assert.That((int)QuestEventType.MissionCompleted, Is.EqualTo(70));
+            Assert.That((int)QuestEventType.Collect, Is.EqualTo(80));
+            Assert.That((int)QuestEventType.Escort, Is.EqualTo(90));
+            Assert.That((int)QuestEventType.Explore, Is.EqualTo(100));
+            Assert.That((int)QuestEventType.Capture, Is.EqualTo(110));
+            Assert.That((int)QuestEventType.Survive, Is.EqualTo(120));
+        }
+
+        [TestCase(QuestEventType.Collect)]
+        [TestCase(QuestEventType.Escort)]
+        [TestCase(QuestEventType.Explore)]
+        [TestCase(QuestEventType.Capture)]
+        [TestCase(QuestEventType.Survive)]
+        public void ExtendedObjectiveType_MatchesOnlyItsOwnType(QuestEventType eventType)
+        {
+            QuestObjectiveDefinition objective = CreateObjective(eventType, "target", 1, false);
+
+            Assert.That(objective.Matches(new QuestEvent(eventType, "quest", "target")), Is.True);
+            Assert.That(objective.Matches(new QuestEvent(QuestEventType.Interact, "quest", "target")), Is.False);
+            Assert.That(objective.Matches(new QuestEvent(eventType, "quest", "other")), Is.False);
+        }
+
+        [Test]
+        public void CalendarMultiDayAdvance_EmitsPerDayAndCrossesWeekBoundary()
+        {
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+            int eventCount = 0;
+            calendar.OnDayAdvanced += _ => eventCount++;
+
+            Assert.That(calendar.TryAdvanceDays(7), Is.True);
+
+            Assert.That(calendar.CurrentDay, Is.EqualTo(8));
+            Assert.That(calendar.CurrentWeek, Is.EqualTo(2));
+            Assert.That(eventCount, Is.EqualTo(7));
+        }
+
+        [TestCase(0)]
+        [TestCase(-1)]
+        public void CalendarInvalidMultiDayAdvance_DoesNotMutateState(int dayCount)
+        {
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+
+            Assert.That(calendar.TryAdvanceDays(dayCount), Is.False);
+            Assert.That(calendar.CurrentDay, Is.EqualTo(1));
+            Assert.That(calendar.CurrentWeek, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void CalendarState_SurvivesCaptureAndRestore()
+        {
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+            calendar.TryAdvanceDays(8);
+            GameSaveData save = new();
+            calendar.CaptureSaveData(save);
+            calendar.TryAdvanceDays(5);
+
+            calendar.RestoreSaveData(save);
+
+            Assert.That(calendar.CurrentDay, Is.EqualTo(9));
+            Assert.That(calendar.CurrentWeek, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void QuestMissionDayCost_AppliesOnceAndRestoreDoesNotRecharge()
+        {
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+            QuestRuntime firstRuntime = CreateComponent<QuestRuntime>("FirstRuntime");
+            QuestCalendarIntegration firstIntegration = CreateCalendarIntegration(firstRuntime, calendar, "FirstIntegration");
+            QuestDefinitionSO definition = CreateQuestDefinition("mission", QuestEventType.Kill, "kill", 1);
+            SetField(definition, "missionDayCost", 3);
+
+            firstRuntime.StartQuest(definition);
+            firstRuntime.StartQuest(definition);
+
+            Assert.That(calendar.CurrentDay, Is.EqualTo(4));
+            GameSaveData save = new();
+            firstIntegration.CaptureSaveData(save);
+            InvokeIfPresent(firstIntegration, "OnDisable");
+
+            QuestRuntime restoredRuntime = CreateComponent<QuestRuntime>("RestoredRuntime");
+            QuestCalendarIntegration restoredIntegration = CreateCalendarIntegration(restoredRuntime, calendar, "RestoredIntegration");
+            restoredIntegration.RestoreSaveData(save);
+            restoredRuntime.StartQuest(definition);
+
+            Assert.That(calendar.CurrentDay, Is.EqualTo(4));
+            Assert.That(save.futureDaily.appliedQuestDayCostIds, Is.EquivalentTo(new[] { "mission" }));
+        }
+
+        [Test]
+        public void QuestRetry_DoesNotReapplyMissionDayCost()
+        {
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            CreateCalendarIntegration(runtime, calendar, "Integration");
+            QuestDefinitionSO definition = CreateQuestDefinition("retry-mission", QuestEventType.Kill, "kill", 1);
+            SetField(definition, "missionDayCost", 2);
+            SetField(definition, "retryPolicy", QuestRetryPolicy.RestartFromBeginning);
+            runtime.StartQuest(definition);
+
+            Assert.That(runtime.FailQuest(
+                "retry-mission",
+                new GameplayOutcomeIdentity(GameplayOutcomeSourceType.Story, "failure", "retry")), Is.True);
+            Assert.That(runtime.RetryQuest("retry-mission"), Is.True);
+
+            Assert.That(calendar.CurrentDay, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void DuplicateQuestCalendarIntegration_DoesNotAdvanceTwice()
+        {
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            CreateCalendarIntegration(runtime, calendar, "FirstIntegration");
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Duplicate calendar integration blocked"));
+            CreateCalendarIntegration(runtime, calendar, "DuplicateIntegration");
+            QuestDefinitionSO definition = CreateQuestDefinition("mission", QuestEventType.Kill, "kill", 1);
+            SetField(definition, "missionDayCost", 2);
+
+            runtime.StartQuest(definition);
+
+            Assert.That(calendar.CurrentDay, Is.EqualTo(3));
+        }
+
+        [Test]
         public void RegisteredDefinition_RemainsInactiveUntilExplicitStart()
         {
             QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
@@ -1587,6 +1731,22 @@ namespace Game.Tests.Integration
             return tracker;
         }
 
+        private QuestCalendarIntegration CreateCalendarIntegration(
+            QuestRuntime runtime,
+            CalendarService calendar,
+            string name)
+        {
+            GameObject go = CreateGameObject(name);
+            go.SetActive(false);
+            QuestCalendarIntegration integration = go.AddComponent<QuestCalendarIntegration>();
+            SetField(integration, "questRuntime", runtime);
+            SetField(integration, "calendarService", calendar);
+            go.SetActive(true);
+            InvokeIfPresent(integration, "Awake");
+            InvokeIfPresent(integration, "OnEnable");
+            return integration;
+        }
+
         private (DemoMissionRuntime, QuestRuntime) CreateCanonicalDemoMission(int kills, bool rescue)
         {
             GameObject go = CreateGameObject("CanonicalDemo");
@@ -1725,8 +1885,11 @@ namespace Game.Tests.Integration
             DestroyAll<QuestObjectiveTracker>();
             DestroyAll<QuestCompletionFlow>();
             DestroyAll<QuestTrackerUI>();
+            DestroyAll<QuestCalendarIntegration>();
             DestroyAll<DemoMissionRuntime>();
             DestroyAll<QuestRuntime>();
+            DestroyAll<CalendarService>();
+            DestroyAll<Game.Mission.MissionManager>();
             DestroyAll<RewardService>();
             DestroyAll<CurrencyWallet>();
             DestroyAll<GameFlowController>();

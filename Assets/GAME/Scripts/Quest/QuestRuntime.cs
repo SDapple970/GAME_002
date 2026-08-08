@@ -25,7 +25,6 @@ namespace Game.Quest
 
         private void Awake()
         {
-            ResolveMissionManager();
             RegisterSerializedDefinitions();
         }
 
