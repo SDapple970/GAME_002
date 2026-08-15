@@ -297,6 +297,11 @@ Transform:
   m_Children: []
   m_Father: {fileID: 721012617}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &393243342 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 800766413418899980, guid: f35961d996ccaa649bc90ec3da82df58, type: 3}
+  m_PrefabInstance: {fileID: 1645636291499357858}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &544487110
 GameObject:
   m_ObjectHideFlags: 0
@@ -1727,72 +1732,6 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 7527817107024574644, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
   m_PrefabInstance: {fileID: 1742702636}
   m_PrefabAsset: {fileID: 0}
---- !u!1 &1764034514
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1764034516}
-  - component: {fileID: 1764034515}
-  m_Layer: 0
-  m_Name: Batch9PlayModeDebugHarness
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1764034515
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1764034514}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: abe4a34052bf4e9aa38cf22cf18cfa32, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Debugging.Batch9PlayModeDebugHarness
-  targetCharacterId: hero
-  diseaseDefinition: {fileID: 11400000, guid: e816a3a3f07326047af1368fdf4fbe14, type: 2}
-  quirkDefinition: {fileID: 11400000, guid: f71e1fdd7c2492b4b82ee444b574f7db, type: 2}
-  feastItemId: ration
-  feastItemCount: 1
-  hungerRestoreAmount: 5
-  loadTestShiningChange: 1
-  loadTestHungerChange: 1
-  explorationResources: {fileID: 0}
-  persistentConditions: {fileID: 0}
-  feastService: {fileID: 0}
-  inventoryService: {fileID: 0}
-  saveLoadService: {fileID: 0}
-  currentShining: 0
-  currentHunger: 0
-  currentCharacterId: 
-  currentDiseaseId: 
-  currentQuirkId: 
-  currentFeastItemId: 
-  currentFeastItemCount: 0
-  currentHungerRestoreAmount: 0
-  lastResult: Not Run
---- !u!4 &1764034516
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1764034514}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 8.05745, y: 7.03929, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1796023658
 GameObject:
   m_ObjectHideFlags: 0
@@ -2107,7 +2046,7 @@ MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 35479042959957240, guid: f35961d996ccaa649bc90ec3da82df58, type: 3}
   m_PrefabInstance: {fileID: 1645636291499357858}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
+  m_GameObject: {fileID: 393243342}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7f64a15d9dce49058d7a8e5d72ade400, type: 3}
@@ -2118,7 +2057,7 @@ MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 7628697926148123849, guid: f35961d996ccaa649bc90ec3da82df58, type: 3}
   m_PrefabInstance: {fileID: 1645636291499357858}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
+  m_GameObject: {fileID: 393243342}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cce9e8ee44bc43439dc063dec7710e92, type: 3}
@@ -2129,7 +2068,7 @@ MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 7476170761585201080, guid: f35961d996ccaa649bc90ec3da82df58, type: 3}
   m_PrefabInstance: {fileID: 1645636291499357858}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
+  m_GameObject: {fileID: 393243342}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5a163238ad0c488bb63bf6463a4c31c2, type: 3}
@@ -2140,6 +2079,19 @@ Rigidbody2D:
   m_CorrespondingSourceObject: {fileID: 4139382472512729733, guid: f35961d996ccaa649bc90ec3da82df58, type: 3}
   m_PrefabInstance: {fileID: 1645636291499357858}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &2122203432
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 393243342}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3eb2dbf0957c79d448aaddbafc9ce2b3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Interaction.InteractionController
+  promptUI: {fileID: 0}
 --- !u!1001 &1645636291499357858
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2274,7 +2226,10 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 6259194885021415050, guid: f35961d996ccaa649bc90ec3da82df58, type: 3}
       insertIndex: -1
       addedObject: {fileID: 90857363}
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 800766413418899980, guid: f35961d996ccaa649bc90ec3da82df58, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2122203432}
   m_SourcePrefab: {fileID: 100100000, guid: f35961d996ccaa649bc90ec3da82df58, type: 3}
 --- !u!1001 &1665839071176935753
 PrefabInstance:
@@ -2451,4 +2406,3 @@ SceneRoots:
   - {fileID: 1431623488}
   - {fileID: 1115213729}
   - {fileID: 1662575356}
-  - {fileID: 1764034516}
