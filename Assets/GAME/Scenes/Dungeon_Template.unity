@@ -1727,6 +1727,72 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 7527817107024574644, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
   m_PrefabInstance: {fileID: 1742702636}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1764034514
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1764034516}
+  - component: {fileID: 1764034515}
+  m_Layer: 0
+  m_Name: Batch9PlayModeDebugHarness
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1764034515
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1764034514}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: abe4a34052bf4e9aa38cf22cf18cfa32, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Debugging.Batch9PlayModeDebugHarness
+  targetCharacterId: hero
+  diseaseDefinition: {fileID: 11400000, guid: e816a3a3f07326047af1368fdf4fbe14, type: 2}
+  quirkDefinition: {fileID: 11400000, guid: f71e1fdd7c2492b4b82ee444b574f7db, type: 2}
+  feastItemId: ration
+  feastItemCount: 1
+  hungerRestoreAmount: 5
+  loadTestShiningChange: 1
+  loadTestHungerChange: 1
+  explorationResources: {fileID: 0}
+  persistentConditions: {fileID: 0}
+  feastService: {fileID: 0}
+  inventoryService: {fileID: 0}
+  saveLoadService: {fileID: 0}
+  currentShining: 0
+  currentHunger: 0
+  currentCharacterId: 
+  currentDiseaseId: 
+  currentQuirkId: 
+  currentFeastItemId: 
+  currentFeastItemCount: 0
+  currentHungerRestoreAmount: 0
+  lastResult: Not Run
+--- !u!4 &1764034516
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1764034514}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 8.05745, y: 7.03929, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1796023658
 GameObject:
   m_ObjectHideFlags: 0
@@ -2385,3 +2451,4 @@ SceneRoots:
   - {fileID: 1431623488}
   - {fileID: 1115213729}
   - {fileID: 1662575356}
+  - {fileID: 1764034516}
