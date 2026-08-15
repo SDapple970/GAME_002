@@ -38,6 +38,14 @@ When instructions or implementations conflict, use this order:
 
 Report material conflicts instead of guessing.
 
+- Design documents describe intended behavior when explicitly named as requirements by the current task.
+- Development tracking sheets record verified project status; they are not implementation authority.
+- Never change Production code merely to match a stale tracking cell or historical report.
+- Update or recommend development tracking only after inspecting the actual implementation and available validation evidence.
+- When documentation and an established Production implementation disagree, report the discrepancy before replacing working behavior unless the current task explicitly resolves it.
+- When practical, track major functionality as `Design requirement → System → Production owner → Code → Unity asset → Validation`.
+- Do not use file count as a measure of system completeness.
+
 ## 4. Project environment
 
 - Repository: `SDapple970/GAME_002`
@@ -246,6 +254,30 @@ Follow the style already used by the surrounding production code.
 
 Use the best validation available for the task.
 
+Implementation status:
+
+- Not Implemented
+- In Progress
+- Implementation Complete
+- Needs Fix
+
+Validation status:
+
+- Unverified
+- Compile Verified
+- Inspector Verified
+- Play Mode Verified
+- Integration Verified
+
+Status rules:
+
+- `Implementation Complete` does not mean `System Complete`.
+- Successful compilation does not imply Play Mode verification.
+- Prefab or code inspection does not prove scene wiring.
+- Isolated feature tests do not prove cross-system integration.
+- Never report a validation level higher than the evidence actually supports.
+- If required runtime validation must be performed manually in Unity, report implementation complete but runtime verification pending.
+
 Minimum checks for C# changes:
 
 1. Inspect `git diff` and confirm only intended files changed.
@@ -275,6 +307,36 @@ Every completed coding task must report:
 10. Known risks, deferred work, and compatibility paths retained.
 11. Confirmation that unrelated existing changes were preserved.
 
+For non-trivial Production work, append a `Development tracking` section containing:
+
+- System.
+- Feature or behavior changed.
+- Production owner.
+- Relevant design requirement, document, or tab when known.
+- Implementation status.
+- Compile validation.
+- Inspector or serialized-asset validation.
+- Play Mode validation.
+- Integration validation.
+- Remaining unverified items.
+- Recommended development-tracking status.
+- Stale documentation or mapping discovered.
+
+Example:
+
+### Development tracking
+
+- System: Combat
+- Feature: Field encounter → CombatEntryPoint
+- Production owner: CombatEntryPoint
+- Requirement: Combat / Field Encounter
+- Implementation: Implementation Complete
+- Compile: Verified
+- Inspector: Verified
+- Play Mode: Not Run
+- Integration: Not Run
+- Recommended tracking status: Implementation Complete — Runtime Verification Required
+
 Do not hide partial completion or unverified behavior.
 
 ## 13. Expected task structure
@@ -303,3 +365,4 @@ A task is done only when:
 - No competing production owner or duplicate entry path was introduced.
 - Inspector and manual validation steps are documented.
 - The final report accurately distinguishes verified results from assumptions.
+- Do not report `System Complete` while required validation remains unperformed.

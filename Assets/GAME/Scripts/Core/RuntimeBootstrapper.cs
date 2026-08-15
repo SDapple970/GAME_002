@@ -7,6 +7,7 @@ using Game.NonCombat.Inventory;
 using Game.NonCombat.Progress;
 using Game.Systems.Persona;
 using Game.NonCombat.Party;
+using Game.World.Exploration;
 
 namespace Game.Core
 {
@@ -63,6 +64,9 @@ namespace Game.Core
             FindOrCreate<CurrencyWallet>("CurrencyWallet", createMissing, warn);
             FindOrCreate<InventoryService>("InventoryService", createMissing, warn);
             FindOrCreate<PartyRuntime>("PartyRuntime", createMissing, warn);
+            FindOrCreate<ExplorationResourceRuntime>("ExplorationResourceRuntime", createMissing, warn);
+            FindOrCreate<PersistentConditionRuntime>("PersistentConditionRuntime", createMissing, warn);
+            FindOrCreate<FeastService>("FeastService", createMissing, warn);
             FindOrCreate<CharacterProgressionService>("CharacterProgressionService", createMissing, warn);
             FindOrCreate<PersonaStatusManager>("PersonaStatusManager", createMissing, warn);
             FindOrCreate<PersonaSaveAdapter>("PersonaSaveAdapter", createMissing, warn);

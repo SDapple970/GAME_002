@@ -229,6 +229,7 @@ namespace Game.NonCombat.Save
             identityRecords += data?.progression?.characters?.Count ?? 0;
             identityRecords += data?.party?.memberIds?.Count ?? 0;
             identityRecords += data?.party?.selectedCombatMemberIds?.Count ?? 0;
+            identityRecords += data?.exploration?.conditions?.Count ?? 0;
             if (data?.world?.interactions != null)
             {
                 for (int i = 0; i < data.world.interactions.Count; i++)
@@ -252,6 +253,10 @@ namespace Game.NonCombat.Save
             data.currency ??= new CurrencySaveData(); data.party ??= new PartySaveData(); data.progression ??= new ProgressionSaveData();
             data.demoMission ??= new DemoMissionSaveData(); data.futureDaily ??= new FutureDailySaveData(); data.story ??= new StorySaveData();
             data.reward ??= new RewardSaveData(); data.world ??= new WorldSaveData(); data.location ??= new PlayerLocationSaveData();
+            data.exploration ??= new ExplorationSaveData();
+            data.exploration.shining = Mathf.Max(0, data.exploration.shining);
+            data.exploration.hunger = Mathf.Max(0, data.exploration.hunger);
+            NormalizePersistentConditions(data.exploration);
             data.currency.gold = Mathf.Max(0, data.currency.gold);
             NormalizeIntEntries(data.inventory.items);
             NormalizeCharacterProgression(data.progression);
@@ -284,6 +289,32 @@ namespace Game.NonCombat.Save
             });
             for (int i = 0; i < party.selectedCombatMemberIds.Count; i++)
                 party.selectedCombatMemberIds[i] = party.selectedCombatMemberIds[i].Trim();
+        }
+
+        private static void NormalizePersistentConditions(ExplorationSaveData exploration)
+        {
+            exploration.conditions ??= new List<PersistentConditionSaveData>();
+            Dictionary<string, PersistentConditionSaveData> unique = new(StringComparer.Ordinal);
+            foreach (PersistentConditionSaveData entry in exploration.conditions)
+            {
+                string owner = NormalizeId(entry?.ownerId);
+                string condition = NormalizeId(entry?.conditionId);
+                if (owner == null || condition == null || !Enum.IsDefined(typeof(Game.World.Exploration.PersistentConditionCategory), entry.category)) continue;
+                unique.TryAdd($"{owner}\n{(int)entry.category}\n{condition}", new PersistentConditionSaveData
+                {
+                    ownerId = owner,
+                    conditionId = condition,
+                    category = entry.category
+                });
+            }
+            exploration.conditions.Clear();
+            exploration.conditions.AddRange(unique.Values);
+            exploration.conditions.Sort((left, right) =>
+            {
+                int owner = string.CompareOrdinal(left.ownerId, right.ownerId);
+                int category = owner == 0 ? left.category.CompareTo(right.category) : owner;
+                return category == 0 ? string.CompareOrdinal(left.conditionId, right.conditionId) : category;
+            });
         }
 
         private static void NormalizeStableIds(List<string> values)

@@ -17,7 +17,24 @@ namespace Game.NonCombat.Save
         public StorySaveData story = new();
         public RewardSaveData reward = new();
         public WorldSaveData world = new();
+        public ExplorationSaveData exploration = new();
         public PlayerLocationSaveData location = new();
+    }
+
+    [Serializable]
+    public sealed class ExplorationSaveData
+    {
+        public int shining;
+        public int hunger;
+        public List<PersistentConditionSaveData> conditions = new();
+    }
+
+    [Serializable]
+    public sealed class PersistentConditionSaveData
+    {
+        public string ownerId;
+        public string conditionId;
+        public int category;
     }
 
     [Serializable]
