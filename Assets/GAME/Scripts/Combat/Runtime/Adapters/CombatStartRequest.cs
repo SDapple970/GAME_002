@@ -14,6 +14,7 @@ namespace Game.Combat.Adapters
         public readonly Side InitiativeSide;
         public readonly int InspirationMax;
         public readonly int InspirationStart;
+        public readonly CombatFlowMode FlowMode;
 
         public readonly OpeningEffectSO OpeningEffectOrNull;
 
@@ -30,12 +31,32 @@ namespace Game.Combat.Adapters
             int inspirationMax,
             int inspirationStart,
             OpeningEffectSO openingEffectOrNull)
+            : this(
+                reason,
+                initiativeSide,
+                inspirationMax,
+                inspirationStart,
+                openingEffectOrNull,
+                CombatFlowMode.LegacyPlanning)
+        {
+        }
+
+        public CombatStartRequest(
+            StartReason reason,
+            Side initiativeSide,
+            int inspirationMax,
+            int inspirationStart,
+            OpeningEffectSO openingEffectOrNull,
+            CombatFlowMode flowMode)
         {
             Reason = reason;
             InitiativeSide = initiativeSide;
             InspirationMax = inspirationMax;
             InspirationStart = inspirationStart;
             OpeningEffectOrNull = openingEffectOrNull;
+            FlowMode = flowMode == CombatFlowMode.StandoffClashChain
+                ? flowMode
+                : CombatFlowMode.LegacyPlanning;
         }
     }
 }

@@ -411,6 +411,7 @@ namespace Game.Combat.Core
                 resolvedInspirationMax,
                 resolvedInspirationStart,
                 request.OpeningEffectOrNull,
+                request.FlowMode,
                 request.EncounterOwnerOrNull,
                 activeAllies,
                 activeEnemies);
@@ -645,6 +646,7 @@ namespace Game.Combat.Core
             public readonly int InspirationMax;
             public readonly int InspirationStart;
             public readonly OpeningEffectSO OpeningEffectOrNull;
+            public readonly CombatFlowMode FlowMode;
             public readonly UnityEngine.Object EncounterOwnerOrNull;
             public readonly GameObject[] Allies;
             public readonly GameObject[] Enemies;
@@ -655,6 +657,7 @@ namespace Game.Combat.Core
                 int inspirationMax,
                 int inspirationStart,
                 OpeningEffectSO openingEffectOrNull,
+                CombatFlowMode flowMode,
                 UnityEngine.Object encounterOwnerOrNull,
                 GameObject[] allies,
                 GameObject[] enemies)
@@ -664,6 +667,7 @@ namespace Game.Combat.Core
                 InspirationMax = inspirationMax;
                 InspirationStart = inspirationStart;
                 OpeningEffectOrNull = openingEffectOrNull;
+                FlowMode = flowMode;
                 EncounterOwnerOrNull = encounterOwnerOrNull;
                 Allies = allies;
                 Enemies = enemies;
@@ -676,7 +680,8 @@ namespace Game.Combat.Core
                     InitiativeSide,
                     InspirationMax,
                     InspirationStart,
-                    OpeningEffectOrNull);
+                    OpeningEffectOrNull,
+                    FlowMode);
                 request.AllyFieldObjects.AddRange(Allies);
                 request.EnemyFieldObjects.AddRange(Enemies);
                 request.EncounterOwnerOrNull = EncounterOwnerOrNull;
@@ -720,7 +725,7 @@ namespace Game.Combat.Core
                 return false;
             }
 
-            if (phase == Phase.Planning)
+            if (phase == Phase.Planning || phase == Phase.Standoff)
             {
                 flow.EnterCombatPlanning();
                 return stateMachine.Is(GameState.CombatPlanning);

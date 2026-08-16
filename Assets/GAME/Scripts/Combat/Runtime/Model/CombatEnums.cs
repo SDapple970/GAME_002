@@ -41,6 +41,13 @@ namespace Game.Combat.Model
         Planning,
         Resolution,
         EndTurn,
-        ExitCombat
+        ExitCombat,
+        Standoff,
+        AttackDeclaration,
+        Approach,
+        Clash,
+        ApplyOutcome,
+        ChainDecision,
+        Chain
     }
 }

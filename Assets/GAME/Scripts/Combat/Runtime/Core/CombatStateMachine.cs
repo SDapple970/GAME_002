@@ -22,11 +22,20 @@ namespace Game.Combat.Core
         public CombatStateMachine(CombatSession session)
         {
             _session = session;
+            InitializeRuntimeState();
         }
 
         public CombatStateMachine(CombatSession session, object legacyArg1, object legacyArg2)
         {
             _session = session;
+            InitializeRuntimeState();
+        }
+
+        private void InitializeRuntimeState()
+        {
+            // The bootstrapper finalizes the roster before constructing the state machine.
+            // Keep runtime-state availability independent from the first Planning/Turn transition.
+            _session?.InitializeCombatStates(CombatRuntimeConfig.Compatibility);
         }
 
         public bool ConfirmPlanning()
@@ -47,6 +56,25 @@ namespace Game.Combat.Core
             _presentingTurn = null;
             _presentingTurnIndex = -1;
             SetPhase(Phase.Resolution);
+            return true;
+        }
+
+        public bool EnterStandoff()
+        {
+            if (_exited || _session == null || _session.FlowMode != CombatFlowMode.StandoffClashChain)
+                return false;
+
+            if (Phase == Phase.Standoff)
+                return true;
+
+            if (Phase != Phase.EnterCombat || CombatEndEvaluator.Evaluate(_session) != CombatEndReason.None)
+                return false;
+
+            _session.InitializeCombatStates(CombatRuntimeConfig.Compatibility);
+            if (_session.ExchangeState == null || _session.CombatStateCount != CountRosterCombatants())
+                return false;
+
+            SetPhase(Phase.Standoff);
             return true;
         }
 
@@ -73,7 +101,14 @@ namespace Game.Combat.Core
                         break;
                     }
 
-                    if (_session == null || !_session.TryBeginNewTurn())
+                    if (_session.FlowMode == CombatFlowMode.StandoffClashChain)
+                    {
+                        if (!EnterStandoff())
+                            EnterExit(CombatEndReason.Abort);
+                        break;
+                    }
+
+                    if (!_session.TryBeginNewTurn())
                     {
                         EnterExit(CombatEndReason.Abort);
                         break;
@@ -200,6 +235,23 @@ namespace Game.Combat.Core
         {
             ClearStuns(_session.Allies);
             ClearStuns(_session.Enemies);
+        }
+
+        private int CountRosterCombatants()
+        {
+            return CountCombatants(_session.Allies) + CountCombatants(_session.Enemies);
+        }
+
+        private static int CountCombatants(System.Collections.Generic.IReadOnlyList<ICombatant> combatants)
+        {
+            int count = 0;
+            for (int i = 0; i < combatants.Count; i++)
+            {
+                if (combatants[i] != null)
+                    count++;
+            }
+
+            return count;
         }
 
         private static void ClearStuns(System.Collections.Generic.IReadOnlyList<ICombatant> combatants)
