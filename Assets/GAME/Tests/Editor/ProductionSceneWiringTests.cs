@@ -13,6 +13,7 @@ using Game.NonCombat.Inventory;
 using Game.Quest;
 using Game.Reward;
 using Game.Story;
+using Game.Story.Data;
 using Game.Story.Interaction;
 using Game.UI;
 using Game.UI.Editor;
@@ -244,6 +245,97 @@ namespace Game.Tests.Integration
             finally
             {
                 Object.DestroyImmediate(owner);
+            }
+        }
+
+        [Test]
+        public void ProductionNpcInteractionPrefab_UsesCanonicalStoryRequestContract()
+        {
+            const string path = "Assets/GAME/Prefabs/Interaction/ProductionNpcInteraction.prefab";
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            Assert.That(prefab, Is.Not.Null);
+
+            InteractableObject interactable = prefab.GetComponent<InteractableObject>();
+            Assert.That(interactable, Is.Not.Null);
+            Assert.That(prefab.GetComponents<InteractableObject>(), Has.Length.EqualTo(1));
+            Assert.That(interactable.PromptText, Is.EqualTo("F: \uB300\uD654"));
+            Assert.That(interactable.UsePolicy, Is.EqualTo(InteractionUsePolicy.Repeatable));
+
+            Collider2D trigger = prefab.GetComponent<Collider2D>();
+            Assert.That(trigger, Is.Not.Null);
+            Assert.That(trigger.isTrigger, Is.True);
+            Assert.That(interactable.Events, Has.Count.EqualTo(1));
+            Assert.That(interactable.Events[0], Is.TypeOf<StoryInteractionEventSO>());
+
+            StoryInteractionEventSO storyEvent = (StoryInteractionEventSO)interactable.Events[0];
+            Assert.That(storyEvent.SupportsProductionExecution, Is.True);
+            Assert.That(storyEvent.EventDefinition, Is.Not.Null);
+            Assert.That(storyEvent.EventDefinition, Is.TypeOf<StoryEventDefinitionSO>());
+            Assert.That(storyEvent.EventDefinition.EventId, Is.Not.Null.And.Not.Empty);
+        }
+
+        [Test]
+        public void ProductionNpcDetection_PlayerContactColliderCarriesPlayerTag()
+        {
+            GameObject player = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/GAME/Prefabs/Player.prefab");
+            Assert.That(player, Is.Not.Null);
+            Collider2D[] contactColliders = player.GetComponentsInChildren<Collider2D>(true);
+            Assert.That(contactColliders, Is.Not.Empty);
+            Assert.That(contactColliders.All(collider => collider.CompareTag("Player")), Is.True);
+        }
+
+        [Test]
+        public void ProductionNpcRequest_StartsStoryExactlyOnceAndRestoresExploration()
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/GAME/Prefabs/Interaction/ProductionNpcInteraction.prefab");
+            GameObject instance = PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+            GameObject core = new("ProductionNpcRequestTestCore");
+            GameObject narrative = new("ProductionNpcRequestTestNarrative");
+            try
+            {
+                GameStateMachine stateMachine = core.AddComponent<GameStateMachine>();
+                core.AddComponent<GameFlowController>();
+                StoryEventRunner storyRunner = narrative.AddComponent<StoryEventRunner>();
+                int starts = 0;
+                storyRunner.OnEventStarted += _ => starts++;
+
+                InteractableObject interactable = instance.GetComponent<InteractableObject>();
+                interactable.Interact(core);
+                interactable.Interact(core);
+
+                Assert.That(starts, Is.EqualTo(1));
+                Assert.That(storyRunner.IsRunning, Is.True);
+                Assert.That(stateMachine.Current, Is.EqualTo(GameState.Dialogue));
+
+                storyRunner.EndEvent();
+                Assert.That(stateMachine.Current, Is.EqualTo(GameState.Exploration));
+            }
+            finally
+            {
+                Object.DestroyImmediate(instance);
+                Object.DestroyImmediate(narrative);
+                Object.DestroyImmediate(core);
+                InteractionRunner runtimeRunner = Object.FindFirstObjectByType<InteractionRunner>();
+                if (runtimeRunner != null)
+                    Object.DestroyImmediate(runtimeRunner.gameObject);
+            }
+        }
+
+        [Test]
+        public void LegacyDialogueInteractionAssets_RemainLegacyOnly()
+        {
+            string[] paths =
+            {
+                "Assets/GAME/Data/Interaction/Dialogue_Investigate_Note.asset",
+                "Assets/GAME/Data/Interaction/Dialogue_RescueN{pc.asset"
+            };
+
+            foreach (string path in paths)
+            {
+                DialogueInteractionEventSO legacy = AssetDatabase.LoadAssetAtPath<DialogueInteractionEventSO>(path);
+                Assert.That(legacy, Is.Not.Null, path);
+                Assert.That(legacy.SupportsProductionExecution, Is.False, path);
             }
         }
 

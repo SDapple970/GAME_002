@@ -28,6 +28,12 @@ Persistent random loot resolves an entry once with an isolated `System.Random`, 
 
 Multi-event execution is authored-order deterministic. A blocked or no-effect request is not consumed. If at least one irreversible effect is accepted and another event fails, the runner reports `PartialFailure` and consumes a one-shot interaction so already-applied consequences are never retried.
 
+## Production NPC dialogue fixture
+
+`Assets/GAME/Prefabs/Interaction/ProductionNpcInteraction.prefab` is the minimal reusable NPC interaction fixture. It authors `F: 대화`, a trigger `Collider2D`, `Repeatable`, and one `StoryInteractionEventSO` that references the existing stable Story definition. The prefab does not own input, UI, `GameState`, or Story execution.
+
+Place it only in a scene that already has the canonical `StoryEventRunner` and a connected Production presenter. `Dungeon_Template` intentionally has an empty Narrative extension slot, so placing the NPC there without installing the existing Narrative runtime/presenter is an incomplete setup. Existing Dungeon 1 `StoryInteractable2D` and Demo/Legacy dialogue assets remain compatibility content and are not migrated by this fixture.
+
 ## Visuals and manual validation
 
 Optionally add `InteractionVisualStateAdapter` and wire available/consumed sprites, active objects, and the prompt collider. Restore applies visuals without executing events. Keep the root and `InteractableObject` alive so save restoration can find it.

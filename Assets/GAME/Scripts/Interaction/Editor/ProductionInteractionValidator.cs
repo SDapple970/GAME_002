@@ -96,7 +96,44 @@ namespace Game.Interaction.Editor
             }
 
             ValidateProductionSources(issues);
+            ValidateProductionNpcPrefabs(issues);
             return issues;
+        }
+
+        private static void ValidateProductionNpcPrefabs(List<string> issues)
+        {
+            string[] prefabGuids = AssetDatabase.FindAssets("t:Prefab", new[] { "Assets/GAME/Prefabs/Interaction" });
+            for (int i = 0; i < prefabGuids.Length; i++)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(prefabGuids[i]);
+                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (prefab == null)
+                    continue;
+
+                InteractableObject[] interactables = prefab.GetComponentsInChildren<InteractableObject>(true);
+                for (int itemIndex = 0; itemIndex < interactables.Length; itemIndex++)
+                {
+                    InteractableObject item = interactables[itemIndex];
+                    string location = $"{path}:{GetHierarchyPath(item.transform)}";
+                    Collider2D trigger = item.GetComponent<Collider2D>();
+                    if (trigger == null || !trigger.isTrigger)
+                        issues.Add($"Production NPC requires a trigger Collider2D at '{location}'.");
+                    if (item.UsePolicy == InteractionUsePolicy.LegacyCompatibility)
+                        issues.Add($"Production NPC uses LegacyCompatibility at '{location}'.");
+
+                    IReadOnlyList<InteractionEventSO> events = item.Events;
+                    if (events.Count == 0)
+                        issues.Add($"Production NPC has no Interaction event at '{location}'.");
+                    for (int eventIndex = 0; eventIndex < events.Count; eventIndex++)
+                    {
+                        InteractionEventSO interactionEvent = events[eventIndex];
+                        if (interactionEvent == null || !interactionEvent.SupportsProductionExecution)
+                            issues.Add($"Production NPC has a missing or Legacy-only event at '{location}'.");
+                        if (interactionEvent is StoryInteractionEventSO storyEvent && storyEvent.EventDefinition == null)
+                            issues.Add($"Production NPC Story event is missing its definition at '{location}'.");
+                    }
+                }
+            }
         }
 
         private static void ValidateProductionSources(List<string> issues)

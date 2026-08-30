@@ -9,6 +9,7 @@ using Game.NonCombat.Save;
 using Game.Reward;
 using Game.UI;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 
 namespace Game.Tests.Integration
@@ -127,6 +128,35 @@ namespace Game.Tests.Integration
             Assert.That(duplicate.Status, Is.EqualTo(InteractionResultStatus.AlreadyConsumed));
             Assert.That(nextFrame.Status, Is.EqualTo(InteractionResultStatus.Success));
             Assert.That(interactionEvent.ExecutionCount, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void StoryInteractionEvent_MissingDefinitionFailsSafely()
+        {
+            InteractionRunner runner = CreateRunner(out _);
+            StoryInteractionEventSO storyEvent = ScriptableObject.CreateInstance<StoryInteractionEventSO>();
+            InteractableObject source = CreateSource("npc.missing-definition", InteractionUsePolicy.Repeatable, storyEvent);
+
+            InteractionResult result = runner.Execute(Request(source));
+
+            Assert.That(storyEvent.SupportsProductionExecution, Is.True);
+            Assert.That(result.Status, Is.EqualTo(InteractionResultStatus.Failed));
+            Assert.That(result.StoryAccepted, Is.False);
+        }
+
+        [Test]
+        public void StoryInteractionEvent_MissingNarrativeRunnerFailsSafely()
+        {
+            InteractionRunner runner = CreateRunner(out _);
+            StoryInteractionEventSO storyEvent = AssetDatabase.LoadAssetAtPath<StoryInteractionEventSO>(
+                "Assets/GAME/Data/Interaction/ProductionNpcDialogue.asset");
+            InteractableObject source = CreateSource("npc.missing-runner", InteractionUsePolicy.Repeatable, storyEvent);
+
+            InteractionResult result = runner.Execute(Request(source));
+
+            Assert.That(storyEvent.EventDefinition, Is.Not.Null);
+            Assert.That(result.Status, Is.EqualTo(InteractionResultStatus.Failed));
+            Assert.That(result.StoryAccepted, Is.False);
         }
 
         [Test]

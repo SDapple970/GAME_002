@@ -10,6 +10,7 @@ namespace Game.Interaction
         [SerializeField] private StoryEventDefinitionSO eventDefinition;
         [SerializeField] private StoryEventRunner runner;
 
+        public StoryEventDefinitionSO EventDefinition => eventDefinition;
         public override bool SupportsProductionExecution => true;
 
         public override void Execute(InteractionContext context)
