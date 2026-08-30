@@ -20,7 +20,10 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 namespace Game.Tests.Integration
 {
@@ -155,6 +158,13 @@ namespace Game.Tests.Integration
             Open(DungeonTemplate);
             Assert.That(FindAll<InteractionRunner>(), Has.Length.LessThanOrEqualTo(1));
 
+            InteractionController[] controllers = FindAll<InteractionController>();
+            Assert.That(controllers, Has.Length.EqualTo(1));
+            Assert.That(GetHierarchyPath(controllers[0].transform), Is.EqualTo("Actors/Player/PlayerRoot"));
+            InteractionPromptUI[] prompts = FindAll<InteractionPromptUI>();
+            Assert.That(prompts, Has.Length.EqualTo(1));
+            Assert.That(controllers[0].PromptUI, Is.SameAs(prompts[0]));
+
             InteractableObject[] persistent = FindAll<InteractableObject>()
                 .Where(item => item.UsePolicy == InteractionUsePolicy.PersistentOnce)
                 .ToArray();
@@ -162,6 +172,79 @@ namespace Game.Tests.Integration
             Assert.That(
                 persistent.Select(item => item.InteractionId).Distinct(System.StringComparer.Ordinal).Count(),
                 Is.EqualTo(persistent.Length));
+        }
+
+        [Test]
+        public void ProductionDungeonUI_HasOneSafeFieldInteractionPromptAndKeepsRequiredUI()
+        {
+            const string path = "Assets/GAME/Prefabs/UI/ProductionDungeonUI.prefab";
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            Assert.That(prefab, Is.Not.Null);
+            Assert.That(prefab.GetComponentsInChildren<CombatPlanningHUD>(true), Has.Length.EqualTo(1));
+            Assert.That(prefab.GetComponentsInChildren<RewardUIPanel>(true), Has.Length.EqualTo(1));
+            Assert.That(prefab.GetComponentsInChildren<EventSystem>(true), Has.Length.EqualTo(1));
+
+            GameUIRootController roots = prefab.GetComponent<GameUIRootController>();
+            InteractionPromptUI[] prompts = prefab.GetComponentsInChildren<InteractionPromptUI>(true);
+            Assert.That(prompts, Has.Length.EqualTo(1));
+            GameObject fieldRoot = Reference(roots, "fieldRoot") as GameObject;
+            GameObject displayRoot = Reference(prompts[0], "root") as GameObject;
+            Text messageText = Reference(prompts[0], "messageText") as Text;
+            Assert.That(fieldRoot, Is.Not.Null);
+            Assert.That(prompts[0].transform.IsChildOf(fieldRoot.transform), Is.True);
+            Assert.That(displayRoot, Is.Not.Null.And.Not.SameAs(prompts[0].gameObject));
+            Assert.That(displayRoot.transform.IsChildOf(prompts[0].transform), Is.True);
+            Assert.That(messageText, Is.Not.Null);
+            Assert.That(messageText.raycastTarget, Is.False);
+        }
+
+        [Test]
+        public void ProductionInteractionPrompt_PublicShowAndHideToggleOnlyDisplayRoot()
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/GAME/Prefabs/UI/ProductionDungeonUI.prefab");
+            GameObject instance = PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+            try
+            {
+                InteractionPromptUI prompt = instance.GetComponentInChildren<InteractionPromptUI>(true);
+                GameObject displayRoot = Reference(prompt, "root") as GameObject;
+                Text messageText = Reference(prompt, "messageText") as Text;
+
+                prompt.Show("F: 조사");
+                Assert.That(prompt.gameObject.activeSelf, Is.True);
+                Assert.That(displayRoot.activeSelf, Is.True);
+                Assert.That(messageText.text, Is.EqualTo("F: 조사"));
+
+                prompt.Hide();
+                Assert.That(prompt.gameObject.activeSelf, Is.True);
+                Assert.That(displayRoot.activeSelf, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(instance);
+            }
+        }
+
+        [Test]
+        public void ProductionInteraction_DefaultPromptMatchesGameplayInteractKeyboardBinding()
+        {
+            InputActionAsset actions = AssetDatabase.LoadAssetAtPath<InputActionAsset>(
+                "Assets/GAME/Scripts/Input/inputactions.inputactions");
+            InputAction interact = actions.FindAction("Gameplay/Interact", true);
+            Assert.That(interact.bindings.Any(binding => binding.path == "<Keyboard>/f"), Is.True);
+
+            GameObject owner = new("InteractablePromptDefault");
+            try
+            {
+                owner.AddComponent<BoxCollider2D>();
+                InteractableObject interactable = owner.AddComponent<InteractableObject>();
+                string prompt = new SerializedObject(interactable).FindProperty("promptText").stringValue;
+                Assert.That(prompt, Is.EqualTo("F: 조사"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(owner);
+            }
         }
 
         [Test]
@@ -211,6 +294,18 @@ namespace Game.Tests.Integration
             T owner = FindAll<T>().Single();
             foreach (string property in properties)
                 Assert.That(Reference(owner, property), Is.Not.Null, $"{typeof(T).Name}.{property}");
+        }
+
+        private static string GetHierarchyPath(Transform transform)
+        {
+            string path = transform.name;
+            while (transform.parent != null)
+            {
+                transform = transform.parent;
+                path = transform.name + "/" + path;
+            }
+
+            return path;
         }
     }
 }

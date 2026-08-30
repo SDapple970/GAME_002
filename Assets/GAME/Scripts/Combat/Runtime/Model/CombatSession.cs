@@ -25,13 +25,21 @@ namespace Game.Combat.Model
         public CombatExchangeState ExchangeState { get; }
         public int CombatStateCount => _combatStates.Count;
         public CombatFlowMode FlowMode { get; }
+        public CombatRuntimeConfig RuntimeConfig { get; }
+        public StandoffRuntimeState StandoffState { get; }
 
         public CombatSession(
             StartReason reason,
             Side initiativeSide,
             InspirationPool inspiration,
             CombatEnvironment env)
-            : this(reason, initiativeSide, inspiration, env, CombatFlowMode.LegacyPlanning)
+            : this(
+                reason,
+                initiativeSide,
+                inspiration,
+                env,
+                CombatFlowMode.LegacyPlanning,
+                CombatRuntimeConfig.Compatibility)
         {
         }
 
@@ -41,6 +49,17 @@ namespace Game.Combat.Model
             InspirationPool inspiration,
             CombatEnvironment env,
             CombatFlowMode flowMode)
+            : this(reason, initiativeSide, inspiration, env, flowMode, CombatRuntimeConfig.Compatibility)
+        {
+        }
+
+        public CombatSession(
+            StartReason reason,
+            Side initiativeSide,
+            InspirationPool inspiration,
+            CombatEnvironment env,
+            CombatFlowMode flowMode,
+            CombatRuntimeConfig runtimeConfig)
         {
             CompletionId = Guid.NewGuid().ToString("N");
             StartReason = reason;
@@ -50,7 +69,9 @@ namespace Game.Combat.Model
             FlowMode = flowMode == CombatFlowMode.StandoffClashChain
                 ? flowMode
                 : CombatFlowMode.LegacyPlanning;
+            RuntimeConfig = runtimeConfig;
             ExchangeState = new CombatExchangeState(initiativeSide);
+            StandoffState = new StandoffRuntimeState(runtimeConfig.PressureMax);
         }
 
         public void InitializeCombatStates(CombatRuntimeConfig config)

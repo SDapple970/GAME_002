@@ -195,7 +195,10 @@ namespace Game.Combat.UI
             bool showCombatContent = phase == Phase.Planning ||
                                      phase == Phase.Resolution ||
                                      phase == Phase.EndTurn ||
-                                     phase == Phase.Standoff;
+                                     phase == Phase.Standoff ||
+                                     phase == Phase.AttackDeclaration ||
+                                     phase == Phase.Approach ||
+                                     phase == Phase.Clash;
             bool showPlanning = phase == Phase.Planning;
 
             SetInternalVisible(combatHudRoot, showCombatContent);

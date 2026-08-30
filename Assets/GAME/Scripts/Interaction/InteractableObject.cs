@@ -8,7 +8,7 @@ namespace Game.Interaction
     public sealed class InteractableObject : MonoBehaviour, IInteractable
     {
         [Header("Prompt")]
-        [SerializeField] private string promptText = "E: 조사";
+        [SerializeField] private string promptText = "F: 조사";
 
         [Header("Rules")]
         [SerializeField] private bool interactOnce;

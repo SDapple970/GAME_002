@@ -6,6 +6,8 @@
 
 Add `InteractableObject`, keep its trigger collider registered with the player controller, and choose a use policy:
 
+The canonical `Gameplay/Interact` keyboard binding is `F`, so new objects default to `F: 조사`. Keep authored Production prompt text aligned with that binding. The current Input layer does not expose a reusable binding-display API, so rebinding does not yet update prompt text dynamically.
+
 - `LegacyCompatibility` preserves the old `interactOnce` and `disableAfterInteract` behavior. Do not use it for new Production content.
 - `Repeatable` never records consumption.
 - `OncePerSession` records consumption until the runtime session resets.
@@ -31,5 +33,9 @@ Multi-event execution is authored-order deterministic. A blocked or no-effect re
 Optionally add `InteractionVisualStateAdapter` and wire available/consumed sprites, active objects, and the prompt collider. Restore applies visuals without executing events. Keep the root and `InteractableObject` alive so save restoration can find it.
 
 `RuntimeBootstrapper` is the Production installation owner and creates or adopts exactly one `InteractionRuntime` followed by one `InteractionRunner` before `SaveLoadService`. Existing scenes with authored instances keep them. `InteractionRunner.ResolveOrCreate` remains only an on-demand compatibility fallback for callers that execute before the global bootstrap is available.
+
+Every Production dungeon must contain exactly one `InteractionController` on the moving player root. `Dungeon_Template` authors it as an added component on `Actors/Player/PlayerRoot`; do not apply it to `Player.prefab`, because Demo and compatibility scenes retain scene-local controllers. Do not promote Story, Search, Demo, or Legacy interaction controllers into this Production path.
+
+`ProductionDungeonUI/FieldRoot/InteractionPromptHost` owns the canonical `InteractionPromptUI`. Its child `InteractionPromptRoot` is the display object and contains the non-raycast `PromptText`; the host remains active when the prompt is hidden. `Dungeon_Template` explicitly connects the player `InteractionController.promptUI` to this prefab component. The prompt only presents text. `InteractionController`, `InteractionRunner`, and the Input/Core state owners continue to decide targeting, execution, and whether interaction is allowed.
 
 In Unity, verify Repeatable, session-only, and persistent objects; save/reload an opened object; temporarily remove RewardService and confirm random loot does not reroll; verify Dialogue/Combat/Reward/Pause block interaction; and confirm prompts refresh after consumption and Story ownership acceptance.

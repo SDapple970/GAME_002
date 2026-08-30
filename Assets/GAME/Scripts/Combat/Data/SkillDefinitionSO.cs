@@ -5,7 +5,7 @@ using Game.Combat.Model;
 namespace Game.Combat.Data
 {
     [CreateAssetMenu(menuName = "Game/Combat/Skill Definition")]
-    public sealed class SkillDefinitionSO : ScriptableObject
+    public sealed class SkillDefinitionSO : ScriptableObject, ICombatMpCostProvider
     {
         [Header("Identity")]
         public int skillId;
@@ -13,6 +13,7 @@ namespace Game.Combat.Data
 
         [Header("Costs / Tags")]
         public int inspirationCost;
+        [SerializeField] private int mpCost;
         public SkillTag tag = SkillTag.Attack;
         public TargetingRule targeting = TargetingRule.SingleEnemy;
         public bool consumesTurn = true;
@@ -30,6 +31,7 @@ namespace Game.Combat.Data
         public float DesiredTargetDistance => desiredTargetDistance;
         public float MoveSpeed => moveSpeed;
         public float ActionDelayAfterMove => actionDelayAfterMove;
+        public int MpCost => mpCost;
 
         [Header("Animation")]
         [SerializeField] private string combatAnimationTrigger = "Attack";

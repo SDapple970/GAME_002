@@ -15,6 +15,7 @@ namespace Game.Combat.Adapters
         public readonly int InspirationMax;
         public readonly int InspirationStart;
         public readonly CombatFlowMode FlowMode;
+        public readonly CombatRuntimeConfig RuntimeConfig;
 
         public readonly OpeningEffectSO OpeningEffectOrNull;
 
@@ -37,7 +38,8 @@ namespace Game.Combat.Adapters
                 inspirationMax,
                 inspirationStart,
                 openingEffectOrNull,
-                CombatFlowMode.LegacyPlanning)
+                CombatFlowMode.LegacyPlanning,
+                CombatRuntimeConfig.Compatibility)
         {
         }
 
@@ -48,6 +50,25 @@ namespace Game.Combat.Adapters
             int inspirationStart,
             OpeningEffectSO openingEffectOrNull,
             CombatFlowMode flowMode)
+            : this(
+                reason,
+                initiativeSide,
+                inspirationMax,
+                inspirationStart,
+                openingEffectOrNull,
+                flowMode,
+                CombatRuntimeConfig.Compatibility)
+        {
+        }
+
+        public CombatStartRequest(
+            StartReason reason,
+            Side initiativeSide,
+            int inspirationMax,
+            int inspirationStart,
+            OpeningEffectSO openingEffectOrNull,
+            CombatFlowMode flowMode,
+            CombatRuntimeConfig runtimeConfig)
         {
             Reason = reason;
             InitiativeSide = initiativeSide;
@@ -57,6 +78,7 @@ namespace Game.Combat.Adapters
             FlowMode = flowMode == CombatFlowMode.StandoffClashChain
                 ? flowMode
                 : CombatFlowMode.LegacyPlanning;
+            RuntimeConfig = runtimeConfig;
         }
     }
 }

@@ -17,7 +17,13 @@ namespace Game.Combat.Core
             var inspiration = new InspirationPool(req.InspirationMax, req.InspirationStart);
             var env = new CombatEnvironment();
 
-            var session = new CombatSession(req.Reason, req.InitiativeSide, inspiration, env, req.FlowMode);
+            var session = new CombatSession(
+                req.Reason,
+                req.InitiativeSide,
+                inspiration,
+                env,
+                req.FlowMode,
+                req.RuntimeConfig);
 
             // 전투원 생성(필드 연동 전에는 DummyFactory로 대체 가능)
             combatantFactory ??= new DummyCombatantFactory(skillBook);

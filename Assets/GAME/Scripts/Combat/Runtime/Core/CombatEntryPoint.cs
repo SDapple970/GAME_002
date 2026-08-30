@@ -67,7 +67,7 @@ namespace Game.Combat.Core
             if (ActiveStateMachine == null)
                 return;
 
-            ActiveStateMachine.Tick();
+            ActiveStateMachine.Tick(Time.deltaTime);
 
             if (!_endedRaised && ActiveStateMachine.Phase == Phase.ExitCombat)
                 FinishCombat(ActiveStateMachine.EndReason);
@@ -171,6 +171,19 @@ namespace Game.Combat.Core
             );
 
             return true;
+        }
+
+        public bool TryExecutePreparedTerminalDecision()
+        {
+            CombatStateMachine stateMachine = ActiveStateMachine;
+            if (_endedRaised || ActiveSession == null || stateMachine == null ||
+                !stateMachine.TryExecutePreparedTerminalDecision())
+            {
+                return false;
+            }
+
+            FinishCombat(stateMachine.EndReason);
+            return _endedRaised;
         }
 
         private static bool AddExplicitNonePlansForActorsUnableToAct(
@@ -333,6 +346,7 @@ namespace Game.Combat.Core
                 if (director != null)
                 {
                     createdStateMachine.OnRequireResolutionPlay += director.PlayResolution;
+                    createdStateMachine.OnRequireApproachPlay += director.PlayApproach;
                     directorSubscribed = true;
                 }
 
@@ -412,6 +426,7 @@ namespace Game.Combat.Core
                 resolvedInspirationStart,
                 request.OpeningEffectOrNull,
                 request.FlowMode,
+                request.RuntimeConfig,
                 request.EncounterOwnerOrNull,
                 activeAllies,
                 activeEnemies);
@@ -578,7 +593,10 @@ namespace Game.Combat.Core
                 stateMachine.OnPhaseChanged -= HandleCombatPhaseChanged;
 
             if (stateMachine != null && director != null && directorSubscribed)
+            {
                 stateMachine.OnRequireResolutionPlay -= director.PlayResolution;
+                stateMachine.OnRequireApproachPlay -= director.PlayApproach;
+            }
 
             if (orchestratorBound && flowOrchestrator != null)
                 flowOrchestrator.BindSession(null);
@@ -647,6 +665,7 @@ namespace Game.Combat.Core
             public readonly int InspirationStart;
             public readonly OpeningEffectSO OpeningEffectOrNull;
             public readonly CombatFlowMode FlowMode;
+            public readonly CombatRuntimeConfig RuntimeConfig;
             public readonly UnityEngine.Object EncounterOwnerOrNull;
             public readonly GameObject[] Allies;
             public readonly GameObject[] Enemies;
@@ -658,6 +677,7 @@ namespace Game.Combat.Core
                 int inspirationStart,
                 OpeningEffectSO openingEffectOrNull,
                 CombatFlowMode flowMode,
+                CombatRuntimeConfig runtimeConfig,
                 UnityEngine.Object encounterOwnerOrNull,
                 GameObject[] allies,
                 GameObject[] enemies)
@@ -668,6 +688,7 @@ namespace Game.Combat.Core
                 InspirationStart = inspirationStart;
                 OpeningEffectOrNull = openingEffectOrNull;
                 FlowMode = flowMode;
+                RuntimeConfig = runtimeConfig;
                 EncounterOwnerOrNull = encounterOwnerOrNull;
                 Allies = allies;
                 Enemies = enemies;
@@ -681,7 +702,8 @@ namespace Game.Combat.Core
                     InspirationMax,
                     InspirationStart,
                     OpeningEffectOrNull,
-                    FlowMode);
+                    FlowMode,
+                    RuntimeConfig);
                 request.AllyFieldObjects.AddRange(Allies);
                 request.EnemyFieldObjects.AddRange(Enemies);
                 request.EncounterOwnerOrNull = EncounterOwnerOrNull;
@@ -730,7 +752,9 @@ namespace Game.Combat.Core
                 flow.EnterCombatPlanning();
                 return stateMachine.Is(GameState.CombatPlanning);
             }
-            else if (phase == Phase.Resolution || phase == Phase.EndTurn)
+            else if (phase == Phase.Resolution || phase == Phase.EndTurn ||
+                     phase == Phase.AttackDeclaration || phase == Phase.Approach || phase == Phase.Clash ||
+                     phase == Phase.ApplyOutcome || phase == Phase.ChainDecision || phase == Phase.Chain)
             {
                 flow.EnterCombatResolving();
                 return stateMachine.Is(GameState.CombatResolving);
@@ -770,7 +794,10 @@ namespace Game.Combat.Core
                 endingStateMachine.OnPhaseChanged -= HandleCombatPhaseChanged;
 
             if (director != null && endingStateMachine != null)
+            {
                 endingStateMachine.OnRequireResolutionPlay -= director.PlayResolution;
+                endingStateMachine.OnRequireApproachPlay -= director.PlayApproach;
+            }
 
             if (flowOrchestrator != null)
                 flowOrchestrator.BindSession(null);

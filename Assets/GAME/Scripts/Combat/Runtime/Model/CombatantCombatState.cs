@@ -4,6 +4,8 @@ namespace Game.Combat.Model
 {
     public sealed class CombatantCombatState
     {
+        private double _mpRecoveryRemainder;
+
         public ICombatant Combatant { get; }
         public int CurrentMp { get; private set; }
         public int MaxMp { get; private set; }
@@ -24,11 +26,13 @@ namespace Game.Combat.Model
         {
             MaxMp = Math.Max(0, value);
             CurrentMp = Clamp(CurrentMp, MaxMp);
+            _mpRecoveryRemainder = 0d;
         }
 
         public void SetMp(int value)
         {
             CurrentMp = Clamp(value, MaxMp);
+            _mpRecoveryRemainder = 0d;
         }
 
         public bool CanSpendMp(int amount)
@@ -51,6 +55,32 @@ namespace Game.Combat.Model
                 return;
 
             CurrentMp = AddClamped(CurrentMp, amount, MaxMp);
+        }
+
+        public bool RecoverMp(float recoveryPerSecond, float deltaSeconds)
+        {
+            if (recoveryPerSecond <= 0f || deltaSeconds <= 0f ||
+                float.IsNaN(recoveryPerSecond) || float.IsInfinity(recoveryPerSecond) ||
+                float.IsNaN(deltaSeconds) || float.IsInfinity(deltaSeconds) ||
+                CurrentMp >= MaxMp)
+            {
+                if (CurrentMp >= MaxMp)
+                    _mpRecoveryRemainder = 0d;
+                return false;
+            }
+
+            double accumulated = _mpRecoveryRemainder + (double)recoveryPerSecond * deltaSeconds;
+            int recovered = accumulated >= int.MaxValue ? int.MaxValue : (int)Math.Floor(accumulated);
+            if (recovered <= 0)
+            {
+                _mpRecoveryRemainder = accumulated;
+                return false;
+            }
+
+            int previous = CurrentMp;
+            CurrentMp = AddClamped(CurrentMp, recovered, MaxMp);
+            _mpRecoveryRemainder = CurrentMp >= MaxMp ? 0d : accumulated - recovered;
+            return CurrentMp != previous;
         }
 
         public void SetMaxPosture(int value)

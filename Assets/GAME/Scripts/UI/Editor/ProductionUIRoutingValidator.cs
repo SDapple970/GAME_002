@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Game.Core;
+using Game.Interaction;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -37,9 +38,11 @@ namespace Game.UI.Editor
                 GameUIRootController[] prefabRoots = prefab.GetComponentsInChildren<GameUIRootController>(true);
                 UIScreenRouter[] prefabRouters = prefab.GetComponentsInChildren<UIScreenRouter>(true);
                 EventSystem[] prefabEvents = prefab.GetComponentsInChildren<EventSystem>(true);
+                InteractionPromptUI[] prefabPrompts = prefab.GetComponentsInChildren<InteractionPromptUI>(true);
                 if (prefabRoots.Length != 1) issues.Add($"[Production UI] {prefabPath}: expected one GameUIRootController, found {prefabRoots.Length}.");
                 if (prefabRouters.Length != 1) issues.Add($"[Production UI] {prefabPath}: expected one UIScreenRouter, found {prefabRouters.Length}.");
                 if (prefabEvents.Length != 1) issues.Add($"[Production UI] {prefabPath}: expected one EventSystem, found {prefabEvents.Length}.");
+                if (prefabPrompts.Length != 1) issues.Add($"[Production UI] {prefabPath}: expected one InteractionPromptUI, found {prefabPrompts.Length}.");
                 if (prefabRoots.Length == 1 && (!prefabRoots[0].HasAllRequiredRoots || !prefabRoots[0].ValidateRootGraph(false)))
                     issues.Add($"[Production UI] {prefabPath}: global routed roots are unresolved or unsafe.");
                 if (prefabRouters.Length == 1 && new SerializedObject(prefabRouters[0]).FindProperty("uiRoot").objectReferenceValue == null)
@@ -47,6 +50,8 @@ namespace Game.UI.Editor
                 RewardUIPanel panel = prefab.GetComponentInChildren<RewardUIPanel>(true);
                 if (panel == null || new SerializedObject(panel).FindProperty("fieldRewardToast").objectReferenceValue == null)
                     issues.Add($"[Production UI] {prefabPath}: full Reward panel and FieldRewardToast are not explicitly separated.");
+                if (prefabPrompts.Length == 1)
+                    ValidateInteractionPrompt(prefabRoots.SingleOrDefault(), prefabPrompts[0], prefabPath, issues);
             }
             foreach (string path in ProductionScenes)
             {
@@ -64,8 +69,51 @@ namespace Game.UI.Editor
                 UIScreenRouter router = FindAll<UIScreenRouter>(scene).SingleOrDefault();
                 if (router != null && new SerializedObject(router).FindProperty("uiRoot").objectReferenceValue == null)
                     issues.Add($"[Production UI] {path}: '{GetPath(router.transform)}' has no explicit GameUIRootController reference.");
+
+                if (path == "Assets/GAME/Scenes/Dungeon_Template.unity")
+                {
+                    InteractionPromptUI[] prompts = FindAll<InteractionPromptUI>(scene);
+                    InteractionController controller = FindAll<InteractionController>(scene).SingleOrDefault();
+                    InteractionPromptUI prompt = prompts.Length == 1 ? prompts[0] : null;
+                    if (prompts.Length != 1)
+                        issues.Add($"[Production UI] {path}: expected exactly one InteractionPromptUI, found {prompts.Length}.");
+                    if (controller == null || new SerializedObject(controller).FindProperty("promptUI").objectReferenceValue != prompt)
+                        issues.Add($"[Production UI] {path}: InteractionController has no explicit canonical InteractionPromptUI reference.");
+                }
             }
             return issues;
+        }
+
+        [MenuItem("Tools/GAME/Apply Production Interaction Prompt Wiring")]
+        public static void ApplyProductionInteractionPromptWiring()
+        {
+            const string prefabPath = "Assets/GAME/Prefabs/UI/ProductionDungeonUI.prefab";
+            const string templatePath = "Assets/GAME/Scenes/Dungeon_Template.unity";
+
+            GameObject prefab = PrefabUtility.LoadPrefabContents(prefabPath);
+            try
+            {
+                EnsureInteractionPrompt(prefab);
+                PrefabUtility.SaveAsPrefabAsset(prefab, prefabPath);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(prefab);
+            }
+
+            UnityEngine.SceneManagement.Scene scene = EditorSceneManager.OpenScene(templatePath, OpenSceneMode.Single);
+            InteractionController[] controllers = FindAll<InteractionController>(scene);
+            InteractionPromptUI[] prompts = FindAll<InteractionPromptUI>(scene);
+            if (controllers.Length != 1 || prompts.Length != 1)
+                throw new System.InvalidOperationException(
+                    $"Production prompt wiring requires exactly one controller and prompt; found {controllers.Length} and {prompts.Length}.");
+
+            SerializedObject serializedController = new(controllers[0]);
+            serializedController.FindProperty("promptUI").objectReferenceValue = prompts[0];
+            serializedController.ApplyModifiedPropertiesWithoutUndo();
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            AssetDatabase.SaveAssets();
         }
 
         // Explicit authoring command; never runs during player or scene load.
@@ -170,6 +218,94 @@ namespace Game.UI.Editor
             serialized.ApplyModifiedPropertiesWithoutUndo();
             toastRoot.SetActive(false);
             return toast;
+        }
+
+        private static InteractionPromptUI EnsureInteractionPrompt(GameObject owner)
+        {
+            GameUIRootController roots = owner.GetComponent<GameUIRootController>();
+            if (roots == null)
+                throw new System.InvalidOperationException("ProductionDungeonUI is missing GameUIRootController.");
+
+            GameObject fieldRoot = new SerializedObject(roots).FindProperty("fieldRoot").objectReferenceValue as GameObject;
+            if (fieldRoot == null)
+                throw new System.InvalidOperationException("ProductionDungeonUI is missing its canonical FieldRoot reference.");
+
+            InteractionPromptUI[] existing = owner.GetComponentsInChildren<InteractionPromptUI>(true);
+            if (existing.Length > 1)
+                throw new System.InvalidOperationException($"ProductionDungeonUI contains {existing.Length} InteractionPromptUI components.");
+
+            GameObject host = EnsureChild(fieldRoot.transform, "InteractionPromptHost");
+            InteractionPromptUI prompt = existing.SingleOrDefault() ?? host.AddComponent<InteractionPromptUI>();
+            if (prompt.gameObject != host)
+                throw new System.InvalidOperationException("Canonical InteractionPromptUI must be owned by InteractionPromptHost.");
+
+            Canvas canvas = host.GetComponent<Canvas>();
+            if (canvas == null) canvas = host.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 10;
+
+            CanvasScaler scaler = host.GetComponent<CanvasScaler>();
+            if (scaler == null) scaler = host.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = 0.5f;
+
+            GameObject displayRoot = EnsureChild(host.transform, "InteractionPromptRoot");
+            RectTransform displayRect = (RectTransform)displayRoot.transform;
+            displayRect.anchorMin = new Vector2(0.5f, 0f);
+            displayRect.anchorMax = new Vector2(0.5f, 0f);
+            displayRect.pivot = new Vector2(0.5f, 0f);
+            displayRect.anchoredPosition = new Vector2(0f, 96f);
+            displayRect.sizeDelta = new Vector2(440f, 60f);
+
+            Image background = displayRoot.GetComponent<Image>();
+            if (background == null) background = displayRoot.AddComponent<Image>();
+            background.color = new Color(0f, 0f, 0f, 0.72f);
+            background.raycastTarget = false;
+
+            GameObject textObject = EnsureChild(displayRoot.transform, "PromptText");
+            Text text = textObject.GetComponent<Text>();
+            if (text == null) text = textObject.AddComponent<Text>();
+            text.font = AssetDatabase.LoadAssetAtPath<Font>("Assets/GAME/Fonts/DungGeunMo.ttf");
+            text.fontSize = 28;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = Color.white;
+            text.raycastTarget = false;
+            text.text = "F: 조사";
+            RectTransform textRect = text.rectTransform;
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = new Vector2(16f, 8f);
+            textRect.offsetMax = new Vector2(-16f, -8f);
+
+            SerializedObject serializedPrompt = new(prompt);
+            serializedPrompt.FindProperty("root").objectReferenceValue = displayRoot;
+            serializedPrompt.FindProperty("messageText").objectReferenceValue = text;
+            serializedPrompt.ApplyModifiedPropertiesWithoutUndo();
+            host.SetActive(true);
+            displayRoot.SetActive(false);
+            return prompt;
+        }
+
+        private static void ValidateInteractionPrompt(
+            GameUIRootController roots,
+            InteractionPromptUI prompt,
+            string path,
+            List<string> issues)
+        {
+            if (roots == null || prompt == null)
+                return;
+
+            GameObject fieldRoot = new SerializedObject(roots).FindProperty("fieldRoot").objectReferenceValue as GameObject;
+            SerializedObject serializedPrompt = new(prompt);
+            GameObject displayRoot = serializedPrompt.FindProperty("root").objectReferenceValue as GameObject;
+            Text messageText = serializedPrompt.FindProperty("messageText").objectReferenceValue as Text;
+            if (fieldRoot == null || !prompt.transform.IsChildOf(fieldRoot.transform))
+                issues.Add($"[Production UI] {path}: InteractionPromptUI is not below canonical FieldRoot.");
+            if (displayRoot == null || displayRoot == prompt.gameObject || !displayRoot.transform.IsChildOf(prompt.transform))
+                issues.Add($"[Production UI] {path}: InteractionPromptUI owner and display root are not safely separated.");
+            if (messageText == null || messageText.raycastTarget)
+                issues.Add($"[Production UI] {path}: InteractionPromptUI has no non-raycast UI.Text message target.");
         }
 
         private static void Assign(SerializedObject target, string property, GameObject value) => target.FindProperty(property).objectReferenceValue = value;

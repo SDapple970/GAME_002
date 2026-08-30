@@ -27,6 +27,34 @@ namespace Game.Combat.Effects
         private CombatTurn _lastCompletedTurn;
         private Action _activeCompletion;
         private bool _completionRaised;
+        private Coroutine _activeApproachRoutine;
+        private CombatAttackDeclaration _activeApproachDeclaration;
+        private Action _activeApproachCompletion;
+
+        public void PlayApproach(CombatAttackDeclaration declaration, Action onComplete)
+        {
+            if (declaration == null)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+
+            if (ReferenceEquals(_activeApproachDeclaration, declaration))
+                return;
+
+            CancelActiveApproachWithoutCompletion();
+            if (!isActiveAndEnabled)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+
+            _activeApproachDeclaration = declaration;
+            _activeApproachCompletion = onComplete;
+            Coroutine routine = StartCoroutine(Co_PlayApproach(declaration));
+            if (_activeApproachDeclaration != null)
+                _activeApproachRoutine = routine;
+        }
 
         public void PlayResolution(CombatSession session, Action onComplete)
         {
@@ -76,6 +104,49 @@ namespace Game.Combat.Effects
                 StopCoroutine(_activeResolutionRoutine);
 
             CompleteActiveResolution();
+
+            if (_activeApproachRoutine != null)
+                StopCoroutine(_activeApproachRoutine);
+
+            CompleteActiveApproach();
+        }
+
+        private IEnumerator Co_PlayApproach(CombatAttackDeclaration declaration)
+        {
+            GameObject attackerObject = GetFieldObject(declaration.Attacker);
+            GameObject targetObject = GetFieldObject(declaration.Target);
+            if (attackerObject != null && targetObject != null)
+            {
+                cameraController?.FocusAction(declaration.Attacker, declaration.Target);
+                yield return MoveActorForSkill(
+                    attackerObject.transform,
+                    targetObject.transform,
+                    declaration.Skill);
+            }
+
+            CompleteActiveApproach();
+        }
+
+        private void CompleteActiveApproach()
+        {
+            if (_activeApproachDeclaration == null)
+                return;
+
+            Action completion = _activeApproachCompletion;
+            _activeApproachRoutine = null;
+            _activeApproachDeclaration = null;
+            _activeApproachCompletion = null;
+            completion?.Invoke();
+        }
+
+        private void CancelActiveApproachWithoutCompletion()
+        {
+            if (_activeApproachRoutine != null)
+                StopCoroutine(_activeApproachRoutine);
+
+            _activeApproachRoutine = null;
+            _activeApproachDeclaration = null;
+            _activeApproachCompletion = null;
         }
 
         private IEnumerator Co_PlayTurnAnimation(CombatTurn turn)

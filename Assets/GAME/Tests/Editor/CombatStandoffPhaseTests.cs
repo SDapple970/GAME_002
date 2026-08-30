@@ -134,6 +134,28 @@ namespace Game.Tests.Combat
             Assert.That(globalState.Current, Is.EqualTo(GameState.CombatPlanning));
         }
 
+        [TestCase(Phase.ApplyOutcome)]
+        [TestCase(Phase.ChainDecision)]
+        [TestCase(Phase.Chain)]
+        public void StandoffResolutionPhases_MapToExistingCombatResolvingGlobalState(Phase phase)
+        {
+            DestroyExistingGlobalOwners();
+            GameStateMachine globalState = CreateComponent<GameStateMachine>("GlobalState");
+            Invoke(globalState, "Awake");
+            GameFlowController flow = CreateComponent<GameFlowController>("Flow");
+            Invoke(flow, "Awake");
+            CombatEntryPoint entryPoint = CreateComponent<CombatEntryPoint>("Entry");
+            Invoke(entryPoint, "Awake");
+            Assert.That(
+                (bool)Invoke(entryPoint, "TrySynchronizeGlobalCombatState", Phase.Standoff),
+                Is.True);
+
+            bool synchronized = (bool)Invoke(entryPoint, "TrySynchronizeGlobalCombatState", phase);
+
+            Assert.That(synchronized, Is.True);
+            Assert.That(globalState.Current, Is.EqualTo(GameState.CombatResolving));
+        }
+
         [Test]
         public void Standoff_ShowsCombatContentWithoutOpeningLegacyPlanningPanel()
         {

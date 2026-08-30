@@ -65,6 +65,10 @@ Each loaded dungeon has exactly one `CombatRuntime`, `CombatEntryPoint`,
 dungeon-local roots. `InputService` and `InputRouter` are owned by
 `GameInputInstaller`, not by the player or HUD.
 
+`Actors/Player/PlayerRoot` owns exactly one `InteractionController` as a scene-added prefab-instance component. Keep it on the moving player root because target selection measures from the controller transform. Do not apply it to `Player.prefab`: Demo and mixed compatibility scenes keep their own scene-local controllers. The canonical `Gameplay/Interact` keyboard binding is `F`, and authored Production prompts must use `F` until a binding-display integration is added.
+
+The controller's `promptUI` reference is explicitly connected to `ProductionDungeonUI/FieldRoot/InteractionPromptHost`. The host stays active and owns a small field overlay Canvas plus `InteractionPromptUI`; only its child `InteractionPromptRoot` is toggled. `PromptText` uses `UI.Text` for compatibility with the existing serialized prompt API. This UI displays prompt text only and does not own input, `GameState`, target selection, or interaction execution.
+
 Never copy `Systems`, `RuntimeBootstrapper`, a second UI router, another reward
 binder, `CombatStateSyncer`, `CombatDemoFlowController`, debug start/smoke-test
 tools, auto planners, `SeamlessBattleManager`, or Legacy battle triggers into a
