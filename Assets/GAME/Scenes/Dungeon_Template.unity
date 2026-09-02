@@ -162,7 +162,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 87cfe026b9d86ee42b7072aeb1ea7480, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatEncounterGroup
   autoCollectChildren: 1
   enemies: []
@@ -198,6 +198,68 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2122203419}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &94016021
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1113879640}
+    m_Modifications:
+    - target: {fileID: 100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_Name
+      value: ProductionNpcInteraction
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -10
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+--- !u!4 &94016022 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+  m_PrefabInstance: {fileID: 94016021}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &116758818
 GameObject:
   m_ObjectHideFlags: 0
@@ -272,7 +334,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bfcba10177facee4a810d0800243b65d, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Interaction.InteractableObject
   promptText: "F: \uC870\uC0AC"
   interactOnce: 0
@@ -554,7 +616,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d687f8279a8fa234e956ba98e7d16b5d, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Enemies.FieldEnemyPatrolAI2D
   motor: {fileID: 775279493}
   player: {fileID: 1431050089}
@@ -575,7 +637,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 764465135c4707945a3166c3438d2998, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Adapters.CombatHpComponent
   hp: 10
   maxHp: 10
@@ -720,7 +782,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74cd501383f1d774d91c20a32f120982, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Adapters.CombatKeywordComponent
   weakness: 0
   resist: 0
@@ -734,7 +796,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 17ee971cdce4314498298e805db7b100, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Adapters.CombatSkillLoadoutComponent
   skillIds: 0b0000000c000000
 --- !u!114 &775279493
@@ -747,7 +809,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 83a0c264213754a4b8a0ecf864bca0d1, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Enemies.FieldEnemyMotor2D
   rb: {fileID: 775279488}
   visualRoot: {fileID: 775279484}
@@ -785,6 +847,56 @@ Transform:
   - {fileID: 1875491749}
   m_Father: {fileID: 1431623488}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &964350052
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 964350053}
+  - component: {fileID: 964350054}
+  m_Layer: 0
+  m_Name: StoryEventRunner
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &964350053
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 964350052}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1873044935}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &964350054
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 964350052}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b4fefaff238ca0440ade6062b17d3a1a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Story.StoryEventRunner
+  dialoguePanel: {fileID: 0}
+  storyDialogueHUD: {fileID: 1930999872}
+  timedChoiceDialoguePanel: {fileID: 0}
+  stateWhileRunning: 0
+  restoreExplorationOnEnd: 1
+  markCurrentEventCompletedOnEnd: 0
 --- !u!1 &985912120
 GameObject:
   m_ObjectHideFlags: 0
@@ -844,7 +956,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 94016022}
   m_Father: {fileID: 1115213729}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1115213728
@@ -1133,7 +1246,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 74cd501383f1d774d91c20a32f120982, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Adapters.CombatKeywordComponent
   weakness: 0
   resist: 0
@@ -1147,7 +1260,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 17ee971cdce4314498298e805db7b100, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Adapters.CombatSkillLoadoutComponent
   skillIds: 0b0000000c000000
 --- !u!114 &1388169078
@@ -1160,7 +1273,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 83a0c264213754a4b8a0ecf864bca0d1, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Enemies.FieldEnemyMotor2D
   rb: {fileID: 1388169082}
   visualRoot: {fileID: 1388169075}
@@ -1176,7 +1289,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d687f8279a8fa234e956ba98e7d16b5d, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Enemies.FieldEnemyPatrolAI2D
   motor: {fileID: 1388169078}
   player: {fileID: 1431050089}
@@ -1197,7 +1310,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 764465135c4707945a3166c3438d2998, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Adapters.CombatHpComponent
   hp: 10
   maxHp: 10
@@ -1406,7 +1519,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9b3a9bbb9385aef40886a08f02166bd5, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatEncounterTrigger2D
   entryPoint: {fileID: 1665839071176935754}
   enemyObject: {fileID: 775279483}
@@ -1635,7 +1748,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
   m_RenderShadows: 1
   m_RequiresDepthTextureOption: 2
@@ -1679,7 +1792,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d480f8399fe7dd547907228f5a674037, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.CameraSys.CameraFollow2D
   target: {fileID: 2122203419}
   offset: {x: 0, y: 1.5, z: -10}
@@ -1816,7 +1929,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 161f0608b7c2dfd46a69cffcc4fd3b84, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.RewardUIPanel
 --- !u!4 &1742702638 stripped
 Transform:
@@ -1842,7 +1955,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: eefb455ed4454aa469c8337c7a47bede, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Interaction.InteractionPromptUI
 --- !u!1 &1796023658
 GameObject:
@@ -1934,7 +2047,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 964350053}
   m_Father: {fileID: 721012617}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1875491748
@@ -1968,6 +2082,17 @@ Transform:
   m_Children: []
   m_Father: {fileID: 821167964}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1930999872 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8450166048040648017, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
+  m_PrefabInstance: {fileID: 1742702636}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 936fd672f5f14cb4aae7c282de7e9741, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Story.UI.StoryDialogueHUD
 --- !u!1 &1961567355
 GameObject:
   m_ObjectHideFlags: 0
@@ -2043,7 +2168,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 87cfe026b9d86ee42b7072aeb1ea7480, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatEncounterGroup
   autoCollectChildren: 1
   enemies: []
@@ -2091,7 +2216,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9b3a9bbb9385aef40886a08f02166bd5, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatEncounterTrigger2D
   entryPoint: {fileID: 1665839071176935754}
   enemyObject: {fileID: 1388169074}
@@ -2162,7 +2287,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7f64a15d9dce49058d7a8e5d72ade400, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Player.PlayerInputController
 --- !u!114 &2122203422 stripped
 MonoBehaviour:
@@ -2173,7 +2298,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cce9e8ee44bc43439dc063dec7710e92, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Player.PlayerFieldAttackController
 --- !u!114 &2122203423 stripped
 MonoBehaviour:
@@ -2184,7 +2309,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5a163238ad0c488bb63bf6463a4c31c2, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Player.PlayerMotor2D_New
 --- !u!50 &2122203427 stripped
 Rigidbody2D:
@@ -2201,7 +2326,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3eb2dbf0957c79d448aaddbafc9ce2b3, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Interaction.InteractionController
   promptUI: {fileID: 1742702641}
 --- !u!1001 &1645636291499357858
@@ -2472,7 +2597,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 87780b0c5573e6345a59272ccf2f5e65, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Core.CombatEntryPoint
 --- !u!114 &1665839071176935755 stripped
 MonoBehaviour:
@@ -2483,7 +2608,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 87771121262fd914cbcbb2d789f2deda, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Core.CombatFlowOrchestrator
 --- !u!1 &1665839071176935756 stripped
 GameObject:
@@ -2500,7 +2625,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fbf096185b8cd914cb6784548fefb4e0, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatCameraController
   targetCamera: {fileID: 1662575355}
   explorationCameraFollow: {fileID: 1662575358}

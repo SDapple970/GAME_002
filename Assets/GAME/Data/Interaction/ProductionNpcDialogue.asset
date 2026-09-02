@@ -13,5 +13,5 @@ MonoBehaviour:
   m_Name: ProductionNpcDialogue
   m_EditorClassIdentifier: Assembly-CSharp::Game.Interaction.StoryInteractionEventSO
   actionId: npc.dialogue.start
-  eventDefinition: {fileID: 11400000, guid: 5495c96dc43f8f64d8303b56b3147634, type: 2}
+  eventDefinition: {fileID: 11400000, guid: a4b2c6d8e0f14357a9b1c3d5e7f90246, type: 2}
   runner: {fileID: 0}

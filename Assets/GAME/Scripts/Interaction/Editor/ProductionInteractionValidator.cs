@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Game.Core;
+using Game.Story;
+using Game.Story.UI;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -97,7 +99,53 @@ namespace Game.Interaction.Editor
 
             ValidateProductionSources(issues);
             ValidateProductionNpcPrefabs(issues);
+            ValidateDungeonTemplateNarrative(issues);
             return issues;
+        }
+
+        private static void ValidateDungeonTemplateNarrative(List<string> issues)
+        {
+            const string path = "Assets/GAME/Scenes/Dungeon_Template.unity";
+            string originalPath = SceneManager.GetActiveScene().path;
+            try
+            {
+                EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                StoryEventRunner[] runners = UnityEngine.Object.FindObjectsByType<StoryEventRunner>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                StoryDialogueHUD[] huds = UnityEngine.Object.FindObjectsByType<StoryDialogueHUD>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                TimedChoicePanel[] choices = UnityEngine.Object.FindObjectsByType<TimedChoicePanel>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                if (runners.Length != 1)
+                    issues.Add($"Dungeon_Template requires exactly one StoryEventRunner; found {runners.Length}.");
+                if (huds.Length != 1 || !huds[0].IsPresentationReady)
+                    issues.Add("Dungeon_Template requires one ready StoryDialogueHUD.");
+                if (choices.Length != 1 || huds.Length != 1 || !huds[0].CanPresentChoices)
+                    issues.Add("Dungeon_Template requires one StoryDialogueHUD-connected TimedChoicePanel.");
+
+                InteractableObject[] npcs = UnityEngine.Object.FindObjectsByType<InteractableObject>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                    .Where(item => item.gameObject.name == "ProductionNpcInteraction")
+                    .ToArray();
+                if (npcs.Length != 1)
+                    issues.Add($"Dungeon_Template requires exactly one ProductionNpcInteraction instance; found {npcs.Length}.");
+                else
+                {
+                    Collider2D trigger = npcs[0].GetComponent<Collider2D>();
+                    if (trigger == null || !trigger.isTrigger)
+                        issues.Add("Dungeon_Template ProductionNpcInteraction requires a trigger Collider2D.");
+                    if (npcs[0].UsePolicy == InteractionUsePolicy.LegacyCompatibility)
+                        issues.Add("Dungeon_Template ProductionNpcInteraction cannot use LegacyCompatibility.");
+                    if (npcs[0].Events.Count != 1 || npcs[0].Events[0] is not StoryInteractionEventSO storyEvent ||
+                        !storyEvent.SupportsProductionExecution || storyEvent.EventDefinition == null)
+                    {
+                        issues.Add("Dungeon_Template ProductionNpcInteraction requires one valid Production Story event.");
+                    }
+                }
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(originalPath) && File.Exists(originalPath))
+                    EditorSceneManager.OpenScene(originalPath, OpenSceneMode.Single);
+                else
+                    EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            }
         }
 
         private static void ValidateProductionNpcPrefabs(List<string> issues)

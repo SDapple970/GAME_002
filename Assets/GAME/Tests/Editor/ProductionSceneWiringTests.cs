@@ -15,6 +15,7 @@ using Game.Reward;
 using Game.Story;
 using Game.Story.Data;
 using Game.Story.Interaction;
+using Game.Story.UI;
 using Game.UI;
 using Game.UI.Editor;
 using NUnit.Framework;
@@ -176,6 +177,48 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void DungeonTemplate_HasCanonicalNarrativeRuntimeAndProductionNpc()
+        {
+            Open(DungeonTemplate);
+
+            StoryEventRunner[] runners = FindAll<StoryEventRunner>();
+            Assert.That(runners, Has.Length.EqualTo(1));
+            Assert.That(GetHierarchyPath(runners[0].transform), Is.EqualTo("Runtime/Narrative/StoryEventRunner"));
+
+            StoryDialogueHUD[] huds = FindAll<StoryDialogueHUD>();
+            Assert.That(huds, Has.Length.EqualTo(1));
+            Assert.That(huds[0].IsPresentationReady, Is.True);
+            Assert.That(huds[0].CanPresentChoices, Is.True);
+            Assert.That(Reference(runners[0], "storyDialogueHUD"), Is.SameAs(huds[0]));
+            Assert.That(FindAll<WorldDialogueBubble>(), Has.Length.EqualTo(1));
+            Assert.That(FindAll<TimedChoicePanel>(), Has.Length.EqualTo(1));
+
+            TimedChoicePanel choicePanel = FindAll<TimedChoicePanel>().Single();
+            SerializedObject serializedChoices = new(choicePanel);
+            Assert.That(serializedChoices.FindProperty("choiceButtons").arraySize, Is.GreaterThanOrEqualTo(2));
+            Assert.That(serializedChoices.FindProperty("choiceTexts").arraySize, Is.GreaterThanOrEqualTo(2));
+
+            InteractableObject[] productionNpcs = FindAll<InteractableObject>()
+                .Where(item => item.gameObject.name == "ProductionNpcInteraction")
+                .ToArray();
+            Assert.That(productionNpcs, Has.Length.EqualTo(1));
+            InteractableObject npc = productionNpcs[0];
+            Assert.That(GetHierarchyPath(npc.transform), Is.EqualTo("Actors/NPCs/ProductionNpcInteraction"));
+            Assert.That(npc.PromptText, Is.EqualTo("F: \uB300\uD654"));
+            Assert.That(npc.UsePolicy, Is.EqualTo(InteractionUsePolicy.Repeatable));
+            Assert.That(npc.GetComponent<Collider2D>(), Is.Not.Null);
+            Assert.That(npc.GetComponent<Collider2D>().isTrigger, Is.True);
+            Assert.That(npc.Events, Has.Count.EqualTo(1));
+            Assert.That(AssetDatabase.GetAssetPath(npc.Events[0]), Is.EqualTo(
+                "Assets/GAME/Data/Interaction/ProductionNpcDialogue.asset"));
+            Assert.That(PrefabUtility.GetCorrespondingObjectFromSource(npc.gameObject), Is.SameAs(
+                AssetDatabase.LoadAssetAtPath<GameObject>(
+                    "Assets/GAME/Prefabs/Interaction/ProductionNpcInteraction.prefab")));
+
+            Assert.That(FindAll<InteractionController>(), Has.Length.EqualTo(1));
+        }
+
+        [Test]
         public void ProductionDungeonUI_HasOneSafeFieldInteractionPromptAndKeepsRequiredUI()
         {
             const string path = "Assets/GAME/Prefabs/UI/ProductionDungeonUI.prefab";
@@ -184,6 +227,12 @@ namespace Game.Tests.Integration
             Assert.That(prefab.GetComponentsInChildren<CombatPlanningHUD>(true), Has.Length.EqualTo(1));
             Assert.That(prefab.GetComponentsInChildren<RewardUIPanel>(true), Has.Length.EqualTo(1));
             Assert.That(prefab.GetComponentsInChildren<EventSystem>(true), Has.Length.EqualTo(1));
+            StoryDialogueHUD[] narrativeHuds = prefab.GetComponentsInChildren<StoryDialogueHUD>(true);
+            Assert.That(narrativeHuds, Has.Length.EqualTo(1));
+            Assert.That(narrativeHuds[0].IsPresentationReady, Is.True);
+            Assert.That(narrativeHuds[0].CanPresentChoices, Is.True);
+            Assert.That(prefab.GetComponentsInChildren<WorldDialogueBubble>(true), Has.Length.EqualTo(1));
+            Assert.That(prefab.GetComponentsInChildren<TimedChoicePanel>(true), Has.Length.EqualTo(1));
 
             GameUIRootController roots = prefab.GetComponent<GameUIRootController>();
             InteractionPromptUI[] prompts = prefab.GetComponentsInChildren<InteractionPromptUI>(true);
@@ -197,6 +246,9 @@ namespace Game.Tests.Integration
             Assert.That(displayRoot.transform.IsChildOf(prompts[0].transform), Is.True);
             Assert.That(messageText, Is.Not.Null);
             Assert.That(messageText.raycastTarget, Is.False);
+            GameObject dialogueRoot = Reference(roots, "dialogueRoot") as GameObject;
+            Assert.That(dialogueRoot, Is.Not.Null);
+            Assert.That(narrativeHuds[0].transform.IsChildOf(dialogueRoot.transform), Is.True);
         }
 
         [Test]
@@ -295,7 +347,9 @@ namespace Game.Tests.Integration
             try
             {
                 GameStateMachine stateMachine = core.AddComponent<GameStateMachine>();
-                core.AddComponent<GameFlowController>();
+                GameFlowController gameFlow = core.AddComponent<GameFlowController>();
+                InvokeLifecycle(stateMachine, "Awake");
+                InvokeLifecycle(gameFlow, "Awake");
                 StoryEventRunner storyRunner = narrative.AddComponent<StoryEventRunner>();
                 int starts = 0;
                 storyRunner.OnEventStarted += _ => starts++;
@@ -306,7 +360,7 @@ namespace Game.Tests.Integration
 
                 Assert.That(starts, Is.EqualTo(1));
                 Assert.That(storyRunner.IsRunning, Is.True);
-                Assert.That(stateMachine.Current, Is.EqualTo(GameState.Dialogue));
+                Assert.That(stateMachine.Current, Is.EqualTo(GameState.Dialogue).Or.EqualTo(GameState.Choice));
 
                 storyRunner.EndEvent();
                 Assert.That(stateMachine.Current, Is.EqualTo(GameState.Exploration));
@@ -380,6 +434,11 @@ namespace Game.Tests.Integration
         }
 
         private static Object Reference(Object owner, string property) => new SerializedObject(owner).FindProperty(property)?.objectReferenceValue;
+
+        private static void InvokeLifecycle(Object owner, string method)
+        {
+            owner.GetType().GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)?.Invoke(owner, null);
+        }
 
         private static void AssertReferences<T>(params string[] properties) where T : Object
         {

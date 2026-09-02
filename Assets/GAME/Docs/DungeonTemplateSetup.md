@@ -137,6 +137,12 @@ dungeon integrations. They must call the existing Production flow/services and
 must not become alternate owners. Authored quest, dialogue, choice, and save
 data are intentionally absent from this template.
 
+## Production Narrative and NPC interaction
+
+`Runtime/Narrative/StoryEventRunner` is the single scene-local Production Story owner. It is explicitly connected to `ProductionDungeonUI/DialogueRoot/StoryDialogueHUD`. The HUD reuses the existing `WorldDialogueBubble` and `TimedChoicePanel` Production presenters; `UIScreenRouter` continues to activate `DialogueRoot` and `ChoiceRoot` from `GameState`.
+
+`Actors/NPCs/ProductionNpcInteraction` is an instance of the reusable Production NPC fixture. It uses `F: 대화`, `Repeatable`, a trigger `Collider2D`, and `ProductionNpcDialogue.asset`. That event references `ProductionNpcDialogueValidation.asset`, an effect-free validation Story with a choice, rather than gameplay Story content. The NPC is placed at `(-10, 1, 0)`, left of the authored Player start and away from `TestEncounter_01`. The template runner does not mark this validation Story completed, so repeatable conversation does not alter Story completion progress.
+
 ## Manual Play Mode validation
 
 1. Start from `TitleScene` and enter a copy through `SceneFlowController`;
