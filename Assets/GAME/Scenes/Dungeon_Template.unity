@@ -145,7 +145,7 @@ Transform:
   m_GameObject: {fileID: 77816598}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 4, y: 1, z: 0}
+  m_LocalPosition: {x: 2.4, y: 1, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -166,7 +166,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatEncounterGroup
   autoCollectChildren: 1
   enemies: []
-  encounterId: template.test.01
+  encounterId: validation.production.npc.quest.kill
 --- !u!1 &90857362
 GameObject:
   m_ObjectHideFlags: 0
@@ -560,6 +560,7 @@ Transform:
   - {fileID: 1961567356}
   - {fileID: 1873044935}
   - {fileID: 1805323964}
+  - {fileID: 7100000012}
   - {fileID: 255479124}
   - {fileID: 189927634}
   m_Father: {fileID: 0}
@@ -1524,7 +1525,7 @@ MonoBehaviour:
   entryPoint: {fileID: 1665839071176935754}
   enemyObject: {fileID: 775279483}
   encounterGroup: {fileID: 77816600}
-  encounterId: template.test.01
+  encounterId: validation.production.npc.quest.kill
   openingEffectOrNull: {fileID: 11400000, guid: 8bac46495a7229b43be24e7b1ed682b1, type: 2}
   startReason: 0
   initiativeSide: 0
@@ -1807,6 +1808,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 189927634}
     m_Modifications:
+    - target: {fileID: 910000000000000003, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
+      propertyPath: questRuntime
+      value: 
+      objectReference: {fileID: 7100000001}
     - target: {fileID: 2231473697581713873, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
       propertyPath: combatRoot
       value: 
@@ -1997,6 +2002,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1805323964}
+  - component: {fileID: 7100000001}
+  - component: {fileID: 7100000002}
+  - component: {fileID: 7100000003}
+  - component: {fileID: 7100000004}
   m_Layer: 0
   m_Name: Quest
   m_TagString: Untagged
@@ -2151,7 +2160,7 @@ Transform:
   m_GameObject: {fileID: 1992528910}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 22.15, y: 1, z: 0}
+  m_LocalPosition: {x: 26.66, y: 1, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -2172,7 +2181,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatEncounterGroup
   autoCollectChildren: 1
   enemies: []
-  encounterId: template.test.01
+  encounterId: template.test.02
 --- !u!1 &2121896103
 GameObject:
   m_ObjectHideFlags: 0
@@ -2221,7 +2230,7 @@ MonoBehaviour:
   entryPoint: {fileID: 1665839071176935754}
   enemyObject: {fileID: 1388169074}
   encounterGroup: {fileID: 1992528912}
-  encounterId: template.test.01
+  encounterId: template.test.02
   openingEffectOrNull: {fileID: 11400000, guid: 8bac46495a7229b43be24e7b1ed682b1, type: 2}
   startReason: 0
   initiativeSide: 0
@@ -2329,6 +2338,132 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Interaction.InteractionController
   promptUI: {fileID: 1742702641}
+--- !u!114 &7100000001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1805323963}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ad7b535a038a57c4682a3eb7c79c05f3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.QuestRuntime
+  missionManager: {fileID: 0}
+  questDefinitions:
+  - {fileID: 11400000, guid: d364263c840b4fafb924c5b03ba7d7a9, type: 2}
+--- !u!114 &7100000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1805323963}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e24b398bb96a3b540b9c3a209f0499be, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.QuestObjectiveTracker
+  questRuntime: {fileID: 7100000001}
+--- !u!114 &7100000003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1805323963}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 66e6def39c5ae3b44969aa0f4cf9449a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.QuestCompletionFlow
+  questRuntime: {fileID: 7100000001}
+  rewardService: {fileID: 7100000014}
+  daySettlementFlow: {fileID: 0}
+  enterRewardStateOnCompletion: 0
+  grantRewardOnCompletion: 1
+  notifyDaySettlementOnQuestCompletion: 0
+  fallbackRewardGold: 0
+  fallbackRewardExp: 0
+--- !u!114 &7100000004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1805323963}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a936f2fc965d4141bc4e7fa357ff669e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.CombatQuestObjectivePublisher
+  combatEntryPoint: {fileID: 1665839071176935754}
+  targetEncounter: {fileID: 77816600}
+  questId: validation.production.npc.quest
+  objectiveId: defeat_validation_target
+  eventType: 10
+--- !u!1 &7100000011
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7100000012}
+  - component: {fileID: 7100000013}
+  - component: {fileID: 7100000014}
+  m_Layer: 0
+  m_Name: Reward
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7100000012
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000011}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 721012617}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7100000013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000011}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 635974253fafe8b4c8b41f25d140fd18, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.NonCombat.Inventory.CurrencyWallet
+  gold: 0
+--- !u!114 &7100000014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000011}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a3b8f897e985e74ba9301312fa697fa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Reward.RewardService
+  currencyWallet: {fileID: 7100000013}
+  inventoryService: {fileID: 0}
+  characterProgressionService: {fileID: 0}
 --- !u!1001 &1645636291499357858
 PrefabInstance:
   m_ObjectHideFlags: 0

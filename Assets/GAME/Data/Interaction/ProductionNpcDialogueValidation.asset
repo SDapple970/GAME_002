@@ -20,15 +20,31 @@ MonoBehaviour:
     portrait: {fileID: 0}
     body: "Production NPC interaction validation dialogue."
     choices:
-    - choiceId: continue
-      text: Continue
+    - choiceId: accept_quest
+      text: Accept quest
       nextNodeId: end
       conditions: []
-      effects: []
+      effects:
+      - type: 14
+        key:
+        boolValue: 0
+        intValue: 0
+        personaStat: 0
+        xpAmount: 0
+        missionDefinition: {fileID: 0}
+        missionId:
+        objectiveId:
+        questEventType: 0
+        questDefinition: {fileID: 11400000, guid: d364263c840b4fafb924c5b03ba7d7a9, type: 2}
+        rewardSourceId:
+        rewardGold: 0
+        rewardExp: 0
+        rewardItemId:
+        rewardItemCount: 0
       hideIfConditionNotMet: 1
       disabledReason:
-    - choiceId: finish
-      text: Finish
+    - choiceId: reject_quest
+      text: Decline quest
       nextNodeId: end
       conditions: []
       effects: []

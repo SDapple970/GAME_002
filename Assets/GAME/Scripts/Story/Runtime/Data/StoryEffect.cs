@@ -26,7 +26,8 @@ namespace Game.Story.Data
         CompleteMission,
         CompleteMissionObjective,
         PublishQuestEvent,
-        GrantReward
+        GrantReward,
+        StartQuest
     }
 
     [System.Serializable]
@@ -42,6 +43,7 @@ namespace Game.Story.Data
         [SerializeField] private string missionId;
         [SerializeField] private string objectiveId;
         [SerializeField] private QuestEventType questEventType = QuestEventType.Unknown;
+        [SerializeField] private QuestDefinitionSO questDefinition;
         [SerializeField] private string rewardSourceId;
         [SerializeField] private int rewardGold;
         [SerializeField] private int rewardExp;
@@ -122,6 +124,9 @@ namespace Game.Story.Data
                 case StoryEffectType.GrantReward:
                     GrantReward(context);
                     return;
+                case StoryEffectType.StartQuest:
+                    StartQuest();
+                    return;
                 default:
                     return;
             }
@@ -180,6 +185,24 @@ namespace Game.Story.Data
                     context.OutcomeId),
                 intValue,
                 context.Source));
+        }
+
+        private void StartQuest()
+        {
+            if (questDefinition == null)
+            {
+                Debug.LogWarning("[StoryEffect] QuestDefinitionSO is missing. Story quest start was ignored.");
+                return;
+            }
+
+            QuestRuntime runtime = Object.FindFirstObjectByType<QuestRuntime>();
+            if (runtime == null)
+            {
+                Debug.LogWarning($"[StoryEffect] QuestRuntime missing for quest='{questDefinition.QuestId}'.");
+                return;
+            }
+
+            runtime.StartQuest(questDefinition);
         }
 
         private bool CanUseFlagEffect()

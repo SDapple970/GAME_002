@@ -1,12 +1,13 @@
 using System.Collections.Generic;
 using Game.Core;
 using Game.Daily;
+using Game.NonCombat.Save;
 using Game.Reward;
 using UnityEngine;
 
 namespace Game.Quest
 {
-    public sealed class QuestCompletionFlow : MonoBehaviour
+    public sealed class QuestCompletionFlow : MonoBehaviour, ISaveDataConsumer
     {
         [SerializeField] private QuestRuntime questRuntime;
         [SerializeField] private RewardService rewardService;
@@ -49,6 +50,16 @@ namespace Game.Quest
         {
             ResolveReferences();
             questRuntime?.CompleteQuest(questId);
+        }
+
+        public void RestoreSaveData(GameSaveData saveData)
+        {
+            // These sets are only in-session delivery guards. They must never carry a
+            // pre-load completion into the restored snapshot. RewardService owns the
+            // persisted reward ledger and remains the authoritative idempotence guard.
+            _claimedQuestIds.Clear();
+            _rewardedQuestIds.Clear();
+            _pendingQuestIds.Clear();
         }
 
         private void HandleQuestCompleted(string questId)
@@ -193,11 +204,21 @@ namespace Game.Quest
                 return RewardGrantResult.Empty;
             }
 
-            return rewardService.GrantReward(new RewardGrantRequest(
+            RewardResult reward = rewardService.GrantQuestCompletion(questId, gold, exp);
+            return new RewardGrantResult(
                 RewardSourceType.QuestCompletion,
                 $"quest:{questId}",
                 gold,
-                exp));
+                exp,
+                reward.Gold,
+                reward.Exp,
+                null,
+                0,
+                null,
+                0,
+                reward.DuplicateBlocked,
+                reward.PartialFailure,
+                false);
         }
 
         private void TryNotifyDaySettlement(string questId, RewardGrantResult rewardResult)

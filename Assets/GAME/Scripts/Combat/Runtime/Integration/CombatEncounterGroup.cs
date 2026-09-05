@@ -15,6 +15,7 @@ namespace Game.Combat.Integration
         private readonly HashSet<int> _warnedInvalidAutoChildren = new();
         private readonly HashSet<int> _warnedInvalidManualMembers = new();
         private readonly HashSet<int> _playerColliderIds = new();
+        private readonly Dictionary<GameObject, EncounterMemberRestoreState> _availableMemberStates = new();
         private Object _reservationOwner;
         private EncounterRuntimeLifecycle _lifecycle;
         private string _activeCompletionId;
@@ -36,11 +37,12 @@ namespace Game.Combat.Integration
 
         public void RestoreSaveData(GameSaveData saveData)
         {
-            if (string.IsNullOrWhiteSpace(encounterId) || saveData?.world?.clearedEncounterIds == null || !saveData.world.clearedEncounterIds.Contains(encounterId)) return;
-            _lifecycle = EncounterRuntimeLifecycle.Cleared;
-            _reservationOwner = null; _activeCompletionId = null;
-            List<GameObject> activeEnemies = GetActiveEnemies();
-            for (int i = 0; i < activeEnemies.Count; i++) if (activeEnemies[i] != null) activeEnemies[i].SetActive(false);
+            if (string.IsNullOrWhiteSpace(encounterId))
+                return;
+
+            bool savedCleared = saveData?.world?.clearedEncounterIds != null &&
+                                saveData.world.clearedEncounterIds.Contains(encounterId);
+            RestoreFromSnapshot(savedCleared);
         }
 
         public List<GameObject> GetActiveEnemies()
@@ -87,6 +89,7 @@ namespace Game.Combat.Integration
             if (requester == null || _lifecycle != EncounterRuntimeLifecycle.Idle)
                 return false;
 
+            CaptureAvailableMemberStates(replaceExisting: true);
             _reservationOwner = requester;
             _lifecycle = EncounterRuntimeLifecycle.StartReserved;
             _explorationObserved = false;
@@ -130,6 +133,7 @@ namespace Game.Combat.Integration
             if (_lifecycle != EncounterRuntimeLifecycle.Idle && _lifecycle != EncounterRuntimeLifecycle.StartReserved)
                 return;
 
+            CaptureAvailableMemberStates(replaceExisting: false);
             _reservationOwner = null;
             _activeCompletionId = completionId;
             _processedCompletionId = null;
@@ -203,6 +207,101 @@ namespace Game.Combat.Integration
             _processedCompletionId = null;
             _explorationObserved = false;
             _lifecycle = EncounterRuntimeLifecycle.Idle;
+        }
+
+        // Save restore is the only authoritative rewind path. Normal gameplay still
+        // cannot rearm a cleared encounter through TryRearm.
+        private void RestoreFromSnapshot(bool savedCleared)
+        {
+            _reservationOwner = null;
+            _activeCompletionId = null;
+            _processedCompletionId = null;
+            _explorationObserved = false;
+            _playerColliderIds.Clear();
+
+            List<GameObject> members = GetOwnedMembersIncludingInactive();
+            if (savedCleared)
+            {
+                _lifecycle = EncounterRuntimeLifecycle.Cleared;
+                for (int i = 0; i < members.Count; i++)
+                    if (members[i] != null)
+                        members[i].SetActive(false);
+                return;
+            }
+
+            _lifecycle = EncounterRuntimeLifecycle.Idle;
+            for (int i = 0; i < members.Count; i++)
+                RestoreAvailableMember(members[i]);
+        }
+
+        private void CaptureAvailableMemberStates(bool replaceExisting)
+        {
+            List<GameObject> members = GetOwnedMembersIncludingInactive();
+            for (int i = 0; i < members.Count; i++)
+            {
+                GameObject member = members[i];
+                if (member == null || !member.activeInHierarchy ||
+                    (!replaceExisting && _availableMemberStates.ContainsKey(member)))
+                    continue;
+
+                EncounterMemberRestoreState state = EncounterMemberRestoreState.Capture(member);
+                if (state != null)
+                    _availableMemberStates[member] = state;
+            }
+        }
+
+        private List<GameObject> GetOwnedMembersIncludingInactive()
+        {
+            List<GameObject> result = new();
+            HashSet<GameObject> seen = new();
+
+            if (!autoCollectChildren || HasManualMembers())
+            {
+                if (enemies == null)
+                    return result;
+
+                for (int i = 0; i < enemies.Count; i++)
+                {
+                    GameObject candidate = enemies[i];
+                    if (candidate != null && seen.Add(candidate))
+                        result.Add(candidate);
+                }
+
+                return result;
+            }
+
+            for (int i = 0; i < transform.childCount; i++)
+            {
+                Transform child = transform.GetChild(i);
+                GameObject candidate = child != null ? child.gameObject : null;
+                HpAccessor accessor = HpAccessor.TryCreate(candidate);
+                if (candidate != null && accessor != null && accessor.IsValid && seen.Add(candidate))
+                    result.Add(candidate);
+            }
+
+            return result;
+        }
+
+        private void RestoreAvailableMember(GameObject member)
+        {
+            if (member == null)
+                return;
+
+            if (_availableMemberStates.TryGetValue(member, out EncounterMemberRestoreState state))
+            {
+                state.Restore();
+                return;
+            }
+
+            HpAccessor accessor = HpAccessor.TryCreate(member);
+            if (accessor != null && accessor.IsValid)
+            {
+                int maxHp = accessor.GetMaxHpOrCurrent();
+                if (maxHp > 0)
+                    accessor.SetHp(maxHp);
+            }
+
+            member.SetActive(true);
         }
 
         EncounterRuntimeLifecycle ICombatEncounterRuntimeOwner.Lifecycle => Lifecycle;

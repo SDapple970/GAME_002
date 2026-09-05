@@ -43,6 +43,7 @@ namespace Game.Combat.Integration
         private string _activeCompletionId;
         private string _processedCompletionId;
         private bool _explorationObserved;
+        private EncounterMemberRestoreState _availableEnemyState;
 
         internal ICombatEncounterRuntimeOwner RuntimeOwner => encounterGroup != null ? encounterGroup : this;
         internal EncounterRuntimeLifecycle Lifecycle => encounterGroup != null ? encounterGroup.Lifecycle : _lifecycle;
@@ -60,10 +61,12 @@ namespace Game.Combat.Integration
 
         public void RestoreSaveData(GameSaveData saveData)
         {
-            if (encounterGroup != null || string.IsNullOrWhiteSpace(encounterId) || saveData?.world?.clearedEncounterIds == null || !saveData.world.clearedEncounterIds.Contains(encounterId)) return;
-            _lifecycle = EncounterRuntimeLifecycle.Cleared;
-            _reservationOwner = null; _activeCompletionId = null;
-            gameObject.SetActive(false);
+            if (encounterGroup != null || string.IsNullOrWhiteSpace(encounterId))
+                return;
+
+            bool savedCleared = saveData?.world?.clearedEncounterIds != null &&
+                                saveData.world.clearedEncounterIds.Contains(encounterId);
+            RestoreFromSnapshot(savedCleared);
         }
 
         private void Awake()
@@ -206,6 +209,7 @@ namespace Game.Combat.Integration
             if (requester == null || _lifecycle != EncounterRuntimeLifecycle.Idle)
                 return false;
 
+            CaptureAvailableEnemyState(replaceExisting: true);
             _reservationOwner = requester;
             _lifecycle = EncounterRuntimeLifecycle.StartReserved;
             _explorationObserved = false;
@@ -267,6 +271,7 @@ namespace Game.Combat.Integration
             if (_lifecycle != EncounterRuntimeLifecycle.Idle && _lifecycle != EncounterRuntimeLifecycle.StartReserved)
                 return;
 
+            CaptureAvailableEnemyState(replaceExisting: false);
             _reservationOwner = null;
             _activeCompletionId = completionId;
             _processedCompletionId = null;
@@ -365,6 +370,68 @@ namespace Game.Combat.Integration
             _explorationObserved = false;
             _lifecycle = EncounterRuntimeLifecycle.Idle;
             _armed = true;
+        }
+
+        // Grouped triggers defer entirely to CombatEncounterGroup. This private path
+        // exists only for standalone trigger owners during authoritative save restore.
+        private void RestoreFromSnapshot(bool savedCleared)
+        {
+            _reservationOwner = null;
+            _activeCompletionId = null;
+            _processedCompletionId = null;
+            _explorationObserved = false;
+            _playerColliderIds.Clear();
+            _requestInProgress = false;
+            _lastRequestFrame = -1;
+
+            GameObject fieldEnemy = enemyObject != null ? enemyObject : gameObject;
+            if (savedCleared)
+            {
+                _lifecycle = EncounterRuntimeLifecycle.Cleared;
+                _armed = false;
+                if (fieldEnemy != null)
+                    fieldEnemy.SetActive(false);
+                if (fieldEnemy != gameObject)
+                    gameObject.SetActive(false);
+                return;
+            }
+
+            _lifecycle = EncounterRuntimeLifecycle.Idle;
+            _armed = true;
+            RestoreAvailableEnemy(fieldEnemy);
+            gameObject.SetActive(true);
+        }
+
+        private void CaptureAvailableEnemyState(bool replaceExisting)
+        {
+            if (!replaceExisting && _availableEnemyState != null)
+                return;
+
+            GameObject fieldEnemy = enemyObject != null ? enemyObject : gameObject;
+            if (fieldEnemy != null && fieldEnemy.activeInHierarchy)
+                _availableEnemyState = EncounterMemberRestoreState.Capture(fieldEnemy);
+        }
+
+        private void RestoreAvailableEnemy(GameObject fieldEnemy)
+        {
+            if (fieldEnemy == null)
+                return;
+
+            if (_availableEnemyState != null)
+            {
+                _availableEnemyState.Restore();
+                return;
+            }
+
+            HpAccessor accessor = HpAccessor.TryCreate(fieldEnemy);
+            if (accessor != null && accessor.IsValid)
+            {
+                int maxHp = accessor.GetMaxHpOrCurrent();
+                if (maxHp > 0)
+                    accessor.SetHp(maxHp);
+            }
+
+            fieldEnemy.SetActive(true);
         }
 
         EncounterRuntimeLifecycle ICombatEncounterRuntimeOwner.Lifecycle => Lifecycle;

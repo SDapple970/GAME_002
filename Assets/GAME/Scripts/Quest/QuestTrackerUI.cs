@@ -56,6 +56,7 @@ namespace Game.Quest
                 questRuntime.OnQuestFailed += HandleQuestFailed;
                 questRuntime.OnQuestRetried += HandleQuestRetried;
                 questRuntime.OnObjectiveVisibilityChanged += HandleObjectiveVisibilityChanged;
+                questRuntime.OnStateRestored += HandleQuestStateRestored;
                 _runtimeSubscribed = true;
             }
 
@@ -76,6 +77,7 @@ namespace Game.Quest
                 questRuntime.OnQuestFailed -= HandleQuestFailed;
                 questRuntime.OnQuestRetried -= HandleQuestRetried;
                 questRuntime.OnObjectiveVisibilityChanged -= HandleObjectiveVisibilityChanged;
+                questRuntime.OnStateRestored -= HandleQuestStateRestored;
             }
 
             if (_legacySubscribed && questManager != null)
@@ -107,6 +109,8 @@ namespace Game.Quest
         private void HandleQuestRetried(string questId, int attempt) => RefreshCurrent();
 
         private void HandleObjectiveVisibilityChanged(string questId, string objectiveId, bool visible) => RefreshCurrent();
+
+        private void HandleQuestStateRestored() => RefreshCurrent();
 
         private void RefreshCurrent()
         {

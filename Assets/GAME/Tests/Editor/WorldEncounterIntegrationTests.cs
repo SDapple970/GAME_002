@@ -8,6 +8,7 @@ using Game.Combat.Integration;
 using Game.Combat.Model;
 using Game.Core;
 using Game.Enemies;
+using Game.NonCombat.Save;
 using Game.Player;
 using NUnit.Framework;
 using UnityEngine;
@@ -155,6 +156,60 @@ namespace Game.Tests.Combat
             group.CompleteOutcome(result, false);
             group.ObserveExploration();
             Assert.That(group.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.Cleared));
+            Assert.That(group.TryReserve(_entry), Is.False);
+        }
+
+        [Test]
+        public void GroupRestore_UnclearedSnapshotRewindsClearedEncounterToAvailable()
+        {
+            CombatEncounterGroup group = CreateGroup();
+            SetField(group, "encounterId", "rewind.group");
+            GameObject enemy = CreateCombatant("Enemy", 10, group.transform);
+            CombatHpComponent hp = enemy.GetComponent<CombatHpComponent>();
+            FieldEnemyMotor2D motor = enemy.AddComponent<FieldEnemyMotor2D>();
+            FieldEnemyPatrolAI2D patrol = enemy.AddComponent<FieldEnemyPatrolAI2D>();
+            Vector3 savedPosition = new(3f, 2f, 0f);
+            enemy.transform.position = savedPosition;
+            group.AdoptAcceptedSession("old-completion");
+            CombatResult result = Result("old-completion", CombatEndReason.Victory);
+            group.TryBeginOutcome(result);
+            group.CompleteOutcome(result, false);
+            hp.HP = 0;
+            motor.enabled = false;
+            patrol.enabled = false;
+            enemy.GetComponent<Rigidbody2D>().simulated = false;
+            enemy.transform.position = Vector3.zero;
+            enemy.SetActive(false);
+            int combatResults = 0;
+            _entry.OnCombatEnded += _ => combatResults++;
+
+            group.RestoreSaveData(new GameSaveData());
+
+            Assert.That(group.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.Idle));
+            Assert.That(group.ActiveCompletionId, Is.Null);
+            Assert.That(enemy.activeSelf, Is.True);
+            Assert.That(hp.HP, Is.EqualTo(hp.MaxHP));
+            Assert.That(enemy.transform.position, Is.EqualTo(savedPosition));
+            Assert.That(motor.enabled, Is.True);
+            Assert.That(patrol.enabled, Is.True);
+            Assert.That(enemy.GetComponent<Rigidbody2D>().simulated, Is.True);
+            Assert.That(group.TryReserve(_entry), Is.True);
+            Assert.That(combatResults, Is.Zero);
+        }
+
+        [Test]
+        public void GroupRestore_ClearedSnapshotKeepsEncounterClearedAndEnemyInactive()
+        {
+            CombatEncounterGroup group = CreateGroup();
+            SetField(group, "encounterId", "persisted.group");
+            GameObject enemy = CreateCombatant("Enemy", 10, group.transform);
+            GameSaveData save = new();
+            save.world.clearedEncounterIds.Add("persisted.group");
+
+            group.RestoreSaveData(save);
+
+            Assert.That(group.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.Cleared));
+            Assert.That(enemy.activeSelf, Is.False);
             Assert.That(group.TryReserve(_entry), Is.False);
         }
 
@@ -325,6 +380,48 @@ namespace Game.Tests.Combat
             trigger.enabled = false;
             trigger.enabled = true;
             Assert.That(trigger.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.Cleared));
+        }
+
+        [Test]
+        public void StandaloneTriggerRestore_UnclearedSnapshotRewindsFieldEnemyAndLifecycle()
+        {
+            GameObject enemy = CreateCombatant("Enemy", 10);
+            CombatHpComponent hp = enemy.GetComponent<CombatHpComponent>();
+            CombatEncounterTrigger2D trigger = CreateTrigger("Trigger", enemy.transform);
+            SetField(trigger, "encounterId", "rewind.trigger");
+            SetField(trigger, "enemyObject", enemy);
+            trigger.AdoptAcceptedSession("old-completion");
+            CombatResult result = Result("old-completion", CombatEndReason.Victory);
+            trigger.TryBeginOutcome(result);
+            trigger.CompleteOutcome(result, false);
+            hp.HP = 0;
+            enemy.SetActive(false);
+
+            trigger.RestoreSaveData(new GameSaveData());
+
+            Assert.That(trigger.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.Idle));
+            Assert.That(trigger.ActiveCompletionId, Is.Null);
+            Assert.That(enemy.activeSelf, Is.True);
+            Assert.That(hp.HP, Is.EqualTo(hp.MaxHP));
+            Assert.That(trigger.TryReserve(_entry), Is.True);
+        }
+
+        [Test]
+        public void StandaloneTriggerRestore_ClearedSnapshotKeepsFieldEnemyInactive()
+        {
+            GameObject enemy = CreateCombatant("Enemy", 10);
+            CombatEncounterTrigger2D trigger = CreateTrigger("Trigger", enemy.transform);
+            SetField(trigger, "encounterId", "persisted.trigger");
+            SetField(trigger, "enemyObject", enemy);
+            GameSaveData save = new();
+            save.world.clearedEncounterIds.Add("persisted.trigger");
+
+            trigger.RestoreSaveData(save);
+
+            Assert.That(trigger.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.Cleared));
+            Assert.That(enemy.activeSelf, Is.False);
+            Assert.That(trigger.gameObject.activeSelf, Is.False);
+            Assert.That(trigger.TryReserve(_entry), Is.False);
         }
 
         [Test]

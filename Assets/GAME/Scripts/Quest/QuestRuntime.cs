@@ -22,6 +22,10 @@ namespace Game.Quest
         public event Action<string, int> OnQuestRetried;
         public event Action<string, string, bool> OnObjectiveVisibilityChanged;
         public event Action<string, string, int, int> OnObjectiveProgressChanged;
+        // Restore is a state replacement, not gameplay progression. Consumers that only
+        // need to repaint authoritative quest data can listen here without receiving a
+        // start, progress, completion, or failure callback.
+        public event Action OnStateRestored;
 
         private void Awake()
         {
@@ -480,12 +484,22 @@ namespace Game.Quest
 
         public void RestoreSaveData(GameSaveData saveData)
         {
-            if (saveData?.quest?.quests == null)
-                return;
+            // A load snapshot is authoritative. Clear pre-load state first so loading an
+            // older or payload-less save cannot retain an active/completed quest from the
+            // current session. Re-register authored definitions as inactive defaults.
+            _runtimeByQuestId.Clear();
+            RegisterSerializedDefinitions();
 
-            for (int i = 0; i < saveData.quest.quests.Count; i++)
+            List<QuestStateSaveData> savedQuests = saveData?.quest?.quests;
+            if (savedQuests == null)
             {
-                QuestStateSaveData questState = saveData.quest.quests[i];
+                OnStateRestored?.Invoke();
+                return;
+            }
+
+            for (int i = 0; i < savedQuests.Count; i++)
+            {
+                QuestStateSaveData questState = savedQuests[i];
                 if (questState == null || string.IsNullOrWhiteSpace(questState.questId))
                     continue;
 
@@ -508,6 +522,8 @@ namespace Game.Quest
                 state.ApplyRevealedObjectiveIds(questState.revealedObjectiveIds);
                 state.NormalizeRestoredGroup();
             }
+
+            OnStateRestored?.Invoke();
         }
 
         private void ApplyProgressChange(RuntimeQuestState state, string objectiveId, int next, int requiredCount)

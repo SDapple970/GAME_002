@@ -216,6 +216,78 @@ namespace Game.Tests.Integration
                     "Assets/GAME/Prefabs/Interaction/ProductionNpcInteraction.prefab")));
 
             Assert.That(FindAll<InteractionController>(), Has.Length.EqualTo(1));
+
+            QuestRuntime[] runtimes = FindAll<QuestRuntime>();
+            QuestObjectiveTracker[] objectiveTrackers = FindAll<QuestObjectiveTracker>();
+            QuestCompletionFlow[] completionFlows = FindAll<QuestCompletionFlow>();
+            CombatQuestObjectivePublisher[] combatQuestPublishers = FindAll<CombatQuestObjectivePublisher>();
+            QuestTrackerUI[] questTrackers = FindAll<QuestTrackerUI>();
+            RewardService[] rewardServices = FindAll<RewardService>();
+            CurrencyWallet[] wallets = FindAll<CurrencyWallet>();
+            Assert.That(runtimes, Has.Length.EqualTo(1));
+            Assert.That(GetHierarchyPath(runtimes[0].transform), Is.EqualTo("Runtime/Quest"));
+            Assert.That(objectiveTrackers, Has.Length.EqualTo(1));
+            Assert.That(completionFlows, Has.Length.EqualTo(1));
+            Assert.That(combatQuestPublishers, Has.Length.EqualTo(1));
+            Assert.That(questTrackers, Has.Length.EqualTo(1));
+            Assert.That(rewardServices, Has.Length.EqualTo(1));
+            Assert.That(wallets, Has.Length.EqualTo(1));
+            Assert.That(Reference(objectiveTrackers[0], "questRuntime"), Is.SameAs(runtimes[0]));
+            Assert.That(Reference(completionFlows[0], "questRuntime"), Is.SameAs(runtimes[0]));
+            Assert.That(Reference(completionFlows[0], "rewardService"), Is.SameAs(rewardServices[0]));
+            Assert.That(Reference(rewardServices[0], "currencyWallet"), Is.SameAs(wallets[0]));
+            Assert.That(new SerializedObject(completionFlows[0]).FindProperty("grantRewardOnCompletion").boolValue, Is.True);
+            Assert.That(new SerializedObject(completionFlows[0]).FindProperty("enterRewardStateOnCompletion").boolValue, Is.False);
+
+            SerializedObject serializedRuntime = new(runtimes[0]);
+            SerializedProperty definitions = serializedRuntime.FindProperty("questDefinitions");
+            Assert.That(definitions.arraySize, Is.EqualTo(1));
+            QuestDefinitionSO validationQuest = definitions.GetArrayElementAtIndex(0).objectReferenceValue as QuestDefinitionSO;
+            Assert.That(AssetDatabase.GetAssetPath(validationQuest), Is.EqualTo(
+                "Assets/GAME/Data/Quest/VALIDATION_PRODUCTION_NPC_QUEST.asset"));
+            Assert.That(validationQuest.QuestId, Is.EqualTo("validation.production.npc.quest"));
+            Assert.That(validationQuest.Objectives, Has.Length.EqualTo(1));
+            Assert.That(validationQuest.Objectives[0].EventType, Is.EqualTo(QuestEventType.Kill));
+            Assert.That(validationQuest.Objectives[0].ObjectiveId, Is.EqualTo("defeat_validation_target"));
+            Assert.That(validationQuest.RewardGold, Is.EqualTo(7));
+
+            CombatEncounterGroup[] encounters = FindAll<CombatEncounterGroup>();
+            Assert.That(encounters.Select(encounter => encounter.EncounterId), Has.None.Null.Or.Empty);
+            Assert.That(encounters.Select(encounter => encounter.EncounterId).Distinct().Count(), Is.EqualTo(encounters.Length));
+            CombatEncounterGroup validationEncounter = encounters.Single(encounter =>
+                encounter.EncounterId == "validation.production.npc.quest.kill");
+            Assert.That(Reference(combatQuestPublishers[0], "targetEncounter"), Is.SameAs(validationEncounter));
+            Assert.That(Reference(combatQuestPublishers[0], "combatEntryPoint"), Is.SameAs(FindAll<CombatEntryPoint>().Single()));
+            Assert.That(new SerializedObject(combatQuestPublishers[0]).FindProperty("questId").stringValue,
+                Is.EqualTo(validationQuest.QuestId));
+            Assert.That(new SerializedObject(combatQuestPublishers[0]).FindProperty("objectiveId").stringValue,
+                Is.EqualTo(validationQuest.Objectives[0].ObjectiveId));
+
+            GameUIRootController uiRoots = FindAll<GameUIRootController>().Single();
+            GameObject fieldRoot = Reference(uiRoots, "fieldRoot") as GameObject;
+            Assert.That(Reference(questTrackers[0], "questRuntime"), Is.SameAs(runtimes[0]));
+            Assert.That(fieldRoot, Is.Not.Null);
+            Assert.That(questTrackers[0].transform.IsChildOf(fieldRoot.transform), Is.True);
+
+            StoryEventDefinitionSO validationStory = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
+                "Assets/GAME/Data/Interaction/ProductionNpcDialogueValidation.asset");
+            SerializedProperty choices = new SerializedObject(validationStory)
+                .FindProperty("nodes").GetArrayElementAtIndex(0).FindPropertyRelative("choices");
+            Assert.That(choices.arraySize, Is.EqualTo(2));
+            SerializedProperty acceptChoice = choices.GetArrayElementAtIndex(0);
+            SerializedProperty rejectChoice = choices.GetArrayElementAtIndex(1);
+            Assert.That(acceptChoice.FindPropertyRelative("effects").arraySize, Is.EqualTo(1));
+
+            SerializedProperty acceptEffect = acceptChoice.FindPropertyRelative("effects").GetArrayElementAtIndex(0);
+            Assert.That(acceptEffect.FindPropertyRelative("type").intValue, Is.EqualTo((int)StoryEffectType.StartQuest));
+            Assert.That(acceptEffect.FindPropertyRelative("questDefinition").objectReferenceValue,
+                Is.SameAs(validationQuest));
+            Assert.That(rejectChoice.FindPropertyRelative("effects").arraySize, Is.Zero);
+
+            Assert.That(FindAll<QuestManager>(), Is.Empty);
+            Assert.That(FindAll<Game.Mission.MissionManager>(), Is.Empty);
+            Assert.That(FindAll<DemoMissionRuntime>(), Is.Empty);
+            Assert.That(FindAll<Game.Mission.UI.MissionHUD>(), Is.Empty);
         }
 
         [Test]

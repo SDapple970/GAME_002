@@ -3,6 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Game.Combat.Integration;
+using Game.Combat.Model;
 using Game.Core;
 using Game.Common.Identity;
 using Game.Daily;
@@ -801,6 +803,25 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void StoryStartQuestEffect_UsesCanonicalQuestRuntimeAndDoesNotDuplicateAcceptance()
+        {
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            QuestDefinitionSO definition = CreateQuestDefinition("story.acceptance", QuestEventType.Interact, "await", 1);
+            StoryEffect effect = new();
+            SetField(effect, "type", StoryEffectType.StartQuest);
+            SetField(effect, "questDefinition", definition);
+            int started = 0;
+            runtime.OnQuestStarted += _ => started++;
+
+            effect.Apply();
+            effect.Apply();
+
+            Assert.That(runtime.IsQuestActive("story.acceptance"), Is.True);
+            Assert.That(started, Is.EqualTo(1));
+            Assert.That(UnityEngine.Object.FindFirstObjectByType<Game.Mission.MissionManager>(), Is.Null);
+        }
+
+        [Test]
         public void ProductionQuest_DoesNotRequireMissionManager()
         {
             QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
@@ -1185,6 +1206,73 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void CombatQuestObjectivePublisher_MatchingVictoryCompletesAndRewardsOnce()
+        {
+            (GameStateMachine state, _) = CreateFlowState();
+            CurrencyWallet wallet = CreateWallet();
+            RewardService service = CreateRewardService(wallet);
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            QuestDefinitionSO definition = CreateQuestDefinition(
+                "validation.production.npc.quest",
+                QuestEventType.Kill,
+                "defeat_validation_target",
+                1);
+            SetField(definition, "rewardGold", 7);
+            runtime.StartQuest(definition);
+            CreateObjectiveTracker(runtime);
+            CreateCompletionFlow(runtime, service, 0, false);
+
+            CombatEncounterGroup target = CreateComponent<CombatEncounterGroup>("ValidationEncounter");
+            SetField(target, "_activeCompletionId", "combat-validation-01");
+            CombatQuestObjectivePublisher publisher = CreateCombatQuestPublisher(
+                target,
+                "validation.production.npc.quest",
+                "defeat_validation_target");
+            CombatResult result = new()
+            {
+                CompletionId = "combat-validation-01",
+                EndReason = CombatEndReason.Victory,
+                IsWin = true
+            };
+            result.DefeatedEnemyIds.Add(100);
+
+            int completions = 0;
+            runtime.OnQuestCompleted += _ => completions++;
+            Invoke(publisher, "HandleCombatEnded", result);
+            Invoke(publisher, "HandleCombatEnded", result);
+
+            Assert.That(runtime.GetObjectiveProgress("validation.production.npc.quest", "defeat_validation_target"), Is.EqualTo(1));
+            Assert.That(runtime.GetQuestStatus("validation.production.npc.quest"), Is.EqualTo(QuestStatus.Completed));
+            Assert.That(completions, Is.EqualTo(1));
+            Assert.That(wallet.Gold, Is.EqualTo(7));
+            Assert.That(state.Current, Is.EqualTo(GameState.Exploration));
+        }
+
+        [Test]
+        public void CombatQuestObjectivePublisher_IgnoresUnrelatedCombatCompletion()
+        {
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            runtime.StartQuest(CreateQuestDefinition("quest", QuestEventType.Kill, "target", 1));
+            CreateObjectiveTracker(runtime);
+
+            CombatEncounterGroup target = CreateComponent<CombatEncounterGroup>("ValidationEncounter");
+            SetField(target, "_activeCompletionId", "combat-target");
+            CombatQuestObjectivePublisher publisher = CreateCombatQuestPublisher(target, "quest", "target");
+            CombatResult unrelated = new()
+            {
+                CompletionId = "combat-other",
+                EndReason = CombatEndReason.Victory,
+                IsWin = true
+            };
+            unrelated.DefeatedEnemyIds.Add(100);
+
+            Invoke(publisher, "HandleCombatEnded", unrelated);
+
+            Assert.That(runtime.GetObjectiveProgress("quest", "target"), Is.Zero);
+            Assert.That(runtime.IsQuestActive("quest"), Is.True);
+        }
+
+        [Test]
         public void LegacyEmptyEventId_PreservesCompatibilityBehavior()
         {
             QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
@@ -1407,6 +1495,144 @@ namespace Game.Tests.Integration
             Assert.That(restored.GetQuestStatus("quest"), Is.EqualTo(QuestStatus.Active));
             Assert.That(restored.GetObjectiveProgress("quest", "kill"), Is.EqualTo(1));
             Assert.That(completed, Is.Zero);
+        }
+
+        [Test]
+        public void Restore_ReplacesStaleQuestStateAndRaisesOnlySilentRefresh()
+        {
+            QuestDefinitionSO definition = CreateQuestDefinition("replace", QuestEventType.Kill, "kill", 2);
+            QuestRuntime runtime = CreateRuntimeWithDefinition("Runtime", definition);
+            runtime.StartQuest(definition);
+            runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, "replace", "kill", "one"));
+
+            int started = 0;
+            int progressed = 0;
+            int completed = 0;
+            int restored = 0;
+            runtime.OnQuestStarted += _ => started++;
+            runtime.OnObjectiveProgressChanged += (_, _, _, _) => progressed++;
+            runtime.OnQuestCompleted += _ => completed++;
+            runtime.OnStateRestored += () => restored++;
+
+            runtime.RestoreSaveData(new GameSaveData());
+
+            Assert.That(runtime.GetQuestStatus("replace"), Is.EqualTo(QuestStatus.Inactive));
+            Assert.That(runtime.GetObjectiveProgress("replace", "kill"), Is.Zero);
+            Assert.That(started, Is.Zero);
+            Assert.That(progressed, Is.Zero);
+            Assert.That(completed, Is.Zero);
+            Assert.That(restored, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void QuestTrackerUI_RefreshesFromRestoredActiveQuestWithoutGameplayEvents()
+        {
+            QuestDefinitionSO definition = CreateQuestDefinition("restored-ui", QuestEventType.Kill, "kill", 2);
+            SetField(definition, "questTitle", "Restored Quest");
+            QuestRuntime runtime = CreateRuntimeWithDefinition("Runtime", definition);
+            runtime.StartQuest(definition);
+            runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, "restored-ui", "kill", "one"));
+            GameSaveData save = new();
+            runtime.CaptureSaveData(save);
+            runtime.CompleteQuest("restored-ui");
+
+            GameObject hudObject = CreateGameObject("HUD");
+            hudObject.SetActive(false);
+            QuestTrackerUI hud = hudObject.AddComponent<QuestTrackerUI>();
+            GameObject root = CreateGameObject("HUDRoot");
+            Text title = CreateGameObject("Title", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
+            Text objective = CreateGameObject("Objective", typeof(RectTransform), typeof(Text)).GetComponent<Text>();
+            SetField(hud, "questRuntime", runtime);
+            SetField(hud, "root", root);
+            SetField(hud, "titleText", title);
+            SetField(hud, "objectiveText", objective);
+            hudObject.SetActive(true);
+            InvokeIfPresent(hud, "Awake");
+            InvokeIfPresent(hud, "OnEnable");
+
+            runtime.RestoreSaveData(save);
+
+            Assert.That(root.activeSelf, Is.True);
+            Assert.That(title.text, Is.EqualTo("Restored Quest"));
+            Assert.That(objective.text, Does.Contain("1/2"));
+        }
+
+        [Test]
+        public void ActiveQuest_ZeroProgressRoundTripsWithoutDuplicateState()
+        {
+            QuestDefinitionSO definition = CreateQuestDefinition("active-save", QuestEventType.Kill, "kill", 1);
+            QuestRuntime source = CreateRuntimeWithDefinition("Source", definition);
+            source.StartQuest(definition);
+            GameSaveData save = new();
+            source.CaptureSaveData(save);
+
+            QuestRuntime restored = CreateRuntimeWithDefinition("Restored", definition);
+            restored.RestoreSaveData(save);
+
+            Assert.That(restored.GetQuestStatus("active-save"), Is.EqualTo(QuestStatus.Active));
+            Assert.That(restored.GetObjectiveProgress("active-save", "kill"), Is.Zero);
+            restored.CaptureSaveData(save);
+            Assert.That(save.quest.quests.Count(item => item.questId == "active-save"), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void CompletedQuestRewardAndCurrency_RestoreWithoutRegranting()
+        {
+            CurrencyWallet wallet = CreateWallet();
+            wallet.SetGold(50);
+            RewardService rewards = CreateRewardService(wallet);
+            QuestDefinitionSO definition = CreateQuestDefinition("completed-save", QuestEventType.Kill, "kill", 1);
+            SetField(definition, "rewardGold", 7);
+            QuestRuntime runtime = CreateRuntimeWithDefinition("Runtime", definition);
+            QuestCompletionFlow flow = CreateCompletionFlow(runtime, rewards, 0, false);
+            runtime.StartQuest(definition);
+            runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, "completed-save", "kill", "complete"));
+            Assert.That(wallet.Gold, Is.EqualTo(57));
+
+            GameSaveData save = new();
+            wallet.CaptureSaveData(save);
+            runtime.CaptureSaveData(save);
+            rewards.CaptureSaveData(save);
+            wallet.SetGold(0);
+            runtime.RestoreSaveData(new GameSaveData());
+            rewards.RestoreSaveData(new GameSaveData());
+            int restoreCompletions = 0;
+            runtime.OnQuestCompleted += _ => restoreCompletions++;
+
+            wallet.RestoreSaveData(save);
+            runtime.RestoreSaveData(save);
+            rewards.RestoreSaveData(save);
+            RewardResult duplicate = rewards.GrantQuestCompletion("completed-save", 7, 0);
+
+            Assert.That(runtime.GetQuestStatus("completed-save"), Is.EqualTo(QuestStatus.Completed));
+            Assert.That(wallet.Gold, Is.EqualTo(57));
+            Assert.That(restoreCompletions, Is.Zero);
+            Assert.That(duplicate.DuplicateBlocked, Is.True);
+            Assert.That(rewards.GrantLedgerCount, Is.EqualTo(1));
+            Assert.That(flow, Is.Not.Null);
+        }
+
+        [Test]
+        public void QuestCompletionFlow_RestoreClearsPreLoadCompletionWithoutGranting()
+        {
+            (GameStateMachine state, _) = CreateFlowState();
+            CurrencyWallet wallet = CreateWallet();
+            RewardService rewards = CreateRewardService(wallet);
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            QuestDefinitionSO definition = CreateQuestDefinition("restore-pending", QuestEventType.Kill, "kill", 1);
+            SetField(definition, "rewardGold", 7);
+            runtime.StartQuest(definition);
+            QuestCompletionFlow flow = CreateCompletionFlow(runtime, rewards, 0, false);
+
+            ForceState(state, GameState.Dialogue);
+            runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, "restore-pending", "kill", "complete"));
+            Assert.That(wallet.Gold, Is.Zero);
+
+            flow.RestoreSaveData(new GameSaveData());
+            ForceState(state, GameState.Exploration, raiseEvent: true);
+
+            Assert.That(wallet.Gold, Is.Zero);
+            Assert.That(rewards.GrantLedgerCount, Is.Zero);
         }
 
         [Test]
@@ -1825,6 +2051,35 @@ namespace Game.Tests.Integration
             return flow;
         }
 
+        private QuestObjectiveTracker CreateObjectiveTracker(QuestRuntime runtime)
+        {
+            GameObject go = CreateGameObject("QuestObjectiveTracker");
+            go.SetActive(false);
+            QuestObjectiveTracker tracker = go.AddComponent<QuestObjectiveTracker>();
+            SetField(tracker, "questRuntime", runtime);
+            go.SetActive(true);
+            InvokeIfPresent(tracker, "Awake");
+            InvokeIfPresent(tracker, "OnEnable");
+            return tracker;
+        }
+
+        private CombatQuestObjectivePublisher CreateCombatQuestPublisher(
+            CombatEncounterGroup target,
+            string questId,
+            string objectiveId)
+        {
+            GameObject go = CreateGameObject("CombatQuestObjectivePublisher");
+            go.SetActive(false);
+            CombatQuestObjectivePublisher publisher = go.AddComponent<CombatQuestObjectivePublisher>();
+            SetField(publisher, "targetEncounter", target);
+            SetField(publisher, "questId", questId);
+            SetField(publisher, "objectiveId", objectiveId);
+            go.SetActive(true);
+            InvokeIfPresent(publisher, "Awake");
+            InvokeIfPresent(publisher, "OnEnable");
+            return publisher;
+        }
+
         private CurrencyWallet CreateWallet()
         {
             CurrencyWallet wallet = CreateComponent<CurrencyWallet>("Wallet");
@@ -1911,6 +2166,7 @@ namespace Game.Tests.Integration
             DestroyAll<StoryEventRunner>();
             DestroyAll<StoryProgressManager>();
             DestroyAll<QuestObjectiveTracker>();
+            DestroyAll<CombatQuestObjectivePublisher>();
             DestroyAll<QuestCompletionFlow>();
             DestroyAll<QuestTrackerUI>();
             DestroyAll<QuestCalendarIntegration>();
