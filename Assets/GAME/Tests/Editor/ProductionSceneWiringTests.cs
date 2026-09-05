@@ -234,6 +234,19 @@ namespace Game.Tests.Integration
             Assert.That(prefab.GetComponentsInChildren<WorldDialogueBubble>(true), Has.Length.EqualTo(1));
             Assert.That(prefab.GetComponentsInChildren<TimedChoicePanel>(true), Has.Length.EqualTo(1));
 
+            Canvas[] narrativeCanvases = prefab.GetComponentsInChildren<Canvas>(true)
+                .Where(item => item.gameObject.name == "NarrativeCanvas")
+                .ToArray();
+            Assert.That(narrativeCanvases, Has.Length.EqualTo(1));
+            Canvas narrativeCanvas = narrativeCanvases[0];
+            Assert.That(narrativeCanvas.renderMode, Is.EqualTo(RenderMode.ScreenSpaceOverlay));
+            Assert.That(narrativeCanvas.GetComponent<CanvasScaler>(), Is.Not.Null);
+            Assert.That(narrativeCanvas.GetComponent<CanvasScaler>().uiScaleMode,
+                Is.EqualTo(CanvasScaler.ScaleMode.ConstantPixelSize));
+            Assert.That(narrativeCanvas.GetComponent<GraphicRaycaster>(), Is.Not.Null);
+            Assert.That(prefab.GetComponentsInChildren<WorldDialogueBubble>(true).Single().transform.IsChildOf(narrativeCanvas.transform), Is.True);
+            Assert.That(prefab.GetComponentsInChildren<TimedChoicePanel>(true).Single().transform.IsChildOf(narrativeCanvas.transform), Is.True);
+
             GameUIRootController roots = prefab.GetComponent<GameUIRootController>();
             InteractionPromptUI[] prompts = prefab.GetComponentsInChildren<InteractionPromptUI>(true);
             Assert.That(prompts, Has.Length.EqualTo(1));
@@ -248,6 +261,7 @@ namespace Game.Tests.Integration
             Assert.That(messageText.raycastTarget, Is.False);
             GameObject dialogueRoot = Reference(roots, "dialogueRoot") as GameObject;
             Assert.That(dialogueRoot, Is.Not.Null);
+            Assert.That(dialogueRoot.transform.IsChildOf(narrativeCanvas.transform), Is.True);
             Assert.That(narrativeHuds[0].transform.IsChildOf(dialogueRoot.transform), Is.True);
         }
 

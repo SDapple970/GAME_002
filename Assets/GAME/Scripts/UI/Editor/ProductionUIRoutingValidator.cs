@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Game.Core;
 using Game.Interaction;
+using Game.Story.UI;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -52,6 +53,7 @@ namespace Game.UI.Editor
                     issues.Add($"[Production UI] {prefabPath}: full Reward panel and FieldRewardToast are not explicitly separated.");
                 if (prefabPrompts.Length == 1)
                     ValidateInteractionPrompt(prefabRoots.SingleOrDefault(), prefabPrompts[0], prefabPath, issues);
+                ValidateNarrativeCanvas(prefabRoots.SingleOrDefault(), prefab, prefabPath, issues);
             }
             foreach (string path in ProductionScenes)
             {
@@ -306,6 +308,56 @@ namespace Game.UI.Editor
                 issues.Add($"[Production UI] {path}: InteractionPromptUI owner and display root are not safely separated.");
             if (messageText == null || messageText.raycastTarget)
                 issues.Add($"[Production UI] {path}: InteractionPromptUI has no non-raycast UI.Text message target.");
+        }
+
+        private static void ValidateNarrativeCanvas(
+            GameUIRootController roots,
+            GameObject owner,
+            string path,
+            List<string> issues)
+        {
+            StoryDialogueHUD[] dialogueHuds = owner.GetComponentsInChildren<StoryDialogueHUD>(true);
+            WorldDialogueBubble[] bubbles = owner.GetComponentsInChildren<WorldDialogueBubble>(true);
+            TimedChoicePanel[] choicePanels = owner.GetComponentsInChildren<TimedChoicePanel>(true);
+            Canvas[] narrativeCanvases = owner.GetComponentsInChildren<Canvas>(true)
+                .Where(item => item.gameObject.name == "NarrativeCanvas")
+                .ToArray();
+
+            if (dialogueHuds.Length != 1 || bubbles.Length != 1 || choicePanels.Length != 1)
+            {
+                issues.Add($"[Production UI] {path}: expected one StoryDialogueHUD, WorldDialogueBubble, and TimedChoicePanel.");
+                return;
+            }
+
+            if (narrativeCanvases.Length != 1)
+            {
+                issues.Add($"[Production UI] {path}: expected exactly one NarrativeCanvas, found {narrativeCanvases.Length}.");
+                return;
+            }
+
+            Canvas narrativeCanvas = narrativeCanvases[0];
+            if (narrativeCanvas.renderMode != RenderMode.ScreenSpaceOverlay ||
+                narrativeCanvas.GetComponent<CanvasScaler>()?.uiScaleMode != CanvasScaler.ScaleMode.ConstantPixelSize ||
+                narrativeCanvas.GetComponent<GraphicRaycaster>() == null)
+            {
+                issues.Add($"[Production UI] {path}: NarrativeCanvas must use the canonical overlay Canvas, constant-pixel scaler, and GraphicRaycaster.");
+            }
+
+            if (!dialogueHuds[0].transform.IsChildOf(narrativeCanvas.transform) ||
+                !bubbles[0].transform.IsChildOf(narrativeCanvas.transform) ||
+                !choicePanels[0].transform.IsChildOf(narrativeCanvas.transform))
+            {
+                issues.Add($"[Production UI] {path}: narrative presenters are not all below NarrativeCanvas.");
+            }
+
+            GameObject dialogueRoot = roots != null
+                ? new SerializedObject(roots).FindProperty("dialogueRoot").objectReferenceValue as GameObject
+                : null;
+            if (dialogueRoot == null || !dialogueRoot.transform.IsChildOf(narrativeCanvas.transform) ||
+                !dialogueHuds[0].transform.IsChildOf(dialogueRoot.transform))
+            {
+                issues.Add($"[Production UI] {path}: DialogueRoot is not the routed narrative content root below NarrativeCanvas.");
+            }
         }
 
         private static void Assign(SerializedObject target, string property, GameObject value) => target.FindProperty(property).objectReferenceValue = value;
