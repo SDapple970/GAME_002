@@ -49,7 +49,7 @@ Report material conflicts instead of guessing.
 ## 4. Project environment
 
 - Repository: `SDapple970/GAME_002`
-- Unity version: `6000.2.6f2`
+- Unity version: `6000.3.23f1`
 - Main runtime script root: `Assets/GAME/Scripts`
 - Main project data root: `Assets/GAME/Data`
 - Main prefab root: `Assets/GAME/Prefabs`
