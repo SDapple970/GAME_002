@@ -39,6 +39,7 @@ namespace Game.UI
                 AutoBindMissingReferences();
 
             ValidateRootGraph(true);
+            PauseSavePanel.EnsureInstalled(pauseRoot);
         }
 
         public void SetTitleVisible(bool visible) => SetVisible(titleRoot, visible, nameof(titleRoot));

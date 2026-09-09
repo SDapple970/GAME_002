@@ -8,6 +8,7 @@ namespace Game.Quest
     {
         [SerializeField] private string objectiveId;
         [SerializeField] private QuestEventType eventType = QuestEventType.Interact;
+        [SerializeField] private string targetId;
         [SerializeField] private int requiredCount = 1;
         [SerializeField] private bool optional;
         [Min(0)]
@@ -18,6 +19,7 @@ namespace Game.Quest
 
         public string ObjectiveId => objectiveId;
         public QuestEventType EventType => eventType;
+        public string TargetId => string.IsNullOrWhiteSpace(targetId) ? null : targetId.Trim();
         public int RequiredCount => Mathf.Max(1, requiredCount);
         public bool Optional => optional;
         public int GroupIndex => Mathf.Max(0, groupIndex);
@@ -29,8 +31,10 @@ namespace Game.Quest
             if (questEvent.Type != eventType)
                 return false;
 
-            return string.IsNullOrEmpty(objectiveId) ||
-                   objectiveId == questEvent.ObjectiveId;
+            if (!string.IsNullOrEmpty(objectiveId) && objectiveId != questEvent.ObjectiveId)
+                return false;
+
+            return TargetId == null || TargetId == questEvent.TargetId;
         }
     }
 }

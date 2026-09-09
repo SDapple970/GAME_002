@@ -8,6 +8,7 @@ namespace Game.NonCombat.Save
         internal string PrimaryPath { get; }
         internal string BackupPath => PrimaryPath + ".bak";
         internal string TemporaryPath => PrimaryPath + ".tmp";
+        internal bool HasAnySaveFile => File.Exists(PrimaryPath) || File.Exists(BackupPath);
 
         internal AtomicSaveStorage(string primaryPath) { PrimaryPath = primaryPath; }
 

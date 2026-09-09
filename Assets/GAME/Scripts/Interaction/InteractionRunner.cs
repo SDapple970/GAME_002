@@ -1,5 +1,6 @@
 using Game.Core;
 using Game.Reward;
+using System;
 using UnityEngine;
 
 namespace Game.Interaction
@@ -17,6 +18,7 @@ namespace Game.Interaction
 
         public InteractionRuntime Runtime => runtime;
         public bool IsCompatibilityFallback => _compatibilityFallback;
+        public event Action<InteractionResult> OnInteractionCompleted;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStaticOwnership()
@@ -125,7 +127,10 @@ namespace Game.Interaction
             _resolving = true;
             try
             {
-                return ExecuteEvents(request);
+                InteractionResult result = ExecuteEvents(request);
+                if (result.Succeeded)
+                    OnInteractionCompleted?.Invoke(result);
+                return result;
             }
             finally
             {

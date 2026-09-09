@@ -260,6 +260,48 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
   m_PrefabInstance: {fileID: 94016021}
   m_PrefabAsset: {fileID: 0}
+--- !u!1001 &7100000020
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1113879640}
+    m_Modifications:
+    - target: {fileID: 100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_Name
+      value: ValidationInteractionQuestGiver
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -27.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -2.68
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: interactionId
+      value: validation.production.interaction.quest-giver
+      objectReference: {fileID: 0}
+    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: events.Array.data[0]
+      value: 
+      objectReference: {fileID: 11400000, guid: 73cc4886d5db490c9a10fec70e8606c5, type: 2}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+--- !u!4 &7100000021 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+  m_PrefabInstance: {fileID: 7100000020}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &116758818
 GameObject:
   m_ObjectHideFlags: 0
@@ -303,7 +345,7 @@ GameObject:
   - component: {fileID: 142507223}
   - component: {fileID: 142507222}
   m_Layer: 0
-  m_Name: Test_Interactable
+  m_Name: ValidationInteractionTarget
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -340,8 +382,8 @@ MonoBehaviour:
   interactOnce: 0
   disableAfterInteract: 0
   playerTag: Player
-  interactionId: 
-  usePolicy: 10
+  interactionId: validation.production.interaction.target
+  usePolicy: 30
   conditions: []
   events:
   - {fileID: 11400000, guid: a2fa4a08e00a9754bbe78fa740112087, type: 2}
@@ -2006,6 +2048,7 @@ GameObject:
   - component: {fileID: 7100000002}
   - component: {fileID: 7100000003}
   - component: {fileID: 7100000004}
+  - component: {fileID: 7100000015}
   m_Layer: 0
   m_Name: Quest
   m_TagString: Untagged
@@ -2353,6 +2396,7 @@ MonoBehaviour:
   missionManager: {fileID: 0}
   questDefinitions:
   - {fileID: 11400000, guid: d364263c840b4fafb924c5b03ba7d7a9, type: 2}
+  - {fileID: 11400000, guid: 4159c753fb774d968b3221698ab568a6, type: 2}
 --- !u!114 &7100000002
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2403,6 +2447,23 @@ MonoBehaviour:
   questId: validation.production.npc.quest
   objectiveId: defeat_validation_target
   eventType: 10
+--- !u!114 &7100000015
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1805323963}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d7dd2f94cea4e1997d1de2c72446ec6, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.InteractionQuestObjectivePublisher
+  interactionRunner: {fileID: 0}
+  questId: validation.production.interaction.quest
+  objectiveId: complete_validation_interaction
+  targetInteractionId: validation.production.interaction.target
+  eventType: 60
 --- !u!1 &7100000011
 GameObject:
   m_ObjectHideFlags: 0
