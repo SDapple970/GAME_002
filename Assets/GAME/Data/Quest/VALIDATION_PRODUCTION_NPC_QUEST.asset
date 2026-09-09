@@ -20,6 +20,7 @@ MonoBehaviour:
   objectives:
   - objectiveId: defeat_validation_target
     eventType: 10
+    targetId:
     requiredCount: 1
     optional: 0
     groupIndex: 0

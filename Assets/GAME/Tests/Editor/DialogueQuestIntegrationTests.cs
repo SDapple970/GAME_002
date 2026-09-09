@@ -1421,6 +1421,55 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void LateBootstrappedStateMachine_ReleasesCombatQuestRewardAtExploration()
+        {
+            CurrencyWallet wallet = CreateWallet();
+            RewardService service = CreateRewardService(wallet);
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            QuestDefinitionSO definition = CreateQuestDefinition(
+                "validation.production.npc.quest",
+                QuestEventType.Kill,
+                "defeat_validation_target",
+                1);
+            SetField(definition, "rewardGold", 7);
+            runtime.StartQuest(definition);
+            CreateObjectiveTracker(runtime);
+
+            // Mirrors Dungeon_Template: QuestCompletionFlow is enabled before the
+            // AfterSceneLoad bootstrap callback creates GameStateMachine.
+            QuestCompletionFlow completionFlow = CreateCompletionFlow(runtime, service, 0, false);
+            (GameStateMachine state, _) = CreateFlowState();
+            InvokeIfPresent(completionFlow, "Start");
+            ForceState(state, GameState.CombatPlanning);
+
+            CombatEncounterGroup target = CreateComponent<CombatEncounterGroup>("ValidationEncounter");
+            SetField(target, "_activeCompletionId", "combat-validation-01");
+            CombatQuestObjectivePublisher publisher = CreateCombatQuestPublisher(
+                target,
+                definition.QuestId,
+                definition.Objectives[0].ObjectiveId);
+            CombatResult result = new()
+            {
+                CompletionId = "combat-validation-01",
+                EndReason = CombatEndReason.Victory,
+                IsWin = true,
+                TotalGold = 50
+            };
+            result.DefeatedEnemyIds.Add(100);
+
+            service.GrantCombatResult(result);
+            Invoke(publisher, "HandleCombatEnded", result);
+
+            Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Completed));
+            Assert.That(wallet.Gold, Is.EqualTo(50));
+
+            ForceState(state, GameState.Exploration, raiseEvent: true);
+
+            Assert.That(wallet.Gold, Is.EqualTo(57));
+            Assert.That(service.GrantLedgerCount, Is.EqualTo(2));
+        }
+
+        [Test]
         public void MultipleDeferredCompletions_ProcessInStableOrderOnce()
         {
             (GameStateMachine state, _) = CreateFlowState();

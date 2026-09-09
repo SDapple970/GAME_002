@@ -41,6 +41,17 @@ namespace Game.Quest
             TryProcessPending();
         }
 
+        private void Start()
+        {
+            // RuntimeBootstrapper creates the canonical GameStateMachine from its
+            // AfterSceneLoad callback. A scene-authored completion flow can therefore
+            // be enabled before the singleton exists; retry once after bootstrap so a
+            // combat-time completion is released when gameplay returns to Exploration.
+            ResolveReferences();
+            Subscribe();
+            TryProcessPending();
+        }
+
         private void OnDisable()
         {
             Unsubscribe();
