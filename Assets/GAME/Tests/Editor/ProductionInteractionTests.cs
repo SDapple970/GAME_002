@@ -6,6 +6,7 @@ using Game.Core;
 using Game.Interaction;
 using Game.NonCombat.Inventory;
 using Game.NonCombat.Save;
+using Game.Quest;
 using Game.Reward;
 using Game.UI;
 using NUnit.Framework;
@@ -253,6 +254,56 @@ namespace Game.Tests.Integration
 
             Assert.That(result.Status, Is.EqualTo(InteractionResultStatus.PartialFailure));
             Assert.That(runtime.IsConsumed("partial", InteractionUsePolicy.PersistentOnce), Is.True);
+        }
+
+        [Test]
+        public void InteractionQuestPublisher_UsesSuccessfulStableTargetAndCanonicalDedupe()
+        {
+            InteractionRunner runner = CreateRunner(out _);
+            QuestRuntime runtime = new GameObject("QuestRuntime").AddComponent<QuestRuntime>();
+            Invoke(runtime, "Awake");
+            QuestDefinitionSO definition = CreateInteractionQuestDefinition();
+            runtime.StartQuest(definition);
+
+            QuestObjectiveTracker tracker = new GameObject("QuestTracker").AddComponent<QuestObjectiveTracker>();
+            SetField(tracker, "questRuntime", runtime);
+            Invoke(tracker, "Awake");
+            Invoke(tracker, "OnEnable");
+
+            InteractionQuestObjectivePublisher publisher = new GameObject("InteractionPublisher")
+                .AddComponent<InteractionQuestObjectivePublisher>();
+            SetField(publisher, "interactionRunner", runner);
+            SetField(publisher, "questId", "interaction.quest");
+            SetField(publisher, "objectiveId", "inspect_target");
+            SetField(publisher, "targetInteractionId", "validation.production.interaction.target");
+            Invoke(publisher, "Awake");
+            Invoke(publisher, "OnEnable");
+
+            InteractableObject wrong = CreateSource("validation.production.interaction.wrong", InteractionUsePolicy.Repeatable,
+                ScriptableObject.CreateInstance<CountingEventSO>());
+            Assert.That(runner.Execute(Request(wrong)).Succeeded, Is.True);
+            Assert.That(runtime.GetObjectiveProgress("interaction.quest", "inspect_target"), Is.Zero);
+
+            ResetFrameGuard(runner);
+            InteractableObject target = CreateSource("validation.production.interaction.target", InteractionUsePolicy.Repeatable,
+                ScriptableObject.CreateInstance<CountingEventSO>());
+            Assert.That(runner.Execute(Request(target)).Succeeded, Is.True);
+            Assert.That(runtime.GetObjectiveProgress("interaction.quest", "inspect_target"), Is.EqualTo(1));
+            Assert.That(runtime.GetQuestStatus("interaction.quest"), Is.EqualTo(QuestStatus.Completed));
+
+            ResetFrameGuard(runner);
+            Assert.That(runner.Execute(Request(target)).Succeeded, Is.True);
+            Assert.That(runtime.GetObjectiveProgress("interaction.quest", "inspect_target"), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void InteractionQuestPublisher_DoesNotCallQuestRuntimeOrRewardServiceDirectly()
+        {
+            string source = System.IO.File.ReadAllText(ProjectPath(
+                "Assets/GAME/Scripts/Quest/InteractionQuestObjectivePublisher.cs"));
+            Assert.That(source, Does.Contain("QuestEventChannel.Publish"));
+            Assert.That(source, Does.Not.Contain("ApplyEvent("));
+            Assert.That(source, Does.Not.Contain("RewardService"));
         }
 
         [Test]
@@ -545,6 +596,18 @@ namespace Game.Tests.Integration
             return runner;
         }
 
+        private static QuestDefinitionSO CreateInteractionQuestDefinition()
+        {
+            QuestObjectiveDefinition objective = new();
+            SetField(objective, "objectiveId", "inspect_target");
+            SetField(objective, "eventType", QuestEventType.Interact);
+            SetField(objective, "targetId", "validation.production.interaction.target");
+            QuestDefinitionSO definition = ScriptableObject.CreateInstance<QuestDefinitionSO>();
+            SetField(definition, "questId", "interaction.quest");
+            SetField(definition, "objectives", new[] { objective });
+            return definition;
+        }
+
         private static InventoryService CreateRewardServices(out RewardService rewards)
         {
             InventoryService inventory = new GameObject("Inventory").AddComponent<InventoryService>();
@@ -606,6 +669,13 @@ namespace Game.Tests.Integration
             return (GameSaveData)args[1];
         }
 
+        private static string ProjectPath(string relative)
+        {
+            return System.IO.Path.Combine(
+                System.IO.Directory.GetParent(Application.dataPath).FullName,
+                relative.Replace('/', System.IO.Path.DirectorySeparatorChar));
+        }
+
         private static void SetField(object target, string fieldName, object value)
         {
             Type type = target.GetType();
@@ -633,7 +703,8 @@ namespace Game.Tests.Integration
                 if (item is InteractionRunner || item is InteractionRuntime || item is InteractionController || item is InteractableObject ||
                     item is RuntimeBootstrapper || item is SaveLoadService || item is GameStateMachine || item is GameFlowController ||
                     item is SceneFlowController || item is GameInputInstaller || item is RewardService || item is InventoryService ||
-                    item is CurrencyWallet || item is GameUIRootController || item is UIScreenRouter)
+                    item is CurrencyWallet || item is GameUIRootController || item is UIScreenRouter || item is QuestRuntime ||
+                    item is QuestObjectiveTracker || item is InteractionQuestObjectivePublisher)
                 {
                     if (item != null)
                         owners.Add(item.gameObject);
@@ -646,6 +717,7 @@ namespace Game.Tests.Integration
 
             InvokeStatic(typeof(InteractionRunner), "ResetOwnershipForTests");
             InvokeStatic(typeof(InteractionRuntime), "ResetOwnershipForTests");
+            InvokeStatic(typeof(QuestObjectiveTracker), "ResetOwnershipForTests");
         }
 
         private static void InvokeStatic(Type type, string method)

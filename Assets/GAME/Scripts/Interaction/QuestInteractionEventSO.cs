@@ -11,6 +11,8 @@ namespace Game.Interaction
         [SerializeField] private string objectiveId;
         [SerializeField] private QuestEventType eventType = QuestEventType.Interact;
         [SerializeField] private int amount = 1;
+        // Retained for serialized compatibility with prior authored assets. Production
+        // delivery now goes through QuestEventChannel and QuestObjectiveTracker.
         [SerializeField] private QuestRuntime questRuntime;
 
         public override bool SupportsProductionExecution => true;
@@ -33,22 +35,15 @@ namespace Game.Interaction
                 return InteractionEventResult.Failed("interaction.quest.invalid-identity");
             }
 
-            QuestRuntime runtime = questRuntime != null
-                ? questRuntime
-                : FindFirstObjectByType<QuestRuntime>();
-            if (runtime == null)
-                return InteractionEventResult.Failed("interaction.quest.runtime-missing");
-
-            bool applied = runtime.ApplyEvent(new QuestEvent(
+            QuestEventChannel.Publish(new QuestEvent(
                 eventType,
                 questId,
                 objectiveId,
                 identity,
                 Mathf.Max(1, amount),
-                context.Request.Interactor));
-            return applied
-                ? InteractionEventResult.AcceptedResult(true, true, questAccepted: true)
-                : InteractionEventResult.NoEffect("interaction.quest.not-applied");
+                context.Request.Interactor,
+                context.Request.InteractionId));
+            return InteractionEventResult.AcceptedResult(true, true, questAccepted: true);
         }
     }
 }

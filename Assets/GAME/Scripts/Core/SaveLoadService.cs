@@ -14,6 +14,7 @@ namespace Game.Core
         public enum OperationState { Idle, Capturing, Writing, Reading, Migrating, WaitingForScene, Restoring, Completed, Failed }
 
         public static SaveLoadService Instance { get; private set; }
+        public event Action<bool, string> OnSaveCompleted;
         public event Action<bool, string> OnLoadCompleted;
 
         [SerializeField] private SaveManager saveManager;
@@ -28,6 +29,9 @@ namespace Game.Core
         public OperationState CurrentOperationState => _operationState;
         public string PrimarySavePath => Storage.PrimaryPath;
         public string BackupSavePath => Storage.BackupPath;
+        public bool HasSaveData => Storage.HasAnySaveFile;
+        public bool CanSave => _operationState == OperationState.Idle && CanSaveNow();
+        public bool CanLoad => _operationState == OperationState.Idle && CanLoadNow() && HasSaveData;
 
         private AtomicSaveStorage Storage => _storage ??= new AtomicSaveStorage(Path.Combine(Application.persistentDataPath, saveFileName));
 
@@ -50,18 +54,29 @@ namespace Game.Core
 
         public bool TrySave(out string message)
         {
-            if (!TryBegin(false, out message)) return false;
+            if (!TryBegin(false, out message))
+            {
+                OnSaveCompleted?.Invoke(false, message);
+                return false;
+            }
             try
             {
                 _operationState = OperationState.Capturing;
                 GameSaveData snapshot = CaptureGameSaveDataSnapshot();
                 GameSaveDataValidator.Normalize(snapshot);
-                if (!GameSaveDataValidator.TryValidate(snapshot, out message)) return Fail(message);
+                if (!GameSaveDataValidator.TryValidate(snapshot, out message)) return FinishSaveFailure(message);
                 _operationState = OperationState.Writing;
-                if (!Storage.TryWrite(SaveSerializer.ToJson(snapshot), out message)) return Fail(message);
-                return Complete($"Saved {PrimarySavePath}.");
+                if (!Storage.TryWrite(SaveSerializer.ToJson(snapshot), out message)) return FinishSaveFailure(message);
+                message = $"Saved {PrimarySavePath}.";
+                Complete(message);
+                OnSaveCompleted?.Invoke(true, message);
+                return true;
             }
-            catch (Exception exception) { return Fail($"Save failed: {exception.Message}"); }
+            catch (Exception exception)
+            {
+                message = $"Save failed: {exception.Message}";
+                return FinishSaveFailure(message);
+            }
         }
 
         public bool TryLoad(out string message)
@@ -251,5 +266,11 @@ namespace Game.Core
 
         private bool Complete(string message) { _operationState = OperationState.Completed; Debug.Log($"[SaveLoadService] {message}", this); _operationState = OperationState.Idle; return true; }
         private bool Fail(string message) { _operationState = OperationState.Failed; Debug.LogWarning($"[SaveLoadService] {message}", this); _operationState = OperationState.Idle; return false; }
+        private bool FinishSaveFailure(string message)
+        {
+            bool result = Fail(message);
+            OnSaveCompleted?.Invoke(false, message);
+            return result;
+        }
     }
 }

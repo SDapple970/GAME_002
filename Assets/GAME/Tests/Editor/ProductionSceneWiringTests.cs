@@ -241,8 +241,11 @@ namespace Game.Tests.Integration
 
             SerializedObject serializedRuntime = new(runtimes[0]);
             SerializedProperty definitions = serializedRuntime.FindProperty("questDefinitions");
-            Assert.That(definitions.arraySize, Is.EqualTo(1));
-            QuestDefinitionSO validationQuest = definitions.GetArrayElementAtIndex(0).objectReferenceValue as QuestDefinitionSO;
+            Assert.That(definitions.arraySize, Is.EqualTo(2));
+            QuestDefinitionSO[] authoredQuests = Enumerable.Range(0, definitions.arraySize)
+                .Select(index => definitions.GetArrayElementAtIndex(index).objectReferenceValue as QuestDefinitionSO)
+                .ToArray();
+            QuestDefinitionSO validationQuest = authoredQuests.Single(item => item.QuestId == "validation.production.npc.quest");
             Assert.That(AssetDatabase.GetAssetPath(validationQuest), Is.EqualTo(
                 "Assets/GAME/Data/Quest/VALIDATION_PRODUCTION_NPC_QUEST.asset"));
             Assert.That(validationQuest.QuestId, Is.EqualTo("validation.production.npc.quest"));
@@ -250,6 +253,31 @@ namespace Game.Tests.Integration
             Assert.That(validationQuest.Objectives[0].EventType, Is.EqualTo(QuestEventType.Kill));
             Assert.That(validationQuest.Objectives[0].ObjectiveId, Is.EqualTo("defeat_validation_target"));
             Assert.That(validationQuest.RewardGold, Is.EqualTo(7));
+
+            QuestDefinitionSO interactionQuest = authoredQuests.Single(item => item.QuestId == "validation.production.interaction.quest");
+            Assert.That(AssetDatabase.GetAssetPath(interactionQuest), Is.EqualTo(
+                "Assets/GAME/Data/Quest/VALIDATION_PRODUCTION_INTERACTION_QUEST.asset"));
+            Assert.That(interactionQuest.Objectives, Has.Length.EqualTo(1));
+            Assert.That(interactionQuest.Objectives[0].EventType, Is.EqualTo(QuestEventType.Interact));
+            Assert.That(interactionQuest.Objectives[0].TargetId, Is.EqualTo("validation.production.interaction.target"));
+
+            InteractionQuestObjectivePublisher interactionPublisher = FindAll<InteractionQuestObjectivePublisher>().Single();
+            SerializedObject serializedPublisher = new(interactionPublisher);
+            Assert.That(serializedPublisher.FindProperty("questId").stringValue, Is.EqualTo(interactionQuest.QuestId));
+            Assert.That(serializedPublisher.FindProperty("objectiveId").stringValue, Is.EqualTo("complete_validation_interaction"));
+            Assert.That(serializedPublisher.FindProperty("targetInteractionId").stringValue,
+                Is.EqualTo(interactionQuest.Objectives[0].TargetId));
+
+            InteractableObject interactionTarget = FindAll<InteractableObject>().Single(item =>
+                item.InteractionId == "validation.production.interaction.target");
+            Assert.That(interactionTarget.UsePolicy, Is.EqualTo(InteractionUsePolicy.PersistentOnce));
+            Assert.That(interactionTarget.gameObject.name, Is.EqualTo("ValidationInteractionTarget"));
+
+            InteractableObject interactionGiver = FindAll<InteractableObject>().Single(item =>
+                item.InteractionId == "validation.production.interaction.quest-giver");
+            Assert.That(interactionGiver.Events, Has.Count.EqualTo(1));
+            Assert.That(AssetDatabase.GetAssetPath(interactionGiver.Events[0]), Is.EqualTo(
+                "Assets/GAME/Data/Interaction/ProductionInteractionQuestAcceptanceEvent.asset"));
 
             CombatEncounterGroup[] encounters = FindAll<CombatEncounterGroup>();
             Assert.That(encounters.Select(encounter => encounter.EncounterId), Has.None.Null.Or.Empty);

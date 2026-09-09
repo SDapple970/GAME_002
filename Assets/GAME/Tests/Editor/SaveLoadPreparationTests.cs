@@ -112,6 +112,66 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void HasSaveData_ReportsCanonicalPrimaryOrBackupWithoutReadingFromUi()
+        {
+            Assert.That(_service.HasSaveData, Is.False);
+
+            File.WriteAllText(_primary, SaveSerializer.ToJson(new GameSaveData()));
+            Assert.That(_service.HasSaveData, Is.True);
+
+            File.Delete(_primary);
+            File.WriteAllText(_primary + ".bak", SaveSerializer.ToJson(new GameSaveData()));
+            Assert.That(_service.HasSaveData, Is.True);
+        }
+
+        [Test]
+        public void SaveCompletionEvent_ReportsCanonicalSaveResult()
+        {
+            bool? succeeded = null;
+            string completionMessage = null;
+            _service.OnSaveCompleted += (result, message) =>
+            {
+                succeeded = result;
+                completionMessage = message;
+            };
+
+            Assert.That(_service.TrySave(out _), Is.True);
+            Assert.That(succeeded, Is.True);
+            Assert.That(completionMessage, Does.StartWith("Saved "));
+        }
+
+        [Test]
+        public void UnsafeState_RemainsBlockedForSave()
+        {
+            GameStateMachine stateMachine = new GameObject("UnsafeSaveState").AddComponent<GameStateMachine>();
+            Invoke(stateMachine, "Awake");
+            Assert.That(stateMachine.TrySetState(GameState.Dialogue, "save policy test"), Is.True);
+
+            Assert.That(_service.CanSave, Is.False);
+            Assert.That(_service.TrySave(out string message), Is.False);
+            Assert.That(message, Does.Contain("Save blocked in state Dialogue"));
+            Assert.That(_service.CurrentOperationState, Is.EqualTo(SaveLoadService.OperationState.Idle));
+        }
+
+        [Test]
+        public void ProductionSaveUx_DelegatesToCanonicalOwnersWithoutDirectStorageOrNewGameFlow()
+        {
+            string pauseSource = File.ReadAllText(ProjectPath("Assets/GAME/Scripts/UI/PauseSavePanel.cs"));
+            Assert.That(pauseSource, Does.Contain("service.TrySave(out string message)"));
+            Assert.That(pauseSource, Does.Contain("flow.ResumePreviousState()"));
+            Assert.That(pauseSource, Does.Not.Contain("File."));
+
+            string titleSource = File.ReadAllText(ProjectPath("Assets/GAME/Scripts/Title/Runtime/TitleSceneController.cs"));
+            int continueStart = titleSource.IndexOf("private void HandleContinueClicked", StringComparison.Ordinal);
+            int continueEnd = titleSource.IndexOf("private IEnumerator Co_OpenRequestPaper", continueStart, StringComparison.Ordinal);
+            string continueMethod = titleSource.Substring(continueStart, continueEnd - continueStart);
+            Assert.That(continueMethod, Does.Contain("service.TryLoad(out string message)"));
+            Assert.That(continueMethod, Does.Not.Contain("ResetMissionProgress"));
+            Assert.That(continueMethod, Does.Not.Contain("SceneManager"));
+            Assert.That(titleSource, Does.Contain("continueButton.interactable = !_transitioning && service != null && service.CanLoad"));
+        }
+
+        [Test]
         public void CorruptedPrimaryFallsBackToValidBackup()
         {
             GameSaveData data = new();

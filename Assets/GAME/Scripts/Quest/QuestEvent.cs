@@ -8,6 +8,7 @@ namespace Game.Quest
         public readonly QuestEventType Type;
         public readonly string QuestId;
         public readonly string ObjectiveId;
+        public readonly string TargetId;
         public readonly int Amount;
         public readonly GameObject Source;
         public readonly string EventId;
@@ -20,11 +21,13 @@ namespace Game.Quest
             string objectiveId,
             int amount = 1,
             GameObject source = null,
-            string eventId = null)
+            string eventId = null,
+            string targetId = null)
         {
             Type = type;
             QuestId = questId;
             ObjectiveId = objectiveId;
+            TargetId = targetId;
             Amount = amount;
             Source = source;
             EventId = eventId;
@@ -38,11 +41,13 @@ namespace Game.Quest
             string objectiveId,
             GameplayOutcomeIdentity identity,
             int amount = 1,
-            GameObject source = null)
+            GameObject source = null,
+            string targetId = null)
         {
             Type = type;
             QuestId = questId;
             ObjectiveId = objectiveId;
+            TargetId = targetId;
             Amount = amount;
             Source = source;
             Identity = identity;

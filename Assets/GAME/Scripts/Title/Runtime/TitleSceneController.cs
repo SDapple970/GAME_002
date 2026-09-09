@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using TMPro;
 using Game.Core;
 using Game.DemoMission.Runtime;
 
@@ -18,6 +19,7 @@ namespace GAME.Title
         }
 
         [SerializeField] private Button startButton;
+        [SerializeField] private Button continueButton;
         [SerializeField] private Button paperClickButton;
         [SerializeField] private GameObject titleGroup;
         [SerializeField] private RectTransform requestPaperRoot;
@@ -31,28 +33,35 @@ namespace GAME.Title
 
         private TitleRequestStep _currentStep = TitleRequestStep.None;
         private bool _startButtonBound;
+        private bool _continueButtonBound;
         private bool _paperButtonBound;
         private bool _transitioning;
+        private SaveLoadService _loadCompletionService;
 
         private void Awake()
         {
             if (titleSceneAnimator == null)
                 titleSceneAnimator = GetComponent<TitleSceneAnimator>();
+
+            EnsureContinueButton();
         }
 
         private void Start()
         {
             InitializeState();
+            SubscribeToLoadCompletion();
         }
 
         private void OnEnable()
         {
             BindButtons();
+            SubscribeToLoadCompletion();
         }
 
         private void OnDisable()
         {
             UnbindButtons();
+            UnsubscribeFromLoadCompletion();
         }
 
         private void InitializeState()
@@ -71,6 +80,7 @@ namespace GAME.Title
 
             _currentStep = TitleRequestStep.None;
             _transitioning = false;
+            RefreshContinueAvailability();
         }
 
         private void HandleStartClicked()
@@ -82,6 +92,28 @@ namespace GAME.Title
                 return;
 
             StartCoroutine(Co_OpenRequestPaper());
+        }
+
+        private void HandleContinueClicked()
+        {
+            if (_transitioning)
+                return;
+
+            SaveLoadService service = SaveLoadService.Instance;
+            if (service == null || !service.CanLoad)
+            {
+                RefreshContinueAvailability();
+                return;
+            }
+
+            _transitioning = true;
+            RefreshContinueAvailability();
+            if (!service.TryLoad(out string message))
+            {
+                Debug.LogWarning($"[TitleSceneController] Continue failed: {message}", this);
+                _transitioning = false;
+                RefreshContinueAvailability();
+            }
         }
 
         private IEnumerator Co_OpenRequestPaper()
@@ -240,6 +272,7 @@ namespace GAME.Title
 
         private void BindButtons()
         {
+            EnsureContinueButton();
             if (!_startButtonBound)
             {
                 if (startButton != null)
@@ -248,6 +281,14 @@ namespace GAME.Title
                     Debug.LogError("[TitleSceneController] Start Button is not assigned.", this);
 
                 _startButtonBound = true;
+            }
+
+            if (!_continueButtonBound)
+            {
+                if (continueButton != null)
+                    continueButton.onClick.AddListener(HandleContinueClicked);
+
+                _continueButtonBound = true;
             }
 
             if (!_paperButtonBound)
@@ -269,6 +310,14 @@ namespace GAME.Title
                 _startButtonBound = false;
             }
 
+            if (_continueButtonBound)
+            {
+                if (continueButton != null)
+                    continueButton.onClick.RemoveListener(HandleContinueClicked);
+
+                _continueButtonBound = false;
+            }
+
             if (_paperButtonBound)
             {
                 if (paperClickButton != null)
@@ -286,6 +335,68 @@ namespace GAME.Title
             group.alpha = alpha;
             group.interactable = interactable;
             group.blocksRaycasts = blocksRaycasts;
+        }
+
+        private void EnsureContinueButton()
+        {
+            if (continueButton != null || startButton == null)
+                return;
+
+            continueButton = Instantiate(startButton, startButton.transform.parent);
+            continueButton.name = "ContinueButton";
+            RectTransform source = startButton.transform as RectTransform;
+            RectTransform created = continueButton.transform as RectTransform;
+            if (source != null && created != null)
+            {
+                created.anchorMin = source.anchorMin;
+                created.anchorMax = source.anchorMax;
+                created.pivot = source.pivot;
+                created.sizeDelta = source.sizeDelta;
+                created.anchoredPosition = source.anchoredPosition + Vector2.down * (source.sizeDelta.y + 18f);
+            }
+
+            TMP_Text label = continueButton.GetComponentInChildren<TMP_Text>(true);
+            if (label != null)
+                label.text = "Continue";
+        }
+
+        private void RefreshContinueAvailability()
+        {
+            if (continueButton == null)
+                return;
+
+            SaveLoadService service = SaveLoadService.Instance;
+            continueButton.interactable = !_transitioning && service != null && service.CanLoad;
+        }
+
+        private void SubscribeToLoadCompletion()
+        {
+            SaveLoadService service = SaveLoadService.Instance;
+            if (_loadCompletionService == service)
+                return;
+
+            UnsubscribeFromLoadCompletion();
+            _loadCompletionService = service;
+            if (_loadCompletionService != null)
+                _loadCompletionService.OnLoadCompleted += HandleLoadCompleted;
+        }
+
+        private void UnsubscribeFromLoadCompletion()
+        {
+            if (_loadCompletionService != null)
+                _loadCompletionService.OnLoadCompleted -= HandleLoadCompleted;
+            _loadCompletionService = null;
+        }
+
+        private void HandleLoadCompleted(bool succeeded, string message)
+        {
+            if (!_transitioning)
+                return;
+
+            _transitioning = false;
+            if (!succeeded)
+                Debug.LogWarning($"[TitleSceneController] Continue failed: {message}", this);
+            RefreshContinueAvailability();
         }
 
         private static void LoadDungeonScene(string sceneName)
