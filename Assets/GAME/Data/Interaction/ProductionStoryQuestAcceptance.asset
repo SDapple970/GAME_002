@@ -1,0 +1,73 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7c7d016d594474e439b14d03874d8405, type: 3}
+  m_Name: ProductionStoryQuestAcceptance
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Story.Data.StoryEventDefinitionSO
+  eventId: VALIDATION_PRODUCTION_STORY_QUEST_ACCEPT
+  startNodeId: start
+  nodes:
+  - nodeId: start
+    speakerName: Story Quest Giver
+    portrait: {fileID: 0}
+    body: "Accept the story validation quest, then advance the marked story target."
+    choices:
+    - choiceId: accept_story_quest
+      text: Accept quest
+      nextNodeId: end
+      conditions: []
+      effects:
+      - type: 14
+        key:
+        boolValue: 0
+        intValue: 0
+        personaStat: 0
+        xpAmount: 0
+        missionDefinition: {fileID: 0}
+        missionId:
+        objectiveId:
+        questEventType: 0
+        questDefinition: {fileID: 11400000, guid: e38a4e93885f4366b89a20ef596c52a7, type: 2}
+        rewardSourceId:
+        rewardGold: 0
+        rewardExp: 0
+        rewardItemId:
+        rewardItemCount: 0
+      hideIfConditionNotMet: 1
+      disabledReason:
+    - choiceId: decline_story_quest
+      text: Decline quest
+      nextNodeId: end
+      conditions: []
+      effects: []
+      hideIfConditionNotMet: 1
+      disabledReason:
+    useTimedChoices: 0
+    choiceTimeLimitSeconds: 5
+    timeoutChoiceIndex: 0
+    timeoutNodeId:
+    hideBubbleAfterChoice: 0
+    nextNodeId:
+    effects: []
+    endEvent: 0
+  - nodeId: end
+    speakerName: Story Quest Giver
+    portrait: {fileID: 0}
+    body: "The story validation quest is ready."
+    choices: []
+    useTimedChoices: 0
+    choiceTimeLimitSeconds: 5
+    timeoutChoiceIndex: 0
+    timeoutNodeId:
+    hideBubbleAfterChoice: 0
+    nextNodeId:
+    effects: []
+    endEvent: 1

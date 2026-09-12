@@ -793,7 +793,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &91972173
 RectTransform:
   m_ObjectHideFlags: 0
@@ -18909,9 +18909,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1263257821}
   - component: {fileID: 1263257827}
-  - component: {fileID: 1263257824}
   - component: {fileID: 1263257823}
-  - component: {fileID: 1263257828}
   - component: {fileID: 1263257822}
   - component: {fileID: 1263257825}
   - component: {fileID: 1263257829}
@@ -18981,23 +18979,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Story.SceneTravelService
   dontDestroyOnLoad: 1
   playerTag: Player
---- !u!114 &1263257824
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1263257820}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ca27f8f891603d743bc7fe19f9074c48, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.QuestManager
-  dontDestroyOnLoad: 1
-  activeQuest:
-    quest: {fileID: 0}
-    currentStep: 0
-    completed: 0
 --- !u!114 &1263257825
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -19027,26 +19008,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: edc1c3df60c368d4fb9f169f9429ebfa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Core.GameStateMachine
---- !u!114 &1263257828
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1263257820}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d2ad0ab82d6e469b9377f27cd288f086, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Demo.DungeonObjectiveManager
-  requiredMonsterKills: 2
-  currentMonsterKills: 0
-  npcRescued: 0
-  demoEndController: {fileID: 1494647252}
-  questId: 101
-  stepOnAllMonstersKilled: 2
-  stepOnNpcRescued: 3
-  showDemoEndOnComplete: 1
 --- !u!114 &1263257829
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -20269,7 +20230,6 @@ MonoBehaviour:
   conditions: []
   events:
   - {fileID: 11400000, guid: 22b8fd3d500527940821e4756fe87a05, type: 2}
-  - {fileID: 11400000, guid: 8a63d6a1f6a893f4b8156a44746f67d1, type: 2}
 --- !u!61 &1344412102
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -25299,7 +25259,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1709498062
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -28148,7 +28108,6 @@ GameObject:
   - component: {fileID: 1873649836}
   - component: {fileID: 1873649835}
   - component: {fileID: 1873649834}
-  - component: {fileID: 1873649833}
   - component: {fileID: 1873649839}
   - component: {fileID: 1873649838}
   - component: {fileID: 1873649840}
@@ -28176,23 +28135,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1961634258}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1873649833
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1873649831}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8b5346e224f5c344786cda71854be763, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Tutorial.TutorialQuestCombatBridge
-  entryPoint: {fileID: 1873649839}
-  questId: 101
-  stepOnWin: 0
-  completeQuestOnWin: 0
-  onlyWhenWin: 1
 --- !u!114 &1873649834
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -14,6 +14,7 @@ namespace Game.Quest
         [SerializeField] private CalendarService calendarService;
 
         private readonly HashSet<string> _appliedQuestIds = new();
+        private QuestRuntime _subscribedRuntime;
         private bool _ownsRuntime;
         private bool _missingCalendarWarned;
         private bool _duplicateOwnerWarned;
@@ -26,11 +27,13 @@ namespace Game.Quest
         private void OnEnable()
         {
             ResolveReferences();
-            TryClaimRuntime();
+            if (TryClaimRuntime())
+                Subscribe();
         }
 
         private void OnDisable()
         {
+            Unsubscribe();
             ReleaseRuntime();
         }
 
@@ -139,6 +142,32 @@ namespace Game.Quest
                 OwnersByRuntimeId.Remove(key);
 
             _ownsRuntime = false;
+        }
+
+        private void Subscribe()
+        {
+            if (_subscribedRuntime == questRuntime)
+                return;
+
+            if (_subscribedRuntime != null)
+                _subscribedRuntime.OnQuestCompleted -= HandleQuestCompleted;
+
+            _subscribedRuntime = questRuntime;
+            if (_subscribedRuntime != null)
+                _subscribedRuntime.OnQuestCompleted += HandleQuestCompleted;
+        }
+
+        private void Unsubscribe()
+        {
+            if (_subscribedRuntime != null)
+                _subscribedRuntime.OnQuestCompleted -= HandleQuestCompleted;
+
+            _subscribedRuntime = null;
+        }
+
+        private void HandleQuestCompleted(string questId)
+        {
+            TryApplyMissionDayCost(questId);
         }
 
         private void WarnMissingCalendar(string questId)

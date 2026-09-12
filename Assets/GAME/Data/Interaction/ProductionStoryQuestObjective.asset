@@ -1,0 +1,75 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7c7d016d594474e439b14d03874d8405, type: 3}
+  m_Name: ProductionStoryQuestObjective
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Story.Data.StoryEventDefinitionSO
+  eventId: VALIDATION_PRODUCTION_STORY_QUEST_OBJECTIVE
+  startNodeId: start
+  nodes:
+  - nodeId: start
+    speakerName: Story Validation Target
+    portrait: {fileID: 0}
+    body: "Advance this story once to execute the validation objective effect."
+    choices: []
+    useTimedChoices: 0
+    choiceTimeLimitSeconds: 5
+    timeoutChoiceIndex: 0
+    timeoutNodeId:
+    hideBubbleAfterChoice: 0
+    nextNodeId: complete
+    effects: []
+    endEvent: 0
+  - nodeId: complete
+    speakerName: Story Validation Target
+    portrait: {fileID: 0}
+    body: "The authored StoryEffect has published the validation quest event."
+    choices: []
+    useTimedChoices: 0
+    choiceTimeLimitSeconds: 5
+    timeoutChoiceIndex: 0
+    timeoutNodeId:
+    hideBubbleAfterChoice: 0
+    nextNodeId:
+    effects:
+    - type: 12
+      key:
+      boolValue: 0
+      intValue: 1
+      personaStat: 0
+      xpAmount: 0
+      missionDefinition: {fileID: 0}
+      missionId: validation.production.story.quest
+      objectiveId: complete_validation_story_effect
+      questEventType: 30
+      questDefinition: {fileID: 0}
+      rewardSourceId:
+      rewardGold: 0
+      rewardExp: 0
+      rewardItemId:
+      rewardItemCount: 0
+    - type: 7
+      key: VALIDATION_PRODUCTION_STORY_QUEST_OBJECTIVE
+      boolValue: 0
+      intValue: 0
+      personaStat: 0
+      xpAmount: 0
+      missionDefinition: {fileID: 0}
+      missionId:
+      objectiveId:
+      questEventType: 0
+      questDefinition: {fileID: 0}
+      rewardSourceId:
+      rewardGold: 0
+      rewardExp: 0
+      rewardItemId:
+      rewardItemCount: 0
+    endEvent: 1

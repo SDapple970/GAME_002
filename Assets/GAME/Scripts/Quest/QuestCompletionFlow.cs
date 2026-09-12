@@ -32,12 +32,14 @@ namespace Game.Quest
         private void Awake()
         {
             ResolveReferences();
+            LogRuntimeInstances("Awake");
         }
 
         private void OnEnable()
         {
             ResolveReferences();
             Subscribe();
+            LogRuntimeInstances("OnEnable");
             TryProcessPending();
         }
 
@@ -49,6 +51,7 @@ namespace Game.Quest
             // combat-time completion is released when gameplay returns to Exploration.
             ResolveReferences();
             Subscribe();
+            LogRuntimeInstances("Start called");
             TryProcessPending();
         }
 
@@ -75,22 +78,36 @@ namespace Game.Quest
 
         private void HandleQuestCompleted(string questId)
         {
+            Debug.Log(
+                $"[QuestRewardTrace] QuestCompletionFlow.HandleQuestCompleted received. questId={questId}, currentGameState={GetCurrentGameState()}, pendingQueueCount={_pendingQuestIds.Count}, questCompletionFlowInstanceId={GetInstanceID()}",
+                this);
             if (string.IsNullOrWhiteSpace(questId) || !_claimedQuestIds.Add(questId))
                 return;
 
             _pendingQuestIds.Enqueue(questId);
+            Debug.Log(
+                $"[QuestRewardTrace] QuestCompletionFlow.HandleQuestCompleted enqueued. questId={questId}, currentGameState={GetCurrentGameState()}, pendingQueueCount={_pendingQuestIds.Count}, questCompletionFlowInstanceId={GetInstanceID()}",
+                this);
             TryProcessPending();
         }
 
         private void HandleStateChanged(GameState previous, GameState next)
         {
+            Debug.Log(
+                $"[QuestRewardTrace] QuestCompletionFlow.HandleStateChanged. previous={previous}, next={next}, subscribedGameStateMachineInstanceId={GetInstanceId(_subscribedStateMachine)}, questCompletionFlowInstanceId={GetInstanceID()}",
+                this);
             if (next == GameState.Exploration)
                 TryProcessPending();
         }
 
         private void TryProcessPending()
         {
-            while (_pendingQuestIds.Count > 0 && IsSafeToProcessCompletion())
+            bool safeToProcess = IsSafeToProcessCompletion();
+            Debug.Log(
+                $"[QuestRewardTrace] QuestCompletionFlow.TryProcessPending. pendingQueueCount={_pendingQuestIds.Count}, isSafeToProcessCompletion={safeToProcess}, currentGameState={GetCurrentGameState()}, gameStateMachineInstanceId={GetInstanceId(GameStateMachine.Instance)}, questCompletionFlowInstanceId={GetInstanceID()}",
+                this);
+
+            while (_pendingQuestIds.Count > 0 && safeToProcess)
             {
                 string questId = _pendingQuestIds.Dequeue();
                 Debug.Log($"[QuestCompletionFlow] Processing quest completion. questId={questId}", this);
@@ -166,7 +183,12 @@ namespace Game.Quest
 
             _subscribedStateMachine = stateMachine;
             if (_subscribedStateMachine != null)
+            {
                 _subscribedStateMachine.OnStateChanged += HandleStateChanged;
+                Debug.Log(
+                    $"[QuestRewardTrace] QuestCompletionFlow.Subscribe GameStateMachine. subscribedGameStateMachineInstanceId={GetInstanceId(_subscribedStateMachine)}, questCompletionFlowInstanceId={GetInstanceID()}",
+                    this);
+            }
         }
 
         private void Unsubscribe()
@@ -182,6 +204,9 @@ namespace Game.Quest
 
         private RewardGrantResult TryGrantQuestReward(string questId)
         {
+            Debug.Log(
+                $"[QuestRewardTrace] QuestCompletionFlow.TryGrantQuestReward begin. questId={questId}, grantRewardOnCompletion={grantRewardOnCompletion}, rewardServiceInstanceId={GetInstanceId(rewardService)}, questCompletionFlowInstanceId={GetInstanceID()}",
+                this);
             if (!grantRewardOnCompletion || string.IsNullOrWhiteSpace(questId))
                 return RewardGrantResult.Empty;
 
@@ -204,6 +229,9 @@ namespace Game.Quest
             int definitionExp = 0;
             bool hasDefinitionReward = questRuntime != null &&
                                        questRuntime.TryGetQuestReward(questId, out definitionGold, out definitionExp);
+            Debug.Log(
+                $"[QuestRewardTrace] QuestCompletionFlow.TryGrantQuestReward resolved definition. questId={questId}, tryGetQuestRewardResult={hasDefinitionReward}, definitionGold={definitionGold}, definitionExp={definitionExp}, fallbackGold={fallbackRewardGold}, fallbackExp={fallbackRewardExp}, rewardServiceInstanceId={GetInstanceId(rewardService)}",
+                this);
             if (hasDefinitionReward)
             {
                 gold = definitionGold;
@@ -216,6 +244,9 @@ namespace Game.Quest
             }
 
             RewardResult reward = rewardService.GrantQuestCompletion(questId, gold, exp);
+            Debug.Log(
+                $"[QuestRewardTrace] QuestCompletionFlow.TryGrantQuestReward granted. questId={questId}, resolvedGold={gold}, resolvedExp={exp}, rewardServiceInstanceId={GetInstanceId(rewardService)}, appliedGold={reward.Gold}, appliedExp={reward.Exp}, duplicateBlocked={reward.DuplicateBlocked}",
+                this);
             return new RewardGrantResult(
                 RewardSourceType.QuestCompletion,
                 $"quest:{questId}",
@@ -279,6 +310,25 @@ namespace Game.Quest
                 return;
             _missingDaySettlementFlowWarned = true;
             Debug.LogWarning($"[QuestCompletionFlow] DaySettlementFlow is missing. Quest completion settlement notification skipped. questId={questId}", this);
+        }
+
+        private void LogRuntimeInstances(string phase)
+        {
+            Debug.Log(
+                $"[QuestRewardTrace] QuestCompletionFlow.{phase}. questRuntimeInstanceId={GetInstanceId(questRuntime)}, questCompletionFlowInstanceId={GetInstanceID()}, gameStateMachineInstanceId={GetInstanceId(GameStateMachine.Instance)}, rewardServiceInstanceId={GetInstanceId(rewardService)}, currencyWalletInstanceId={GetInstanceId(Game.NonCombat.Inventory.CurrencyWallet.Instance)}",
+                this);
+        }
+
+        private static string GetCurrentGameState()
+        {
+            return GameStateMachine.Instance != null
+                ? GameStateMachine.Instance.Current.ToString()
+                : "null";
+        }
+
+        private static string GetInstanceId(Object value)
+        {
+            return value != null ? value.GetInstanceID().ToString() : "null";
         }
     }
 }

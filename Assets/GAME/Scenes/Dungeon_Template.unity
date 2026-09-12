@@ -260,48 +260,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
   m_PrefabInstance: {fileID: 94016021}
   m_PrefabAsset: {fileID: 0}
---- !u!1001 &7100000020
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 1113879640}
-    m_Modifications:
-    - target: {fileID: 100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
-      propertyPath: m_Name
-      value: ValidationInteractionQuestGiver
-      objectReference: {fileID: 0}
-    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: -27.5
-      objectReference: {fileID: 0}
-    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: -2.68
-      objectReference: {fileID: 0}
-    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
-      propertyPath: interactionId
-      value: validation.production.interaction.quest-giver
-      objectReference: {fileID: 0}
-    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
-      propertyPath: events.Array.data[0]
-      value: 
-      objectReference: {fileID: 11400000, guid: 73cc4886d5db490c9a10fec70e8606c5, type: 2}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
---- !u!4 &7100000021 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
-  m_PrefabInstance: {fileID: 7100000020}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &116758818
 GameObject:
   m_ObjectHideFlags: 0
@@ -360,7 +318,7 @@ Transform:
   m_GameObject: {fileID: 142507220}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -34.92, y: -2.49, z: 0}
+  m_LocalPosition: {x: -51, y: -2.49, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -759,6 +717,7 @@ Rigidbody2D:
   m_Constraints: 4
 --- !u!212 &775279489
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -804,6 +763,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 8388850206945087443, guid: f24aedbabddf78d47a9aff26ea70797f, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -813,7 +773,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!114 &775279491
 MonoBehaviour:
@@ -996,11 +955,15 @@ Transform:
   m_GameObject: {fileID: 1113879639}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: -21.2, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 94016022}
+  - {fileID: 7100000023}
+  - {fileID: 7100000030}
+  - {fileID: 7100000038}
+  - {fileID: 7100000021}
   m_Father: {fileID: 1115213729}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1115213728
@@ -1063,8 +1026,8 @@ Transform:
   m_GameObject: {fileID: 1135818049}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1.2767, y: -4.9941, z: 0}
-  m_LocalScale: {x: 15.3739195, y: 0.5239824, z: 1}
+  m_LocalPosition: {x: -45.1151, y: -4.9941, z: 0}
+  m_LocalScale: {x: 33.112347, y: 0.5239824, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 544487111}
@@ -1117,6 +1080,7 @@ BoxCollider2D:
   m_EdgeRadius: 0
 --- !u!212 &1135818052
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -1162,6 +1126,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 6375440409007837797, guid: 6523ebab7a6d8504498289dd2967dc12, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -1171,7 +1136,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!1 &1282982183
 GameObject:
@@ -1432,6 +1396,7 @@ Rigidbody2D:
   m_Constraints: 4
 --- !u!212 &1388169083
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -1477,6 +1442,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 8388850206945087443, guid: f24aedbabddf78d47a9aff26ea70797f, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -1486,7 +1452,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!1 &1407906008
 GameObject:
@@ -1685,6 +1650,10 @@ Transform:
   - {fileID: 821167964}
   - {fileID: 1372915707}
   - {fileID: 142507221}
+  - {fileID: 7100000025}
+  - {fileID: 7100000032}
+  - {fileID: 7100000040}
+  - {fileID: 7100000044}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1662575353
@@ -2049,6 +2018,11 @@ GameObject:
   - component: {fileID: 7100000003}
   - component: {fileID: 7100000004}
   - component: {fileID: 7100000015}
+  - component: {fileID: 7100000016}
+  - component: {fileID: 7100000017}
+  - component: {fileID: 7100000018}
+  - component: {fileID: 7100000035}
+  - component: {fileID: 7100000036}
   m_Layer: 0
   m_Name: Quest
   m_TagString: Untagged
@@ -2080,6 +2054,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1873044935}
+  - component: {fileID: 7100000028}
   m_Layer: 0
   m_Name: Narrative
   m_TagString: Untagged
@@ -2397,6 +2372,9 @@ MonoBehaviour:
   questDefinitions:
   - {fileID: 11400000, guid: d364263c840b4fafb924c5b03ba7d7a9, type: 2}
   - {fileID: 11400000, guid: 4159c753fb774d968b3221698ab568a6, type: 2}
+  - {fileID: 11400000, guid: a8e7ff99dd31423bb35b5a96c0858c60, type: 2}
+  - {fileID: 11400000, guid: e38a4e93885f4366b89a20ef596c52a7, type: 2}
+  - {fileID: 11400000, guid: 964cf59463b640868ef1bd46f15b8871, type: 2}
 --- !u!114 &7100000002
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2447,23 +2425,6 @@ MonoBehaviour:
   questId: validation.production.npc.quest
   objectiveId: defeat_validation_target
   eventType: 10
---- !u!114 &7100000015
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1805323963}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9d7dd2f94cea4e1997d1de2c72446ec6, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.InteractionQuestObjectivePublisher
-  interactionRunner: {fileID: 0}
-  questId: validation.production.interaction.quest
-  objectiveId: complete_validation_interaction
-  targetInteractionId: validation.production.interaction.target
-  eventType: 60
 --- !u!1 &7100000011
 GameObject:
   m_ObjectHideFlags: 0
@@ -2525,6 +2486,686 @@ MonoBehaviour:
   currencyWallet: {fileID: 7100000013}
   inventoryService: {fileID: 0}
   characterProgressionService: {fileID: 0}
+--- !u!114 &7100000015
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1805323963}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d7dd2f94cea4e1997d1de2c72446ec6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.InteractionQuestObjectivePublisher
+  interactionRunner: {fileID: 0}
+  questId: validation.production.interaction.quest
+  objectiveId: complete_validation_interaction
+  targetInteractionId: validation.production.interaction.target
+  eventType: 60
+--- !u!114 &7100000016
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1805323963}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d836f03b4dce47bb8f824b5586974f84, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.QuestCalendarIntegration
+  questRuntime: {fileID: 7100000001}
+  calendarService: {fileID: 7100000017}
+--- !u!114 &7100000017
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1805323963}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a9f363d3f1234f3f8fd12a71088bb14f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Daily.CalendarService
+  currentDay: 1
+  currentWeek: 1
+  currentChapterId: 
+  currentPhase: 0
+--- !u!114 &7100000018
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1805323963}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d7dd2f94cea4e1997d1de2c72446ec6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.InteractionQuestObjectivePublisher
+  interactionRunner: {fileID: 0}
+  questId: validation.production.calendar.quest
+  objectiveId: complete_calendar_validation_interaction
+  targetInteractionId: validation.production.calendar.target
+  eventType: 60
+--- !u!1001 &7100000020
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1113879640}
+    m_Modifications:
+    - target: {fileID: 100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_Name
+      value: ValidationInteractionQuestGiver
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -27.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -2.68
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: interactionId
+      value: validation.production.interaction.quest-giver
+      objectReference: {fileID: 0}
+    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: 'events.Array.data[0]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 73cc4886d5db490c9a10fec70e8606c5, type: 2}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+--- !u!4 &7100000021 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+  m_PrefabInstance: {fileID: 7100000020}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &7100000022
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1113879640}
+    m_Modifications:
+    - target: {fileID: 100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_Name
+      value: CalendarValidationQuestGiver
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -22.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -2.68
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: interactionId
+      value: validation.production.calendar.quest-giver
+      objectReference: {fileID: 0}
+    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: 'events.Array.data[0]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 9064acbed57545ffb7879ab5838aae50, type: 2}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+--- !u!4 &7100000023 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+  m_PrefabInstance: {fileID: 7100000022}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &7100000024
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7100000025}
+  - component: {fileID: 7100000027}
+  - component: {fileID: 7100000026}
+  m_Layer: 0
+  m_Name: CalendarValidationInteractionTarget
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7100000025
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000024}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -35.58, y: -2.49, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1431623488}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7100000026
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000024}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bfcba10177facee4a810d0800243b65d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Interaction.InteractableObject
+  promptText: "F: \uC870\uC0AC"
+  interactOnce: 0
+  disableAfterInteract: 0
+  playerTag: Player
+  interactionId: validation.production.calendar.target
+  usePolicy: 30
+  conditions: []
+  events:
+  - {fileID: 11400000, guid: cb6743926fed4d7696857fc1c0d70d7d, type: 2}
+--- !u!61 &7100000027
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000024}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0, y: 0}
+    oldSize: {x: 0, y: 0}
+    newSize: {x: 0, y: 0}
+    adaptiveTilingThreshold: 0
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Size: {x: 2, y: 2}
+  m_EdgeRadius: 0
+--- !u!114 &7100000028
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1873044934}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f6cbbbf5c94d5a4d8c0d54c2c0b5fb6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Story.StoryProgressManager
+  currentChapter: 1
+  mainProgress: 0
+--- !u!1001 &7100000029
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1113879640}
+    m_Modifications:
+    - target: {fileID: 100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_Name
+      value: StoryValidationQuestGiver
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -17.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -2.68
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: interactionId
+      value: validation.production.story.quest-giver
+      objectReference: {fileID: 0}
+    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: 'events.Array.data[0]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 00bb1c19c5544c8081a9fb5143c28dd9, type: 2}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+--- !u!4 &7100000030 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+  m_PrefabInstance: {fileID: 7100000029}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &7100000031
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7100000032}
+  - component: {fileID: 7100000034}
+  - component: {fileID: 7100000033}
+  m_Layer: 0
+  m_Name: StoryValidationInteractionTarget
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7100000032
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000031}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -30.580002, y: -2.49, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1431623488}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7100000033
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000031}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bfcba10177facee4a810d0800243b65d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Interaction.InteractableObject
+  promptText: "F: \uC870\uC0AC"
+  interactOnce: 0
+  disableAfterInteract: 0
+  playerTag: Player
+  interactionId: validation.production.story.target
+  usePolicy: 30
+  conditions: []
+  events:
+  - {fileID: 11400000, guid: ddbb2022eacd43998e22a0a09a161d11, type: 2}
+--- !u!61 &7100000034
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000031}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0, y: 0}
+    oldSize: {x: 0, y: 0}
+    newSize: {x: 0, y: 0}
+    adaptiveTilingThreshold: 0
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Size: {x: 2, y: 2}
+  m_EdgeRadius: 0
+--- !u!114 &7100000035
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1805323963}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a936f2fc965d4141bc4e7fa357ff669e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.CombatQuestObjectivePublisher
+  combatEntryPoint: {fileID: 1665839071176935754}
+  targetEncounter: {fileID: 1992528912}
+  questId: validation.production.multi-objective.quest
+  objectiveId: defeat_multi_validation_encounter
+  eventType: 10
+--- !u!114 &7100000036
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1805323963}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d7dd2f94cea4e1997d1de2c72446ec6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.InteractionQuestObjectivePublisher
+  interactionRunner: {fileID: 0}
+  questId: validation.production.multi-objective.quest
+  objectiveId: complete_multi_validation_interaction
+  targetInteractionId: validation.production.multi-objective.interaction.target
+  eventType: 60
+--- !u!1001 &7100000037
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1113879640}
+    m_Modifications:
+    - target: {fileID: 100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_Name
+      value: MultiObjectiveValidationQuestGiver
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -10.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -2.68
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: interactionId
+      value: validation.production.multi-objective.quest-giver
+      objectReference: {fileID: 0}
+    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: 'events.Array.data[0]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 3ded88002eaa42b4857d61e5e3ca2ad3, type: 2}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+--- !u!4 &7100000038 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+  m_PrefabInstance: {fileID: 7100000037}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &7100000039
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7100000040}
+  - component: {fileID: 7100000042}
+  - component: {fileID: 7100000041}
+  m_Layer: 0
+  m_Name: MultiObjectiveValidationInteractionTarget
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7100000040
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000039}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -23.580002, y: -2.49, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1431623488}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7100000041
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000039}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bfcba10177facee4a810d0800243b65d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Interaction.InteractableObject
+  promptText: "F: \uC870\uC0AC"
+  interactOnce: 0
+  disableAfterInteract: 0
+  playerTag: Player
+  interactionId: validation.production.multi-objective.interaction.target
+  usePolicy: 30
+  conditions: []
+  events:
+  - {fileID: 11400000, guid: ee92f3775c6040d5abc17b7b420b7c32, type: 2}
+--- !u!61 &7100000042
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000039}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0, y: 0}
+    oldSize: {x: 0, y: 0}
+    newSize: {x: 0, y: 0}
+    adaptiveTilingThreshold: 0
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Size: {x: 2, y: 2}
+  m_EdgeRadius: 0
+--- !u!1 &7100000043
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7100000044}
+  - component: {fileID: 7100000046}
+  - component: {fileID: 7100000045}
+  m_Layer: 0
+  m_Name: MultiObjectiveValidationStoryTarget
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7100000044
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000043}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -20.580002, y: -2.49, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1431623488}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7100000045
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000043}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bfcba10177facee4a810d0800243b65d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Interaction.InteractableObject
+  promptText: "F: \uB300\uD654"
+  interactOnce: 0
+  disableAfterInteract: 0
+  playerTag: Player
+  interactionId: validation.production.multi-objective.story.target
+  usePolicy: 30
+  conditions: []
+  events:
+  - {fileID: 11400000, guid: 6093241efeba48b69932c591a3882c3f, type: 2}
+--- !u!61 &7100000046
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000043}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_ForceSendLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ForceReceiveLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_ContactCaptureLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_CallbackLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
+  m_Offset: {x: 0, y: 0}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0, y: 0}
+    oldSize: {x: 0, y: 0}
+    newSize: {x: 0, y: 0}
+    adaptiveTilingThreshold: 0
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  m_Size: {x: 2, y: 2}
+  m_EdgeRadius: 0
 --- !u!1001 &1645636291499357858
 PrefabInstance:
   m_ObjectHideFlags: 0

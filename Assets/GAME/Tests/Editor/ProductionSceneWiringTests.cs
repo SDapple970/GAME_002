@@ -5,6 +5,7 @@ using Game.Combat.Core;
 using Game.Combat.Integration;
 using Game.Combat.UI;
 using Game.Core;
+using Game.Daily;
 using Game.DemoMission.Runtime;
 using Game.Input;
 using Game.Interaction;
@@ -78,6 +79,46 @@ namespace Game.Tests.Integration
             AssertOne<CurrencyWallet>();
             AssertOne<InventoryService>();
             AssertOne<RewardService>();
+        }
+
+        [Test]
+        public void Dungeon_QuestRuntimeIsTheOnlyProductionQuestStateOwner()
+        {
+            Open(Dungeon);
+
+            AssertOne<QuestRuntime>();
+            AssertOne<QuestObjectiveTracker>();
+            AssertOne<QuestCompletionFlow>();
+            Assert.That(FindAll<QuestManager>(), Is.Empty);
+            Assert.That(FindAll<Game.Mission.MissionManager>(), Is.Empty);
+            Assert.That(FindAll<Game.Demo.DungeonObjectiveManager>(), Is.Empty);
+            Assert.That(FindAll<Game.Tutorial.TutorialQuestCombatBridge>(), Is.Empty);
+
+            DemoMissionRuntime demoMission = FindAll<DemoMissionRuntime>().Single();
+            Assert.That(new SerializedObject(demoMission).FindProperty("bridgeToQuestRuntime").boolValue, Is.True);
+            Assert.That(Reference(demoMission, "questRuntime"), Is.SameAs(FindAll<QuestRuntime>().Single()));
+
+            MissionObjectiveTracker tracker = FindAll<MissionObjectiveTracker>().Single();
+            Assert.That(new SerializedObject(tracker).FindProperty("preferQuestRuntime").boolValue, Is.True);
+            Assert.That(Reference(tracker, "questRuntime"), Is.SameAs(FindAll<QuestRuntime>().Single()));
+
+            Game.DemoMission.DemoRescueNpcEndFlow legacyEndFlow =
+                FindAll<Game.DemoMission.DemoRescueNpcEndFlow>().Single();
+            Assert.That(legacyEndFlow.gameObject.activeSelf, Is.False,
+                "The direct Demo UIOnly/Title transition must not execute in the build scene.");
+            Game.DemoMission.DemoEndPanelController legacyEndPanel =
+                FindAll<Game.DemoMission.DemoEndPanelController>().Single();
+            Assert.That(legacyEndPanel.gameObject.activeSelf, Is.False);
+
+            QuestAdvanceInteractionEventSO legacyAdvance =
+                AssetDatabase.LoadAssetAtPath<QuestAdvanceInteractionEventSO>(
+                    "Assets/GAME/Data/Quest/QuestAdvance_Investigate_Note.asset");
+            Assert.That(legacyAdvance, Is.Not.Null);
+            foreach (InteractableObject interactable in FindAll<InteractableObject>())
+            {
+                Assert.That(interactable.Events, Has.No.Member(legacyAdvance),
+                    $"The build scene must not invoke the legacy QuestAdvance path: {interactable.name}");
+            }
         }
 
         [Test]
@@ -184,6 +225,11 @@ namespace Game.Tests.Integration
             StoryEventRunner[] runners = FindAll<StoryEventRunner>();
             Assert.That(runners, Has.Length.EqualTo(1));
             Assert.That(GetHierarchyPath(runners[0].transform), Is.EqualTo("Runtime/Narrative/StoryEventRunner"));
+            StoryProgressManager[] storyProgressManagers = FindAll<StoryProgressManager>();
+            Assert.That(storyProgressManagers, Has.Length.EqualTo(1));
+            Assert.That(GetHierarchyPath(storyProgressManagers[0].transform), Is.EqualTo("Runtime/Narrative"));
+            Assert.That(new SerializedObject(runners[0]).FindProperty("markCurrentEventCompletedOnEnd").boolValue, Is.False,
+                "The validation StoryEffect explicitly records its completion state.");
 
             StoryDialogueHUD[] huds = FindAll<StoryDialogueHUD>();
             Assert.That(huds, Has.Length.EqualTo(1));
@@ -220,6 +266,8 @@ namespace Game.Tests.Integration
             QuestRuntime[] runtimes = FindAll<QuestRuntime>();
             QuestObjectiveTracker[] objectiveTrackers = FindAll<QuestObjectiveTracker>();
             QuestCompletionFlow[] completionFlows = FindAll<QuestCompletionFlow>();
+            QuestCalendarIntegration[] calendarIntegrations = FindAll<QuestCalendarIntegration>();
+            CalendarService[] calendarServices = FindAll<CalendarService>();
             CombatQuestObjectivePublisher[] combatQuestPublishers = FindAll<CombatQuestObjectivePublisher>();
             QuestTrackerUI[] questTrackers = FindAll<QuestTrackerUI>();
             RewardService[] rewardServices = FindAll<RewardService>();
@@ -228,12 +276,16 @@ namespace Game.Tests.Integration
             Assert.That(GetHierarchyPath(runtimes[0].transform), Is.EqualTo("Runtime/Quest"));
             Assert.That(objectiveTrackers, Has.Length.EqualTo(1));
             Assert.That(completionFlows, Has.Length.EqualTo(1));
-            Assert.That(combatQuestPublishers, Has.Length.EqualTo(1));
+            Assert.That(calendarIntegrations, Has.Length.EqualTo(1));
+            Assert.That(calendarServices, Has.Length.EqualTo(1));
+            Assert.That(combatQuestPublishers, Has.Length.EqualTo(2));
             Assert.That(questTrackers, Has.Length.EqualTo(1));
             Assert.That(rewardServices, Has.Length.EqualTo(1));
             Assert.That(wallets, Has.Length.EqualTo(1));
             Assert.That(Reference(objectiveTrackers[0], "questRuntime"), Is.SameAs(runtimes[0]));
             Assert.That(Reference(completionFlows[0], "questRuntime"), Is.SameAs(runtimes[0]));
+            Assert.That(Reference(calendarIntegrations[0], "questRuntime"), Is.SameAs(runtimes[0]));
+            Assert.That(Reference(calendarIntegrations[0], "calendarService"), Is.SameAs(calendarServices[0]));
             Assert.That(Reference(completionFlows[0], "rewardService"), Is.SameAs(rewardServices[0]));
             Assert.That(Reference(rewardServices[0], "currencyWallet"), Is.SameAs(wallets[0]));
             Assert.That(new SerializedObject(completionFlows[0]).FindProperty("grantRewardOnCompletion").boolValue, Is.True);
@@ -241,7 +293,7 @@ namespace Game.Tests.Integration
 
             SerializedObject serializedRuntime = new(runtimes[0]);
             SerializedProperty definitions = serializedRuntime.FindProperty("questDefinitions");
-            Assert.That(definitions.arraySize, Is.EqualTo(2));
+            Assert.That(definitions.arraySize, Is.EqualTo(5));
             QuestDefinitionSO[] authoredQuests = Enumerable.Range(0, definitions.arraySize)
                 .Select(index => definitions.GetArrayElementAtIndex(index).objectReferenceValue as QuestDefinitionSO)
                 .ToArray();
@@ -261,17 +313,90 @@ namespace Game.Tests.Integration
             Assert.That(interactionQuest.Objectives[0].EventType, Is.EqualTo(QuestEventType.Interact));
             Assert.That(interactionQuest.Objectives[0].TargetId, Is.EqualTo("validation.production.interaction.target"));
 
-            InteractionQuestObjectivePublisher interactionPublisher = FindAll<InteractionQuestObjectivePublisher>().Single();
+            QuestDefinitionSO calendarQuest = authoredQuests.Single(item => item.QuestId == "validation.production.calendar.quest");
+            Assert.That(AssetDatabase.GetAssetPath(calendarQuest), Is.EqualTo(
+                "Assets/GAME/Data/Quest/VALIDATION_PRODUCTION_CALENDAR_QUEST.asset"));
+            Assert.That(calendarQuest.MissionDayCost, Is.EqualTo(2));
+            Assert.That(calendarQuest.RewardGold, Is.Zero);
+            Assert.That(calendarQuest.RewardExp, Is.Zero);
+            Assert.That(calendarQuest.Objectives, Has.Length.EqualTo(1));
+            Assert.That(calendarQuest.Objectives[0].EventType, Is.EqualTo(QuestEventType.Interact));
+            Assert.That(calendarQuest.Objectives[0].ObjectiveId, Is.EqualTo("complete_calendar_validation_interaction"));
+            Assert.That(calendarQuest.Objectives[0].TargetId, Is.EqualTo("validation.production.calendar.target"));
+
+            QuestDefinitionSO storyQuest = authoredQuests.Single(item => item.QuestId == "validation.production.story.quest");
+            Assert.That(AssetDatabase.GetAssetPath(storyQuest), Is.EqualTo(
+                "Assets/GAME/Data/Quest/VALIDATION_PRODUCTION_STORY_QUEST.asset"));
+            Assert.That(storyQuest.MissionDayCost, Is.Zero);
+            Assert.That(storyQuest.RewardGold, Is.Zero);
+            Assert.That(storyQuest.RewardExp, Is.Zero);
+            Assert.That(storyQuest.Objectives, Has.Length.EqualTo(1));
+            Assert.That(storyQuest.Objectives[0].EventType, Is.EqualTo(QuestEventType.Talk));
+            Assert.That(storyQuest.Objectives[0].ObjectiveId, Is.EqualTo("complete_validation_story_effect"));
+            Assert.That(storyQuest.Objectives[0].TargetId, Is.Null);
+
+            QuestDefinitionSO multiObjectiveQuest = authoredQuests.Single(item =>
+                item.QuestId == "validation.production.multi-objective.quest");
+            Assert.That(AssetDatabase.GetAssetPath(multiObjectiveQuest), Is.EqualTo(
+                "Assets/GAME/Data/Quest/VALIDATION_PRODUCTION_MULTI_OBJECTIVE_QUEST.asset"));
+            Assert.That(multiObjectiveQuest.MissionDayCost, Is.Zero);
+            Assert.That(multiObjectiveQuest.RewardGold, Is.Zero);
+            Assert.That(multiObjectiveQuest.RewardExp, Is.Zero);
+            Assert.That(multiObjectiveQuest.Objectives, Has.Length.EqualTo(3));
+            Assert.That(multiObjectiveQuest.Objectives.Select(item => item.ObjectiveId), Is.EquivalentTo(new[]
+            {
+                "defeat_multi_validation_encounter",
+                "complete_multi_validation_interaction",
+                "complete_multi_validation_story"
+            }));
+            Assert.That(multiObjectiveQuest.Objectives.Select(item => item.GroupIndex), Is.All.EqualTo(0));
+            Assert.That(multiObjectiveQuest.Objectives.Select(item => item.Optional), Is.All.EqualTo(false));
+            Assert.That(multiObjectiveQuest.Objectives.Single(item => item.ObjectiveId == "defeat_multi_validation_encounter").EventType,
+                Is.EqualTo(QuestEventType.Kill));
+            QuestObjectiveDefinition multiInteractionObjective = multiObjectiveQuest.Objectives.Single(item =>
+                item.ObjectiveId == "complete_multi_validation_interaction");
+            Assert.That(multiInteractionObjective.EventType, Is.EqualTo(QuestEventType.Interact));
+            Assert.That(multiInteractionObjective.TargetId,
+                Is.EqualTo("validation.production.multi-objective.interaction.target"));
+            Assert.That(multiObjectiveQuest.Objectives.Single(item => item.ObjectiveId == "complete_multi_validation_story").EventType,
+                Is.EqualTo(QuestEventType.Talk));
+
+            InteractionQuestObjectivePublisher[] interactionPublishers = FindAll<InteractionQuestObjectivePublisher>();
+            Assert.That(interactionPublishers, Has.Length.EqualTo(3));
+            InteractionQuestObjectivePublisher interactionPublisher = interactionPublishers.Single(item =>
+                new SerializedObject(item).FindProperty("questId").stringValue == interactionQuest.QuestId);
             SerializedObject serializedPublisher = new(interactionPublisher);
-            Assert.That(serializedPublisher.FindProperty("questId").stringValue, Is.EqualTo(interactionQuest.QuestId));
             Assert.That(serializedPublisher.FindProperty("objectiveId").stringValue, Is.EqualTo("complete_validation_interaction"));
             Assert.That(serializedPublisher.FindProperty("targetInteractionId").stringValue,
                 Is.EqualTo(interactionQuest.Objectives[0].TargetId));
+            InteractionQuestObjectivePublisher calendarPublisher = interactionPublishers.Single(item =>
+                new SerializedObject(item).FindProperty("questId").stringValue == calendarQuest.QuestId);
+            SerializedObject serializedCalendarPublisher = new(calendarPublisher);
+            Assert.That(serializedCalendarPublisher.FindProperty("objectiveId").stringValue,
+                Is.EqualTo(calendarQuest.Objectives[0].ObjectiveId));
+            Assert.That(serializedCalendarPublisher.FindProperty("targetInteractionId").stringValue,
+                Is.EqualTo(calendarQuest.Objectives[0].TargetId));
+            InteractionQuestObjectivePublisher multiInteractionPublisher = interactionPublishers.Single(item =>
+                new SerializedObject(item).FindProperty("questId").stringValue == multiObjectiveQuest.QuestId);
+            SerializedObject serializedMultiInteractionPublisher = new(multiInteractionPublisher);
+            Assert.That(serializedMultiInteractionPublisher.FindProperty("objectiveId").stringValue,
+                Is.EqualTo(multiInteractionObjective.ObjectiveId));
+            Assert.That(serializedMultiInteractionPublisher.FindProperty("targetInteractionId").stringValue,
+                Is.EqualTo(multiInteractionObjective.TargetId));
 
             InteractableObject interactionTarget = FindAll<InteractableObject>().Single(item =>
                 item.InteractionId == "validation.production.interaction.target");
             Assert.That(interactionTarget.UsePolicy, Is.EqualTo(InteractionUsePolicy.PersistentOnce));
             Assert.That(interactionTarget.gameObject.name, Is.EqualTo("ValidationInteractionTarget"));
+
+            InteractableObject calendarTarget = FindAll<InteractableObject>().Single(item =>
+                item.InteractionId == calendarQuest.Objectives[0].TargetId);
+            Assert.That(calendarTarget.UsePolicy, Is.EqualTo(InteractionUsePolicy.PersistentOnce));
+            Assert.That(calendarTarget.gameObject.name, Is.EqualTo("CalendarValidationInteractionTarget"));
+            Assert.That(calendarTarget.Events, Has.Count.EqualTo(1));
+            Assert.That(AssetDatabase.GetAssetPath(calendarTarget.Events[0]), Is.EqualTo(
+                "Assets/GAME/Data/Interaction/ProductionCalendarQuestCompletionEvent.asset"));
+            Assert.That(calendarTarget.InteractionId, Is.Not.EqualTo(interactionTarget.InteractionId));
 
             InteractableObject interactionGiver = FindAll<InteractableObject>().Single(item =>
                 item.InteractionId == "validation.production.interaction.quest-giver");
@@ -279,17 +404,143 @@ namespace Game.Tests.Integration
             Assert.That(AssetDatabase.GetAssetPath(interactionGiver.Events[0]), Is.EqualTo(
                 "Assets/GAME/Data/Interaction/ProductionInteractionQuestAcceptanceEvent.asset"));
 
+            InteractableObject calendarGiver = FindAll<InteractableObject>().Single(item =>
+                item.InteractionId == "validation.production.calendar.quest-giver");
+            Assert.That(calendarGiver.gameObject.name, Is.EqualTo("CalendarValidationQuestGiver"));
+            Assert.That(calendarGiver.Events, Has.Count.EqualTo(1));
+            Assert.That(AssetDatabase.GetAssetPath(calendarGiver.Events[0]), Is.EqualTo(
+                "Assets/GAME/Data/Interaction/ProductionCalendarQuestAcceptanceEvent.asset"));
+            Assert.That(calendarGiver.InteractionId, Is.Not.EqualTo(interactionGiver.InteractionId));
+
+            InteractableObject storyTarget = FindAll<InteractableObject>().Single(item =>
+                item.InteractionId == "validation.production.story.target");
+            Assert.That(storyTarget.UsePolicy, Is.EqualTo(InteractionUsePolicy.PersistentOnce));
+            Assert.That(storyTarget.gameObject.name, Is.EqualTo("StoryValidationInteractionTarget"));
+            Assert.That(storyTarget.Events, Has.Count.EqualTo(1));
+            Assert.That(AssetDatabase.GetAssetPath(storyTarget.Events[0]), Is.EqualTo(
+                "Assets/GAME/Data/Interaction/ProductionStoryQuestObjectiveEvent.asset"));
+            Assert.That(storyTarget.InteractionId, Is.Not.EqualTo(interactionTarget.InteractionId));
+            Assert.That(storyTarget.InteractionId, Is.Not.EqualTo(calendarTarget.InteractionId));
+
+            InteractableObject storyGiver = FindAll<InteractableObject>().Single(item =>
+                item.InteractionId == "validation.production.story.quest-giver");
+            Assert.That(storyGiver.gameObject.name, Is.EqualTo("StoryValidationQuestGiver"));
+            Assert.That(storyGiver.Events, Has.Count.EqualTo(1));
+            Assert.That(AssetDatabase.GetAssetPath(storyGiver.Events[0]), Is.EqualTo(
+                "Assets/GAME/Data/Interaction/ProductionStoryQuestAcceptanceEvent.asset"));
+            Assert.That(storyGiver.InteractionId, Is.Not.EqualTo(interactionGiver.InteractionId));
+            Assert.That(storyGiver.InteractionId, Is.Not.EqualTo(calendarGiver.InteractionId));
+
+            InteractableObject multiInteractionTarget = FindAll<InteractableObject>().Single(item =>
+                item.InteractionId == multiInteractionObjective.TargetId);
+            Assert.That(multiInteractionTarget.UsePolicy, Is.EqualTo(InteractionUsePolicy.PersistentOnce));
+            Assert.That(multiInteractionTarget.gameObject.name, Is.EqualTo("MultiObjectiveValidationInteractionTarget"));
+            Assert.That(multiInteractionTarget.Events, Has.Count.EqualTo(1));
+            Assert.That(AssetDatabase.GetAssetPath(multiInteractionTarget.Events[0]), Is.EqualTo(
+                "Assets/GAME/Data/Interaction/ProductionMultiObjectiveQuestInteractionEvent.asset"));
+            Assert.That(multiInteractionTarget.InteractionId, Is.Not.EqualTo(interactionTarget.InteractionId));
+            Assert.That(multiInteractionTarget.InteractionId, Is.Not.EqualTo(calendarTarget.InteractionId));
+
+            InteractableObject multiStoryTarget = FindAll<InteractableObject>().Single(item =>
+                item.InteractionId == "validation.production.multi-objective.story.target");
+            Assert.That(multiStoryTarget.UsePolicy, Is.EqualTo(InteractionUsePolicy.PersistentOnce));
+            Assert.That(multiStoryTarget.gameObject.name, Is.EqualTo("MultiObjectiveValidationStoryTarget"));
+            Assert.That(multiStoryTarget.Events, Has.Count.EqualTo(1));
+            Assert.That(AssetDatabase.GetAssetPath(multiStoryTarget.Events[0]), Is.EqualTo(
+                "Assets/GAME/Data/Interaction/ProductionMultiObjectiveQuestStoryEvent.asset"));
+            Assert.That(multiStoryTarget.InteractionId, Is.Not.EqualTo(storyTarget.InteractionId));
+
+            InteractableObject multiGiver = FindAll<InteractableObject>().Single(item =>
+                item.InteractionId == "validation.production.multi-objective.quest-giver");
+            Assert.That(multiGiver.gameObject.name, Is.EqualTo("MultiObjectiveValidationQuestGiver"));
+            Assert.That(multiGiver.Events, Has.Count.EqualTo(1));
+            Assert.That(AssetDatabase.GetAssetPath(multiGiver.Events[0]), Is.EqualTo(
+                "Assets/GAME/Data/Interaction/ProductionMultiObjectiveQuestAcceptanceEvent.asset"));
+            Assert.That(multiGiver.InteractionId, Is.Not.EqualTo(storyGiver.InteractionId));
+
+            StoryEventDefinitionSO storyAcceptanceEvent = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
+                "Assets/GAME/Data/Interaction/ProductionStoryQuestAcceptance.asset");
+            SerializedProperty acceptanceChoices = new SerializedObject(storyAcceptanceEvent)
+                .FindProperty("nodes").GetArrayElementAtIndex(0).FindPropertyRelative("choices");
+            SerializedProperty storyAcceptEffect = acceptanceChoices.GetArrayElementAtIndex(0)
+                .FindPropertyRelative("effects").GetArrayElementAtIndex(0);
+            Assert.That(storyAcceptEffect.FindPropertyRelative("type").intValue,
+                Is.EqualTo((int)StoryEffectType.StartQuest));
+            Assert.That(storyAcceptEffect.FindPropertyRelative("questDefinition").objectReferenceValue,
+                Is.SameAs(storyQuest));
+
+            StoryEventDefinitionSO storyObjectiveEvent = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
+                "Assets/GAME/Data/Interaction/ProductionStoryQuestObjective.asset");
+            SerializedProperty storyNodes = new SerializedObject(storyObjectiveEvent).FindProperty("nodes");
+            Assert.That(storyNodes.arraySize, Is.EqualTo(2));
+            Assert.That(storyNodes.GetArrayElementAtIndex(0).FindPropertyRelative("effects").arraySize, Is.Zero);
+            Assert.That(storyNodes.GetArrayElementAtIndex(0).FindPropertyRelative("nextNodeId").stringValue,
+                Is.EqualTo("complete"));
+            SerializedProperty objectiveEffects = storyNodes.GetArrayElementAtIndex(1).FindPropertyRelative("effects");
+            Assert.That(objectiveEffects.arraySize, Is.EqualTo(2));
+            SerializedProperty publishQuestEffect = objectiveEffects.GetArrayElementAtIndex(0);
+            Assert.That(publishQuestEffect.FindPropertyRelative("type").intValue,
+                Is.EqualTo((int)StoryEffectType.PublishQuestEvent));
+            Assert.That(publishQuestEffect.FindPropertyRelative("missionId").stringValue, Is.EqualTo(storyQuest.QuestId));
+            Assert.That(publishQuestEffect.FindPropertyRelative("objectiveId").stringValue,
+                Is.EqualTo(storyQuest.Objectives[0].ObjectiveId));
+            Assert.That(publishQuestEffect.FindPropertyRelative("questEventType").intValue,
+                Is.EqualTo((int)QuestEventType.Talk));
+            SerializedProperty markCompletedEffect = objectiveEffects.GetArrayElementAtIndex(1);
+            Assert.That(markCompletedEffect.FindPropertyRelative("type").intValue,
+                Is.EqualTo((int)StoryEffectType.MarkEventCompleted));
+            Assert.That(markCompletedEffect.FindPropertyRelative("key").stringValue,
+                Is.EqualTo("VALIDATION_PRODUCTION_STORY_QUEST_OBJECTIVE"));
+
+            StoryEventDefinitionSO multiAcceptanceEvent = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
+                "Assets/GAME/Data/Interaction/ProductionMultiObjectiveQuestAcceptance.asset");
+            SerializedProperty multiAcceptEffect = new SerializedObject(multiAcceptanceEvent)
+                .FindProperty("nodes").GetArrayElementAtIndex(0).FindPropertyRelative("choices")
+                .GetArrayElementAtIndex(0).FindPropertyRelative("effects").GetArrayElementAtIndex(0);
+            Assert.That(multiAcceptEffect.FindPropertyRelative("type").intValue,
+                Is.EqualTo((int)StoryEffectType.StartQuest));
+            Assert.That(multiAcceptEffect.FindPropertyRelative("questDefinition").objectReferenceValue,
+                Is.SameAs(multiObjectiveQuest));
+
+            StoryEventDefinitionSO multiStoryEvent = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
+                "Assets/GAME/Data/Interaction/ProductionMultiObjectiveQuestStory.asset");
+            SerializedProperty multiStoryEffects = new SerializedObject(multiStoryEvent)
+                .FindProperty("nodes").GetArrayElementAtIndex(1).FindPropertyRelative("effects");
+            Assert.That(multiStoryEffects.arraySize, Is.EqualTo(2));
+            SerializedProperty multiPublishEffect = multiStoryEffects.GetArrayElementAtIndex(0);
+            Assert.That(multiPublishEffect.FindPropertyRelative("type").intValue,
+                Is.EqualTo((int)StoryEffectType.PublishQuestEvent));
+            Assert.That(multiPublishEffect.FindPropertyRelative("missionId").stringValue,
+                Is.EqualTo(multiObjectiveQuest.QuestId));
+            Assert.That(multiPublishEffect.FindPropertyRelative("objectiveId").stringValue,
+                Is.EqualTo("complete_multi_validation_story"));
+            Assert.That(multiPublishEffect.FindPropertyRelative("questEventType").intValue,
+                Is.EqualTo((int)QuestEventType.Talk));
+            Assert.That(multiStoryEffects.GetArrayElementAtIndex(1).FindPropertyRelative("type").intValue,
+                Is.EqualTo((int)StoryEffectType.MarkEventCompleted));
+            Assert.That(multiStoryEffects.GetArrayElementAtIndex(1).FindPropertyRelative("key").stringValue,
+                Is.EqualTo("VALIDATION_PRODUCTION_MULTI_OBJECTIVE_STORY"));
+
             CombatEncounterGroup[] encounters = FindAll<CombatEncounterGroup>();
             Assert.That(encounters.Select(encounter => encounter.EncounterId), Has.None.Null.Or.Empty);
             Assert.That(encounters.Select(encounter => encounter.EncounterId).Distinct().Count(), Is.EqualTo(encounters.Length));
             CombatEncounterGroup validationEncounter = encounters.Single(encounter =>
                 encounter.EncounterId == "validation.production.npc.quest.kill");
-            Assert.That(Reference(combatQuestPublishers[0], "targetEncounter"), Is.SameAs(validationEncounter));
-            Assert.That(Reference(combatQuestPublishers[0], "combatEntryPoint"), Is.SameAs(FindAll<CombatEntryPoint>().Single()));
-            Assert.That(new SerializedObject(combatQuestPublishers[0]).FindProperty("questId").stringValue,
+            CombatQuestObjectivePublisher validationCombatPublisher = combatQuestPublishers.Single(item =>
+                new SerializedObject(item).FindProperty("questId").stringValue == validationQuest.QuestId);
+            Assert.That(Reference(validationCombatPublisher, "targetEncounter"), Is.SameAs(validationEncounter));
+            Assert.That(Reference(validationCombatPublisher, "combatEntryPoint"), Is.SameAs(FindAll<CombatEntryPoint>().Single()));
+            Assert.That(new SerializedObject(validationCombatPublisher).FindProperty("questId").stringValue,
                 Is.EqualTo(validationQuest.QuestId));
-            Assert.That(new SerializedObject(combatQuestPublishers[0]).FindProperty("objectiveId").stringValue,
+            Assert.That(new SerializedObject(validationCombatPublisher).FindProperty("objectiveId").stringValue,
                 Is.EqualTo(validationQuest.Objectives[0].ObjectiveId));
+            CombatQuestObjectivePublisher multiCombatPublisher = combatQuestPublishers.Single(item =>
+                new SerializedObject(item).FindProperty("questId").stringValue == multiObjectiveQuest.QuestId);
+            CombatEncounterGroup multiEncounter = encounters.Single(item => item.EncounterId == "template.test.02");
+            Assert.That(Reference(multiCombatPublisher, "targetEncounter"), Is.SameAs(multiEncounter));
+            Assert.That(Reference(multiCombatPublisher, "combatEntryPoint"), Is.SameAs(FindAll<CombatEntryPoint>().Single()));
+            Assert.That(new SerializedObject(multiCombatPublisher).FindProperty("objectiveId").stringValue,
+                Is.EqualTo("defeat_multi_validation_encounter"));
 
             GameUIRootController uiRoots = FindAll<GameUIRootController>().Single();
             GameObject fieldRoot = Reference(uiRoots, "fieldRoot") as GameObject;

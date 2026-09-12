@@ -28,11 +28,21 @@ namespace Game.NonCombat.Inventory
 
         public CurrencyMutationResult TryAddGold(int amount)
         {
-            if (amount <= 0) return new CurrencyMutationResult(amount, 0, gold, CurrencyMutationStatus.InvalidAmount);
-            if (gold > int.MaxValue - amount) return new CurrencyMutationResult(amount, 0, gold, CurrencyMutationStatus.OverflowPrevented);
+            int goldBefore = gold;
+            if (amount <= 0)
+            {
+                Debug.Log($"[QuestRewardTrace] CurrencyWallet.TryAddGold rejected. currencyWalletInstanceId={GetInstanceID()}, goldBefore={goldBefore}, appliedAmount=0, goldAfter={gold}, requestedAmount={amount}, status={CurrencyMutationStatus.InvalidAmount}", this);
+                return new CurrencyMutationResult(amount, 0, gold, CurrencyMutationStatus.InvalidAmount);
+            }
+            if (gold > int.MaxValue - amount)
+            {
+                Debug.Log($"[QuestRewardTrace] CurrencyWallet.TryAddGold rejected. currencyWalletInstanceId={GetInstanceID()}, goldBefore={goldBefore}, appliedAmount=0, goldAfter={gold}, requestedAmount={amount}, status={CurrencyMutationStatus.OverflowPrevented}", this);
+                return new CurrencyMutationResult(amount, 0, gold, CurrencyMutationStatus.OverflowPrevented);
+            }
             gold += amount;
             CurrencyMutationResult result = new(amount, amount, gold, CurrencyMutationStatus.Success);
             Changed?.Invoke(result);
+            Debug.Log($"[QuestRewardTrace] CurrencyWallet.TryAddGold applied. currencyWalletInstanceId={GetInstanceID()}, goldBefore={goldBefore}, appliedAmount={result.AppliedAmount}, goldAfter={gold}, requestedAmount={amount}, status={result.Status}", this);
             return result;
         }
 

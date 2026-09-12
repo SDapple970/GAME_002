@@ -62,11 +62,15 @@ namespace Game.Reward
 
         public RewardResult GrantQuestCompletion(string questId, int gold, int exp)
         {
-            return Grant(new RewardGrantRequest(
+            RewardGrantRequest request = new(
                 RewardSourceType.QuestCompletion,
                 PrefixCompatibilityId("quest", questId),
                 gold,
-                exp));
+                exp);
+            Debug.Log($"[QuestRewardTrace] RewardService.GrantQuestCompletion begin. questId={questId}, rewardServiceInstanceId={GetInstanceID()}, requestedGold={Mathf.Max(0, gold)}, requestedExp={Mathf.Max(0, exp)}", this);
+            RewardResult result = Grant(request);
+            Debug.Log($"[QuestRewardTrace] RewardService.GrantQuestCompletion end. questId={questId}, rewardServiceInstanceId={GetInstanceID()}, requestedGold={Mathf.Max(0, gold)}, appliedGold={result.Gold}, duplicateBlocked={result.DuplicateBlocked}", this);
+            return result;
         }
 
         public RewardResult GrantMissionCompletion(string missionId, int gold, int exp)
@@ -88,6 +92,7 @@ namespace Game.Reward
             if (!TryResolveIdentity(request, out GameplayOutcomeIdentity identity))
             {
                 WarnInvalidIdentity(request);
+                Debug.Log($"[QuestRewardTrace] RewardService.GrantReward invalid identity. canonicalLedgerKey=null, duplicateBlocked=false, requestedGold={Mathf.Max(0, request.Gold)}, appliedGold=0, rewardServiceInstanceId={GetInstanceID()}", this);
                 return new RewardGrantResult(
                     request.SourceType,
                     request.SourceId,
@@ -109,7 +114,9 @@ namespace Game.Reward
             if (_grantLedger.TryGetValue(ledgerKey, out RewardGrantResult recorded))
             {
                 WarnDuplicateReward(identity);
-                return CreateDuplicateResult(recorded);
+                RewardGrantResult duplicate = CreateDuplicateResult(recorded);
+                Debug.Log($"[QuestRewardTrace] RewardService.GrantReward duplicate. canonicalLedgerKey={ledgerKey}, duplicateBlocked={duplicate.DuplicateBlocked}, requestedGold={Mathf.Max(0, request.Gold)}, appliedGold={duplicate.Gold}, rewardServiceInstanceId={GetInstanceID()}", this);
+                return duplicate;
             }
 
             int requestedGold = Mathf.Max(0, request.Gold);
@@ -161,6 +168,8 @@ namespace Game.Reward
             // resumable: retrying a partial multi-channel grant could duplicate a channel
             // which already succeeded.
             _grantLedger[ledgerKey] = result;
+
+            Debug.Log($"[QuestRewardTrace] RewardService.GrantReward applied. canonicalLedgerKey={ledgerKey}, duplicateBlocked={result.DuplicateBlocked}, requestedGold={requestedGold}, appliedGold={appliedGold}, rewardServiceInstanceId={GetInstanceID()}", this);
 
             return result;
         }
@@ -324,7 +333,9 @@ namespace Game.Reward
             {
                 try
                 {
-                    return wallet.TryAddGold(amount).AppliedAmount;
+                    CurrencyMutationResult mutation = wallet.TryAddGold(amount);
+                    Debug.Log($"[QuestRewardTrace] RewardService.GrantGold. source={request.SourceType}, canonicalLedgerKey={sourceId}, currencyWalletInstanceId={wallet.GetInstanceID()}, requestedGold={amount}, appliedGold={mutation.AppliedAmount}", this);
+                    return mutation.AppliedAmount;
                 }
                 catch (Exception exception)
                 {

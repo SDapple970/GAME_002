@@ -246,9 +246,11 @@ namespace Game.DemoMission.Runtime
 
         public void CaptureSaveData(GameSaveData saveData)
         {
-            if (saveData == null)
+            if (saveData == null || (bridgeToQuestRuntime && TryResolveQuestRuntime(false)))
                 return;
 
+            // Legacy fallback data remains writable only while this compatibility
+            // runtime owns progress. Canonical bridge mode is saved by QuestRuntime.
             saveData.demoMission ??= new DemoMissionSaveData();
             saveData.demoMission.missionId = CurrentQuestId;
             saveData.demoMission.enemyDefeatCount = EnemyDefeatCount;

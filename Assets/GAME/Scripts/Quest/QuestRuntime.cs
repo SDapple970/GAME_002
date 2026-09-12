@@ -543,7 +543,9 @@ namespace Game.Quest
                 return;
 
             state.Status = QuestStatus.Completed;
+            Debug.Log($"[QuestRewardTrace] QuestRuntime.CompleteState before OnQuestCompleted. questId={state.QuestId}, questRuntimeInstanceId={GetInstanceID()}", this);
             OnQuestCompleted?.Invoke(state.QuestId);
+            Debug.Log($"[QuestRewardTrace] QuestRuntime.CompleteState after OnQuestCompleted. questId={state.QuestId}, questRuntimeInstanceId={GetInstanceID()}", this);
         }
 
         private bool TryGetActiveState(string questId, out RuntimeQuestState state)

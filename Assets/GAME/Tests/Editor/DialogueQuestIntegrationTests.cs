@@ -787,6 +787,133 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void StoryEffect_ProgressesOnlyItsMatchingActiveQuestExactlyOnce()
+        {
+            CreateFlowState();
+            QuestDefinitionSO definition = CreateQuestDefinition(
+                "validation.production.story.quest",
+                QuestEventType.Talk,
+                "complete_validation_story_effect",
+                1);
+            QuestRuntime runtime = CreateRuntimeWithDefinition("Runtime", definition);
+            CreateObjectiveTracker(runtime);
+            runtime.StartQuest(definition);
+            int completions = 0;
+            runtime.OnQuestCompleted += _ => completions++;
+
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            runner.StartEvent(CreateStoryEvent(
+                "unrelated-story",
+                true,
+                CreateQuestStoryEffect("other.quest", "complete_validation_story_effect", QuestEventType.Talk, 1)));
+            runner.EndEvent();
+            Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "complete_validation_story_effect"), Is.Zero);
+
+            StoryEventDefinitionSO matching = CreateStoryEvent(
+                "VALIDATION_PRODUCTION_STORY_QUEST_OBJECTIVE",
+                true,
+                CreateQuestStoryEffect(definition.QuestId, "complete_validation_story_effect", QuestEventType.Talk, 1));
+            runner.StartEvent(matching);
+            Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Completed));
+            Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "complete_validation_story_effect"), Is.EqualTo(1));
+            runner.EndEvent();
+            runner.StartEvent(matching);
+
+            Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "complete_validation_story_effect"), Is.EqualTo(1));
+            Assert.That(completions, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void StoryEffect_DoesNotMatchWrongObjectiveOrTargetRestrictedObjective()
+        {
+            CreateFlowState();
+            QuestObjectiveDefinition objective = CreateObjective(QuestEventType.Talk, "complete_validation_story_effect", 1, false);
+            SetField(objective, "targetId", "validation.production.story.target");
+            QuestDefinitionSO definition = CreateQuestDefinition("story-targeted", objective);
+            QuestRuntime runtime = CreateRuntimeWithDefinition("Runtime", definition);
+            CreateObjectiveTracker(runtime);
+            runtime.StartQuest(definition);
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+
+            runner.StartEvent(CreateStoryEvent(
+                "wrong-objective",
+                true,
+                CreateQuestStoryEffect(definition.QuestId, "wrong-objective", QuestEventType.Talk, 1)));
+            runner.EndEvent();
+            runner.StartEvent(CreateStoryEvent(
+                "targeted-story-effect",
+                true,
+                CreateQuestStoryEffect(definition.QuestId, objective.ObjectiveId, QuestEventType.Talk, 1)));
+
+            Assert.That(runtime.GetObjectiveProgress(definition.QuestId, objective.ObjectiveId), Is.Zero,
+                "StoryEffect does not author a targetId, so a target-filtered objective must not match it.");
+            Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Active));
+        }
+
+        [Test]
+        public void StoryEffect_ActiveSaveLoadRestoresZeroProgressAndAllowsReplay()
+        {
+            CreateFlowState();
+            StoryProgressManager progress = CreateComponent<StoryProgressManager>("StoryProgress");
+            QuestDefinitionSO definition = CreateQuestDefinition("story-save-active", QuestEventType.Talk, "talk", 1);
+            QuestRuntime runtime = CreateRuntimeWithDefinition("Runtime", definition);
+            CreateObjectiveTracker(runtime);
+            SaveLoadService saveLoad = CreateComponent<SaveLoadService>("SaveLoadService");
+            runtime.StartQuest(definition);
+            GameSaveData activeSave = saveLoad.CaptureGameSaveDataSnapshot();
+
+            StoryEventDefinitionSO story = CreateStoryEvent(
+                "story-save-active-event",
+                true,
+                CreateQuestStoryEffect(definition.QuestId, "talk", QuestEventType.Talk, 1));
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            runner.StartEvent(story);
+            runner.EndEvent();
+            Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Completed));
+            Assert.That(progress.IsEventCompleted(story.EventId), Is.True);
+
+            saveLoad.RestoreGameSaveDataSnapshot(activeSave);
+
+            Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Active));
+            Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "talk"), Is.Zero);
+            Assert.That(progress.IsEventCompleted(story.EventId), Is.False);
+            runner.StartEvent(story);
+
+            Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Completed));
+            Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "talk"), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void StoryEffect_CompletedSaveLoadKeepsCompletionAndDoesNotReapply()
+        {
+            CreateFlowState();
+            StoryProgressManager progress = CreateComponent<StoryProgressManager>("StoryProgress");
+            QuestDefinitionSO definition = CreateQuestDefinition("story-save-completed", QuestEventType.Talk, "talk", 1);
+            QuestRuntime runtime = CreateRuntimeWithDefinition("Runtime", definition);
+            CreateObjectiveTracker(runtime);
+            SaveLoadService saveLoad = CreateComponent<SaveLoadService>("SaveLoadService");
+            runtime.StartQuest(definition);
+            int completions = 0;
+            runtime.OnQuestCompleted += _ => completions++;
+            StoryEventDefinitionSO story = CreateStoryEvent(
+                "story-save-completed-event",
+                true,
+                CreateQuestStoryEffect(definition.QuestId, "talk", QuestEventType.Talk, 1));
+            StoryEventRunner runner = CreateComponent<StoryEventRunner>("Runner");
+            runner.StartEvent(story);
+            runner.EndEvent();
+            GameSaveData completedSave = saveLoad.CaptureGameSaveDataSnapshot();
+
+            saveLoad.RestoreGameSaveDataSnapshot(completedSave);
+            runner.StartEvent(story);
+
+            Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Completed));
+            Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "talk"), Is.EqualTo(1));
+            Assert.That(progress.IsEventCompleted(story.EventId), Is.True);
+            Assert.That(completions, Is.EqualTo(1));
+        }
+
+        [Test]
         public void StartQuest_ActivatesOnce_AndCompletedQuestDoesNotRestart()
         {
             QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
@@ -904,7 +1031,7 @@ namespace Game.Tests.Integration
         }
 
         [Test]
-        public void QuestStartDoesNotCharge_ExplicitDayCostAppliesOnceAndRestoreDoesNotRecharge()
+        public void QuestStartDoesNotCharge_QuestCompletionAppliesDayCostOnceAndRestoreDoesNotRecharge()
         {
             CalendarService calendar = CreateComponent<CalendarService>("Calendar");
             QuestRuntime firstRuntime = CreateComponent<QuestRuntime>("FirstRuntime");
@@ -916,8 +1043,8 @@ namespace Game.Tests.Integration
             firstRuntime.StartQuest(definition);
 
             Assert.That(calendar.CurrentDay, Is.EqualTo(1));
-            Assert.That(firstIntegration.TryApplyMissionDayCost("mission"), Is.True);
-            Assert.That(firstIntegration.TryApplyMissionDayCost("mission"), Is.False);
+            firstRuntime.CompleteQuest("mission");
+            firstRuntime.CompleteQuest("mission");
             Assert.That(calendar.CurrentDay, Is.EqualTo(4));
             GameSaveData save = new();
             firstIntegration.CaptureSaveData(save);
@@ -929,9 +1056,86 @@ namespace Game.Tests.Integration
             restoredRuntime.StartQuest(definition);
 
             Assert.That(calendar.CurrentDay, Is.EqualTo(4));
-            Assert.That(restoredIntegration.TryApplyMissionDayCost("mission"), Is.False);
+            restoredRuntime.CompleteQuest("mission");
             Assert.That(calendar.CurrentDay, Is.EqualTo(4));
             Assert.That(save.futureDaily.appliedQuestDayCostIds, Is.EquivalentTo(new[] { "mission" }));
+        }
+
+        [Test]
+        public void QuestCompletion_ZeroCostAndUnknownQuestDoNotAdvanceCalendar()
+        {
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            QuestCalendarIntegration integration = CreateCalendarIntegration(runtime, calendar, "Integration");
+            QuestDefinitionSO definition = CreateQuestDefinition("zero-cost", QuestEventType.Kill, "kill", 1);
+
+            runtime.StartQuest(definition);
+            runtime.CompleteQuest("zero-cost");
+
+            Assert.That(integration.TryApplyMissionDayCost("unknown"), Is.False);
+            Assert.That(calendar.CurrentDay, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void QuestCompletion_PreCompletionSaveRestoreAllowsOneFutureDayCostApplication()
+        {
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            QuestCalendarIntegration integration = CreateCalendarIntegration(runtime, calendar, "Integration");
+            QuestDefinitionSO definition = CreateQuestDefinition("rewind", QuestEventType.Kill, "kill", 1);
+            SetField(definition, "missionDayCost", 2);
+            runtime.StartQuest(definition);
+            SaveLoadService saveLoad = CreateComponent<SaveLoadService>("SaveLoadService");
+
+            GameSaveData preCompletion = saveLoad.CaptureGameSaveDataSnapshot();
+
+            runtime.CompleteQuest("rewind");
+            Assert.That(calendar.CurrentDay, Is.EqualTo(3));
+
+            saveLoad.RestoreGameSaveDataSnapshot(preCompletion);
+            runtime.CompleteQuest("rewind");
+
+            Assert.That(calendar.CurrentDay, Is.EqualTo(3));
+            Assert.That(preCompletion.futureDaily.appliedQuestDayCostIds, Is.Empty);
+        }
+
+        [Test]
+        public void QuestCompletion_CompletedSaveRestoreDoesNotReapplyDayCost()
+        {
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            QuestCalendarIntegration integration = CreateCalendarIntegration(runtime, calendar, "Integration");
+            QuestDefinitionSO definition = CreateQuestDefinition("completed", QuestEventType.Kill, "kill", 1);
+            SetField(definition, "missionDayCost", 2);
+            runtime.StartQuest(definition);
+            runtime.CompleteQuest("completed");
+            SaveLoadService saveLoad = CreateComponent<SaveLoadService>("SaveLoadService");
+
+            GameSaveData completed = saveLoad.CaptureGameSaveDataSnapshot();
+            saveLoad.RestoreGameSaveDataSnapshot(completed);
+
+            runtime.CompleteQuest("completed");
+
+            Assert.That(calendar.CurrentDay, Is.EqualTo(3));
+            Assert.That(completed.futureDaily.appliedQuestDayCostIds, Is.EquivalentTo(new[] { "completed" }));
+        }
+
+        [Test]
+        public void QuestCalendarIntegration_IsCapturedBySaveLoadServiceDiscovery()
+        {
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            CreateCalendarIntegration(runtime, calendar, "Integration");
+            QuestDefinitionSO definition = CreateQuestDefinition("discovery", QuestEventType.Kill, "kill", 1);
+            SetField(definition, "missionDayCost", 2);
+            runtime.StartQuest(definition);
+            runtime.CompleteQuest("discovery");
+            SaveLoadService saveLoad = CreateComponent<SaveLoadService>("SaveLoadService");
+
+            GameSaveData snapshot = saveLoad.CaptureGameSaveDataSnapshot();
+
+            Assert.That(snapshot.futureDaily.dayIndex, Is.EqualTo(3));
+            Assert.That(snapshot.futureDaily.appliedQuestDayCostIds, Is.EquivalentTo(new[] { "discovery" }));
         }
 
         [Test]
@@ -985,9 +1189,8 @@ namespace Game.Tests.Integration
             SetField(definition, "missionDayCost", 2);
 
             runtime.StartQuest(definition);
+            runtime.CompleteQuest("mission");
 
-            Assert.That(calendar.CurrentDay, Is.EqualTo(1));
-            Assert.That(first.TryApplyMissionDayCost("mission"), Is.True);
             Assert.That(duplicate.TryApplyMissionDayCost("mission"), Is.False);
             Assert.That(calendar.CurrentDay, Is.EqualTo(3));
         }
@@ -1351,6 +1554,63 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void DemoMissionCanonicalMode_WritesOnlyQuestRuntimeSaveState()
+        {
+            (DemoMissionRuntime demo, QuestRuntime runtime) = CreateCanonicalDemoMission(2, false);
+            demo.RegisterEnemyDefeated("enemy-a");
+            GameSaveData save = new();
+
+            runtime.CaptureSaveData(save);
+            demo.CaptureSaveData(save);
+
+            Assert.That(save.quest.quests.Single(item => item.questId == demo.CurrentQuestId).completed, Is.False);
+            Assert.That(save.demoMission.missionId, Is.Null.Or.Empty);
+            Assert.That(save.demoMission.enemyDefeatCount, Is.Zero);
+            Assert.That(save.demoMission.npcRescued, Is.False);
+            Assert.That(save.demoMission.completed, Is.False);
+        }
+
+        [Test]
+        public void DemoMissionCanonicalRestore_IgnoresConflictingLegacyMirror()
+        {
+            (DemoMissionRuntime demo, QuestRuntime runtime) = CreateCanonicalDemoMission(2, false);
+            demo.RegisterEnemyDefeated("enemy-a");
+            GameSaveData save = new();
+            runtime.CaptureSaveData(save);
+            save.demoMission.missionId = demo.CurrentQuestId;
+            save.demoMission.enemyDefeatCount = 99;
+            save.demoMission.npcRescued = true;
+            save.demoMission.completed = true;
+
+            demo.RegisterEnemyDefeated("enemy-b");
+            Assert.That(runtime.IsQuestComplete(demo.CurrentQuestId), Is.True);
+
+            runtime.RestoreSaveData(save);
+            demo.RestoreSaveData(save);
+
+            Assert.That(runtime.IsQuestActive(demo.CurrentQuestId), Is.True);
+            Assert.That(demo.EnemyDefeatCount, Is.EqualTo(1));
+            Assert.That(demo.IsNpcRescued, Is.False);
+            Assert.That(demo.IsMissionComplete(), Is.False);
+        }
+
+        [Test]
+        public void MissionCompletionController_CanonicalModeDoesNotCompeteWithQuestCompletionFlow()
+        {
+            (GameStateMachine state, _) = CreateFlowState();
+            (DemoMissionRuntime demo, QuestRuntime runtime) = CreateCanonicalDemoMission(1, false);
+            MissionCompletionController controller = CreateComponent<MissionCompletionController>("LegacyCompletionAdapter");
+            SetField(controller, "missionRuntime", demo);
+            SetField(controller, "questRuntime", runtime);
+
+            demo.RegisterEnemyDefeated("enemy-a");
+            controller.HandleMissionCompleted();
+
+            Assert.That(runtime.IsQuestComplete(demo.CurrentQuestId), Is.True);
+            Assert.That(state.Current, Is.EqualTo(GameState.Exploration));
+        }
+
+        [Test]
         public void DemoMissionRescue_PublishesOnceAndResetResetsCanonicalQuest()
         {
             (DemoMissionRuntime demo, QuestRuntime runtime) = CreateCanonicalDemoMission(0, true);
@@ -1379,6 +1639,13 @@ namespace Game.Tests.Integration
             demo.RegisterEnemyDefeated();
             demo.RegisterNpcRescued();
             Assert.That(demo.IsMissionComplete(), Is.True);
+
+            GameSaveData save = new();
+            demo.CaptureSaveData(save);
+            Assert.That(save.demoMission.missionId, Is.EqualTo("fallback"));
+            Assert.That(save.demoMission.enemyDefeatCount, Is.EqualTo(1));
+            Assert.That(save.demoMission.npcRescued, Is.True);
+            Assert.That(save.demoMission.completed, Is.True);
         }
 
         [Test]
@@ -1421,10 +1688,11 @@ namespace Game.Tests.Integration
         }
 
         [Test]
-        public void LateBootstrappedStateMachine_ReleasesCombatQuestRewardAtExploration()
+        public void LateBootstrappedStateMachine_AppliesQuestDayCostAndReleasesCombatQuestRewardAtExploration()
         {
             CurrencyWallet wallet = CreateWallet();
             RewardService service = CreateRewardService(wallet);
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
             QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
             QuestDefinitionSO definition = CreateQuestDefinition(
                 "validation.production.npc.quest",
@@ -1432,8 +1700,10 @@ namespace Game.Tests.Integration
                 "defeat_validation_target",
                 1);
             SetField(definition, "rewardGold", 7);
+            SetField(definition, "missionDayCost", 2);
             runtime.StartQuest(definition);
             CreateObjectiveTracker(runtime);
+            CreateCalendarIntegration(runtime, calendar, "QuestCalendarIntegration");
 
             // Mirrors Dungeon_Template: QuestCompletionFlow is enabled before the
             // AfterSceneLoad bootstrap callback creates GameStateMachine.
@@ -1462,10 +1732,12 @@ namespace Game.Tests.Integration
 
             Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Completed));
             Assert.That(wallet.Gold, Is.EqualTo(50));
+            Assert.That(calendar.CurrentDay, Is.EqualTo(3));
 
             ForceState(state, GameState.Exploration, raiseEvent: true);
 
             Assert.That(wallet.Gold, Is.EqualTo(57));
+            Assert.That(calendar.CurrentDay, Is.EqualTo(3));
             Assert.That(service.GrantLedgerCount, Is.EqualTo(2));
         }
 
@@ -1746,6 +2018,115 @@ namespace Game.Tests.Integration
             Assert.That(completions, Is.EqualTo(1));
             Assert.That(runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Interact, "ordered", "final", "later")), Is.False);
             Assert.That(completions, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void FlatRequiredObjectives_ProgressIndependentlyInArbitraryOrderAndCompleteOnce()
+        {
+            const string questId = "validation.production.multi-objective.quest";
+            QuestObjectiveDefinition kill = CreateObjective(QuestEventType.Kill, "kill", 1, false);
+            QuestObjectiveDefinition interact = CreateObjective(QuestEventType.Interact, "interact", 1, false);
+            SetField(interact, "targetId", "multi.interaction.target");
+            QuestObjectiveDefinition story = CreateObjective(QuestEventType.Talk, "story", 1, false);
+            QuestObjectiveDefinition optional = CreateObjective(QuestEventType.Inspect, "optional", 1, true);
+            QuestDefinitionSO definition = CreateQuestDefinition(questId, kill, interact, story, optional);
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            runtime.StartQuest(definition);
+            int completions = 0;
+            runtime.OnQuestCompleted += _ => completions++;
+
+            Assert.That(runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, "wrong.quest", "kill", "wrong-quest")), Is.False);
+            Assert.That(runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, questId, "wrong-objective", "wrong-objective")), Is.False);
+            Assert.That(runtime.ApplyEvent(new QuestEvent(
+                QuestEventType.Interact,
+                questId,
+                "interact",
+                new GameplayOutcomeIdentity(GameplayOutcomeSourceType.Interaction, "wrong-target", "interact"),
+                targetId: "other.target")), Is.False);
+
+            Assert.That(runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Inspect, questId, "optional", "optional")), Is.True);
+            Assert.That(runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, questId, "kill", "kill")), Is.True);
+            Assert.That(runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, questId, "kill", "kill")), Is.False);
+            Assert.That(runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Talk, questId, "story", "story")), Is.True);
+
+            Assert.That(runtime.GetObjectiveProgress(questId, "kill"), Is.EqualTo(1));
+            Assert.That(runtime.GetObjectiveProgress(questId, "story"), Is.EqualTo(1));
+            Assert.That(runtime.GetObjectiveProgress(questId, "interact"), Is.Zero);
+            Assert.That(runtime.GetQuestStatus(questId), Is.EqualTo(QuestStatus.Active));
+            Assert.That(completions, Is.Zero);
+
+            QuestEvent finalEvent = new(
+                QuestEventType.Interact,
+                questId,
+                "interact",
+                new GameplayOutcomeIdentity(GameplayOutcomeSourceType.Interaction, "multi.interaction.target", "interact"),
+                targetId: "multi.interaction.target");
+            Assert.That(runtime.ApplyEvent(finalEvent), Is.True);
+            Assert.That(runtime.GetQuestStatus(questId), Is.EqualTo(QuestStatus.Completed));
+            Assert.That(completions, Is.EqualTo(1));
+            Assert.That(runtime.ApplyEvent(finalEvent), Is.False);
+            Assert.That(runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Inspect, questId, "optional", "later")), Is.False);
+            Assert.That(completions, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void FlatRequiredObjectives_ActiveSaveLoadRestoresPartialProgressAndCanonicalDedupe()
+        {
+            const string questId = "validation.production.multi-objective.quest";
+            QuestDefinitionSO definition = CreateQuestDefinition(
+                questId,
+                CreateObjective(QuestEventType.Kill, "kill", 1, false),
+                CreateObjective(QuestEventType.Interact, "interact", 1, false),
+                CreateObjective(QuestEventType.Talk, "story", 1, false));
+            QuestRuntime source = CreateRuntimeWithDefinition("Source", definition);
+            source.StartQuest(definition);
+            QuestEvent kill = CanonicalQuestEvent(QuestEventType.Kill, questId, "kill", "kill");
+            QuestEvent story = CanonicalQuestEvent(QuestEventType.Talk, questId, "story", "story");
+            Assert.That(source.ApplyEvent(kill), Is.True);
+            Assert.That(source.ApplyEvent(story), Is.True);
+            GameSaveData save = new();
+            source.CaptureSaveData(save);
+
+            QuestRuntime restored = CreateRuntimeWithDefinition("Restored", definition);
+            int completions = 0;
+            restored.OnQuestCompleted += _ => completions++;
+            restored.RestoreSaveData(save);
+
+            Assert.That(restored.GetQuestStatus(questId), Is.EqualTo(QuestStatus.Active));
+            Assert.That(restored.GetObjectiveProgress(questId, "kill"), Is.EqualTo(1));
+            Assert.That(restored.GetObjectiveProgress(questId, "story"), Is.EqualTo(1));
+            Assert.That(restored.GetObjectiveProgress(questId, "interact"), Is.Zero);
+            Assert.That(restored.ApplyEvent(kill), Is.False);
+            Assert.That(restored.ApplyEvent(CanonicalQuestEvent(QuestEventType.Interact, questId, "interact", "interact")), Is.True);
+            Assert.That(restored.GetQuestStatus(questId), Is.EqualTo(QuestStatus.Completed));
+            Assert.That(completions, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void FlatRequiredObjectives_CompletedSaveLoadKeepsTerminalStateWithoutReemission()
+        {
+            const string questId = "validation.production.multi-objective.quest";
+            QuestDefinitionSO definition = CreateQuestDefinition(
+                questId,
+                CreateObjective(QuestEventType.Kill, "kill", 1, false),
+                CreateObjective(QuestEventType.Interact, "interact", 1, false),
+                CreateObjective(QuestEventType.Talk, "story", 1, false));
+            QuestRuntime source = CreateRuntimeWithDefinition("Source", definition);
+            source.StartQuest(definition);
+            Assert.That(source.ApplyEvent(CanonicalQuestEvent(QuestEventType.Talk, questId, "story", "story")), Is.True);
+            Assert.That(source.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, questId, "kill", "kill")), Is.True);
+            Assert.That(source.ApplyEvent(CanonicalQuestEvent(QuestEventType.Interact, questId, "interact", "interact")), Is.True);
+            GameSaveData save = new();
+            source.CaptureSaveData(save);
+
+            QuestRuntime restored = CreateRuntimeWithDefinition("Restored", definition);
+            int completions = 0;
+            restored.OnQuestCompleted += _ => completions++;
+            restored.RestoreSaveData(save);
+
+            Assert.That(restored.GetQuestStatus(questId), Is.EqualTo(QuestStatus.Completed));
+            Assert.That(restored.ApplyEvent(CanonicalQuestEvent(QuestEventType.Kill, questId, "kill", "later")), Is.False);
+            Assert.That(completions, Is.Zero);
         }
 
         [Test]
@@ -2219,6 +2600,7 @@ namespace Game.Tests.Integration
             DestroyAll<QuestCompletionFlow>();
             DestroyAll<QuestTrackerUI>();
             DestroyAll<QuestCalendarIntegration>();
+            DestroyAll<SaveLoadService>();
             DestroyAll<DemoMissionRuntime>();
             DestroyAll<QuestRuntime>();
             DestroyAll<CalendarService>();

@@ -52,7 +52,17 @@ namespace Game.Debugging
             CheckRequired<Game.Core.GameStateMachine>("GameStateMachine");
             CheckRequired<global::GameInputInstaller>("GameInputInstaller");
             CheckRequired<ChapterProgressManager>("ChapterProgressManager");
-            CheckRequired<QuestManager>("QuestManager");
+            QuestRuntime questRuntime = FindFirst<QuestRuntime>();
+            if (questRuntime != null)
+            {
+                LogOk("QuestRuntime found (canonical quest owner).");
+                if (FindFirst<QuestManager>() != null)
+                    LogError("QuestManager must not coexist with QuestRuntime in a Production scene.");
+            }
+            else
+            {
+                CheckRequired<QuestManager>("QuestManager (legacy Demo owner)");
+            }
             CheckRequired<SceneTravelService>("SceneTravelService");
 
             CheckRecommended<InteractionController>("InteractionController", "Interactions will not execute from the shared controller.");
@@ -60,7 +70,10 @@ namespace Game.Debugging
             CheckRecommended<QuestTrackerUI>("QuestTrackerUI", "Quest progress will not be visible.");
             CheckRecommended<CombatEntryPoint>("CombatEntryPoint", "Tutorial battle entry will not be available.");
             CheckRecommended<RewardUIPanel>("RewardUIPanel", "Combat or field rewards may not be visible.");
-            CheckRecommended<TutorialQuestCombatBridge>("TutorialQuestCombatBridge", "Combat win will not update the tutorial quest automatically.");
+            if (questRuntime != null)
+                CheckRecommended<QuestObjectiveTracker>("QuestObjectiveTracker", "Canonical QuestEvents will not reach QuestRuntime.");
+            else
+                CheckRecommended<TutorialQuestCombatBridge>("TutorialQuestCombatBridge", "Combat win will not update the legacy tutorial quest automatically.");
 
             CheckPlayer();
             CheckSpawnPoints();
