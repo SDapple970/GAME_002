@@ -9,6 +9,7 @@ using Game.Combat.UI;
 using Game.CameraSys;
 using Game.Daily;
 using Game.Demo;
+using Game.Enemies;
 using Game.Input;
 using Game.Interaction;
 using Game.NonCombat.Inventory;
@@ -35,6 +36,13 @@ namespace Game.EditorTools
         public const int ExpectedSpriteRendererCount = 172;
         public const int ExpectedPhysicalColliderCount = 53;
         public const int ExpectedRepairedLegacySpriteCount = 40;
+
+        private static readonly ProductionEncounterSpec[] ProductionEncounters =
+        {
+            new("Encounter_01", "Enemy_01", "dungeon1.encounter.01", new Vector3(4.85948f, -5.41649f, 0f)),
+            new("Encounter_02", "Enemy_02", "dungeon1.encounter.02", new Vector3(-2.26052f, 25.07351f, 0f)),
+            new("Encounter_03", "Enemy_03", "dungeon1.encounter.03", new Vector3(144.28948f, -6.35649f, 0f))
+        };
 
         private static readonly Vector3 ProductionStartPosition = new(-39.88f, -6.33f, 0f);
 
@@ -114,6 +122,7 @@ namespace Game.EditorTools
             EditorSceneManager.CloseScene(legacyScene, true);
             SceneManager.SetActiveScene(productionScene);
             RepairUnresolvedDestinationSprites(environmentRoot);
+            PlaceProductionEncounters(productionScene);
             EditorSceneManager.MarkSceneDirty(productionScene);
 
             ValidateProductionScene();
@@ -130,6 +139,22 @@ namespace Game.EditorTools
         public static void CreateProductionSceneFromCommandLine()
         {
             CreateProductionScene();
+        }
+
+        public static void PlaceProductionEncountersFromCommandLine()
+        {
+            EditorSceneManager.OpenScene(ProductionScenePath, OpenSceneMode.Single);
+            PlaceProductionEncounters(SceneManager.GetActiveScene());
+            ValidateProductionScene();
+            EditorSceneManager.SaveOpenScenes();
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[DungeonOneProductionMigration] Placed {ProductionEncounters.Length} production encounters in '{ProductionScenePath}'.");
+        }
+
+        [MenuItem("GAME/Production Migration/Place Dungeon 1 Production Encounters")]
+        public static void PlaceProductionEncountersFromMenu()
+        {
+            PlaceProductionEncountersFromCommandLine();
         }
 
         [MenuItem("GAME/Production Migration/Validate Dungeon 1 Production Scene")]
@@ -174,8 +199,14 @@ namespace Game.EditorTools
             RequireCount<Game.Mission.MissionManager>(0);
             RequireCount<DungeonObjectiveManager>(0);
             RequireCount<Game.Tutorial.TutorialQuestCombatBridge>(0);
-            RequireCount<CombatEncounterGroup>(0);
-            RequireCount<CombatEncounterTrigger2D>(0);
+            CombatEncounterGroup[] authoredGroups = FindSceneComponents<CombatEncounterGroup>();
+            CombatEncounterTrigger2D[] authoredTriggers = FindSceneComponents<CombatEncounterTrigger2D>();
+            Require(authoredGroups.Length == 0 || authoredGroups.Length == ProductionEncounters.Length,
+                $"Expected either no encounters before production placement or {ProductionEncounters.Length} CombatEncounterGroup components, found {authoredGroups.Length}.");
+            Require(authoredTriggers.Length == 0 || authoredTriggers.Length == ProductionEncounters.Length,
+                $"Expected either no encounters before production placement or {ProductionEncounters.Length} CombatEncounterTrigger2D components, found {authoredTriggers.Length}.");
+            if (authoredGroups.Length != 0 || authoredTriggers.Length != 0)
+                ValidateProductionEncounters();
             RequireCount<CombatQuestObjectivePublisher>(0);
             RequireCount<InteractionQuestObjectivePublisher>(0);
             RequireCount<InteractableObject>(0);
@@ -277,6 +308,131 @@ namespace Game.EditorTools
             SerializedProperty questDefinitions = serializedRuntime.FindProperty("questDefinitions");
             questDefinitions.arraySize = 0;
             serializedRuntime.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void PlaceProductionEncounters(Scene productionScene)
+        {
+            if (productionScene.path != ProductionScenePath)
+                throw new InvalidOperationException($"Expected production scene '{ProductionScenePath}', found '{productionScene.path}'.");
+
+            Transform destinationRoot = FindRequired("World/Encounters");
+            CombatEntryPoint entryPoint = FindSceneComponents<CombatEntryPoint>().Single();
+            Transform player = FindRequired("Actors/Player/PlayerRoot");
+
+            RemoveAllChildren(destinationRoot);
+            Scene templateScene = EditorSceneManager.OpenScene(TemplateScenePath, OpenSceneMode.Additive);
+            try
+            {
+                Transform templateRoot = FindRoot(templateScene, "World").transform.Find("Encounters");
+                if (templateRoot == null)
+                    throw new InvalidOperationException("Dungeon_Template is missing World/Encounters.");
+
+                CombatEncounterGroup templateGroup = templateRoot
+                    .GetComponentsInChildren<CombatEncounterGroup>(true)
+                    .FirstOrDefault();
+                if (templateGroup == null)
+                    throw new InvalidOperationException("Dungeon_Template has no canonical CombatEncounterGroup fixture.");
+
+                foreach (ProductionEncounterSpec spec in ProductionEncounters)
+                    CloneProductionEncounter(templateGroup, destinationRoot, productionScene, entryPoint, player, spec);
+            }
+            finally
+            {
+                EditorSceneManager.CloseScene(templateScene, true);
+                SceneManager.SetActiveScene(productionScene);
+            }
+
+            EditorSceneManager.MarkSceneDirty(productionScene);
+        }
+
+        private static void CloneProductionEncounter(
+            CombatEncounterGroup templateGroup,
+            Transform destinationRoot,
+            Scene productionScene,
+            CombatEntryPoint entryPoint,
+            Transform player,
+            ProductionEncounterSpec spec)
+        {
+            GameObject clone = UnityEngine.Object.Instantiate(templateGroup.gameObject);
+            SceneManager.MoveGameObjectToScene(clone, productionScene);
+            clone.name = spec.GroupName;
+            clone.transform.SetParent(destinationRoot, false);
+            clone.transform.localPosition = spec.Position;
+            clone.transform.localRotation = Quaternion.identity;
+            clone.transform.localScale = Vector3.one;
+
+            CombatEncounterGroup group = clone.GetComponent<CombatEncounterGroup>();
+            FieldEnemyMotor2D[] enemyMotors = clone.GetComponentsInChildren<FieldEnemyMotor2D>(true);
+            CombatEncounterTrigger2D[] triggers = clone.GetComponentsInChildren<CombatEncounterTrigger2D>(true);
+            if (group == null || enemyMotors.Length != 1 || triggers.Length != 1)
+            {
+                throw new InvalidOperationException(
+                    $"Dungeon_Template encounter fixture must contain one group, one FieldEnemyMotor2D, and one trigger; " +
+                    $"found group={(group != null ? 1 : 0)}, enemies={enemyMotors.Length}, triggers={triggers.Length}.");
+            }
+
+            GameObject enemy = enemyMotors[0].gameObject;
+            CombatEncounterTrigger2D trigger = triggers[0];
+            enemy.name = spec.EnemyName;
+            trigger.gameObject.name = "ContactTrigger";
+
+            SetString(group, "encounterId", spec.EncounterId);
+            SetString(trigger, "encounterId", spec.EncounterId);
+            SetReference(trigger, "entryPoint", entryPoint);
+            SetReference(trigger, "enemyObject", enemy);
+            SetReference(trigger, "encounterGroup", group);
+            SetReference(trigger, "openingEffectOrNull", null);
+            SetBool(trigger, "debugLog", false);
+
+            foreach (FieldEnemyPatrolAI2D patrol in clone.GetComponentsInChildren<FieldEnemyPatrolAI2D>(true))
+                SetReference(patrol, "player", player);
+        }
+
+        private static void ValidateProductionEncounters()
+        {
+            CombatEncounterGroup[] groups = FindSceneComponents<CombatEncounterGroup>();
+            CombatEncounterTrigger2D[] triggers = FindSceneComponents<CombatEncounterTrigger2D>();
+            Require(groups.Length == ProductionEncounters.Length,
+                $"Expected {ProductionEncounters.Length} CombatEncounterGroup components, found {groups.Length}.");
+            Require(triggers.Length == ProductionEncounters.Length,
+                $"Expected {ProductionEncounters.Length} CombatEncounterTrigger2D components, found {triggers.Length}.");
+
+            Transform encountersRoot = FindRequired("World/Encounters");
+            CombatEntryPoint entryPoint = FindSceneComponents<CombatEntryPoint>().Single();
+            Transform player = FindRequired("Actors/Player/PlayerRoot");
+            foreach (ProductionEncounterSpec spec in ProductionEncounters)
+            {
+                CombatEncounterGroup group = groups.SingleOrDefault(item =>
+                    ReadString(item, "encounterId") == spec.EncounterId);
+                Require(group != null, $"Encounter group '{spec.EncounterId}' is missing.");
+                Require(group.name == spec.GroupName, $"Encounter '{spec.EncounterId}' group name is '{group.name}'.");
+                Require(group.transform.parent == encountersRoot, $"Encounter '{spec.EncounterId}' is outside World/Encounters.");
+                Require(Vector3.Distance(group.transform.position, spec.Position) < 0.001f,
+                    $"Encounter '{spec.EncounterId}' position is {group.transform.position}, expected {spec.Position}.");
+
+                FieldEnemyMotor2D[] enemyMotors = group.GetComponentsInChildren<FieldEnemyMotor2D>(true);
+                CombatEncounterTrigger2D[] memberTriggers = group.GetComponentsInChildren<CombatEncounterTrigger2D>(true);
+                Require(enemyMotors.Length == 1, $"Encounter '{spec.EncounterId}' must have one canonical field enemy.");
+                Require(memberTriggers.Length == 1, $"Encounter '{spec.EncounterId}' must have one contact trigger.");
+                Require(enemyMotors[0].gameObject.name == spec.EnemyName,
+                    $"Encounter '{spec.EncounterId}' enemy name is '{enemyMotors[0].name}'.");
+
+                CombatEncounterTrigger2D trigger = memberTriggers[0];
+                Require(ReadString(trigger, "encounterId") == spec.EncounterId,
+                    $"Encounter trigger for '{spec.EncounterId}' has a mismatched stable ID.");
+                Require(ReadReference<CombatEntryPoint>(trigger, "entryPoint") == entryPoint,
+                    $"Encounter '{spec.EncounterId}' is not bound to the canonical CombatEntryPoint.");
+                Require(ReadReference<GameObject>(trigger, "enemyObject") == enemyMotors[0].gameObject,
+                    $"Encounter '{spec.EncounterId}' does not target its field enemy.");
+                Require(ReadReference<CombatEncounterGroup>(trigger, "encounterGroup") == group,
+                    $"Encounter '{spec.EncounterId}' trigger is not owned by its group.");
+                Require(!ReadBool(trigger, "debugLog"),
+                    $"Encounter '{spec.EncounterId}' must not enable debug trigger logging.");
+
+                foreach (FieldEnemyPatrolAI2D patrol in group.GetComponentsInChildren<FieldEnemyPatrolAI2D>(true))
+                    Require(ReadReference<Transform>(patrol, "player") == player,
+                        $"Encounter '{spec.EncounterId}' patrol is not bound to the production player.");
+            }
         }
 
         private static void PrepareProductionRoots(out Transform environmentRoot, out Transform collisionRoot)
@@ -487,6 +643,63 @@ namespace Game.EditorTools
                 UnityEngine.Object.DestroyImmediate(parent.GetChild(i).gameObject);
         }
 
+        private static void SetString(UnityEngine.Object owner, string propertyName, string value)
+        {
+            SerializedObject serialized = new(owner);
+            SerializedProperty property = serialized.FindProperty(propertyName);
+            if (property == null)
+                throw new InvalidOperationException($"{owner.GetType().Name}.{propertyName} was not found.");
+            property.stringValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(owner);
+        }
+
+        private static void SetReference(UnityEngine.Object owner, string propertyName, UnityEngine.Object value)
+        {
+            SerializedObject serialized = new(owner);
+            SerializedProperty property = serialized.FindProperty(propertyName);
+            if (property == null)
+                throw new InvalidOperationException($"{owner.GetType().Name}.{propertyName} was not found.");
+            property.objectReferenceValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(owner);
+        }
+
+        private static void SetBool(UnityEngine.Object owner, string propertyName, bool value)
+        {
+            SerializedObject serialized = new(owner);
+            SerializedProperty property = serialized.FindProperty(propertyName);
+            if (property == null)
+                throw new InvalidOperationException($"{owner.GetType().Name}.{propertyName} was not found.");
+            property.boolValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(owner);
+        }
+
+        private static string ReadString(UnityEngine.Object owner, string propertyName)
+        {
+            SerializedProperty property = new SerializedObject(owner).FindProperty(propertyName);
+            if (property == null)
+                throw new InvalidOperationException($"{owner.GetType().Name}.{propertyName} was not found.");
+            return property.stringValue;
+        }
+
+        private static bool ReadBool(UnityEngine.Object owner, string propertyName)
+        {
+            SerializedProperty property = new SerializedObject(owner).FindProperty(propertyName);
+            if (property == null)
+                throw new InvalidOperationException($"{owner.GetType().Name}.{propertyName} was not found.");
+            return property.boolValue;
+        }
+
+        private static T ReadReference<T>(UnityEngine.Object owner, string propertyName) where T : UnityEngine.Object
+        {
+            SerializedProperty property = new SerializedObject(owner).FindProperty(propertyName);
+            if (property == null)
+                throw new InvalidOperationException($"{owner.GetType().Name}.{propertyName} was not found.");
+            return property.objectReferenceValue as T;
+        }
+
         private static T[] FindSceneComponents<T>() where T : Component
         {
             Scene scene = SceneManager.GetActiveScene();
@@ -554,6 +767,22 @@ namespace Game.EditorTools
 
             public string Name { get; }
             public string Category { get; }
+        }
+
+        private readonly struct ProductionEncounterSpec
+        {
+            public ProductionEncounterSpec(string groupName, string enemyName, string encounterId, Vector3 position)
+            {
+                GroupName = groupName;
+                EnemyName = enemyName;
+                EncounterId = encounterId;
+                Position = position;
+            }
+
+            public string GroupName { get; }
+            public string EnemyName { get; }
+            public string EncounterId { get; }
+            public Vector3 Position { get; }
         }
     }
 }
