@@ -32,6 +32,10 @@ namespace Game.EditorTools
         public const string TemplateScenePath = "Assets/GAME/Scenes/Dungeon_Template.unity";
         public const string LegacyScenePath = "Assets/GAME/Scenes/Dungeon 1.unity";
         public const string ProductionScenePath = "Assets/GAME/Scenes/Dungeon_1_Production.unity";
+        private const string ProductionNpcPrefabPath = "Assets/GAME/Prefabs/Interaction/ProductionNpcInteraction.prefab";
+        private const string ProductionNpcEventPath = "Assets/GAME/Data/Interaction/DungeonOneNpcInteraction.asset";
+        private const string ProductionNpcName = "Dungeon1_FirstTalkNpc";
+        private const string ProductionNpcInteractionId = "dungeon1.npc.first-talk";
 
         public const int ExpectedSpriteRendererCount = 172;
         public const int ExpectedPhysicalColliderCount = 53;
@@ -45,6 +49,7 @@ namespace Game.EditorTools
         };
 
         private static readonly Vector3 ProductionStartPosition = new(-39.88f, -6.33f, 0f);
+        private static readonly Vector3 ProductionNpcPosition = new(187.105f, 7.698f, 0f);
 
         private static readonly EnvironmentRoot[] EnvironmentRoots =
         {
@@ -123,6 +128,7 @@ namespace Game.EditorTools
             SceneManager.SetActiveScene(productionScene);
             RepairUnresolvedDestinationSprites(environmentRoot);
             PlaceProductionEncounters(productionScene);
+            PlaceProductionNpc(productionScene);
             EditorSceneManager.MarkSceneDirty(productionScene);
 
             ValidateProductionScene();
@@ -155,6 +161,22 @@ namespace Game.EditorTools
         public static void PlaceProductionEncountersFromMenu()
         {
             PlaceProductionEncountersFromCommandLine();
+        }
+
+        public static void PlaceProductionNpcFromCommandLine()
+        {
+            EditorSceneManager.OpenScene(ProductionScenePath, OpenSceneMode.Single);
+            PlaceProductionNpc(SceneManager.GetActiveScene());
+            ValidateProductionScene();
+            EditorSceneManager.SaveOpenScenes();
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[DungeonOneProductionMigration] Placed Production NPC interaction in '{ProductionScenePath}'.");
+        }
+
+        [MenuItem("GAME/Production Migration/Place Dungeon 1 Production NPC Interaction")]
+        public static void PlaceProductionNpcFromMenu()
+        {
+            PlaceProductionNpcFromCommandLine();
         }
 
         [MenuItem("GAME/Production Migration/Validate Dungeon 1 Production Scene")]
@@ -209,7 +231,7 @@ namespace Game.EditorTools
                 ValidateProductionEncounters();
             RequireCount<CombatQuestObjectivePublisher>(0);
             RequireCount<InteractionQuestObjectivePublisher>(0);
-            RequireCount<InteractableObject>(0);
+            ValidateProductionNpc();
 
             MonoBehaviour[] behaviours = FindSceneComponents<MonoBehaviour>();
             MonoBehaviour forbidden = behaviours.FirstOrDefault(component =>
@@ -279,7 +301,7 @@ namespace Game.EditorTools
             ValidatePrefabInstanceCount("Assets/GAME/Prefabs/CombatRuntime.prefab", 1);
             ValidatePrefabInstanceCount("Assets/GAME/Prefabs/Player.prefab", 1);
             ValidatePrefabInstanceCount("Assets/GAME/Prefabs/UI/ProductionDungeonUI.prefab", 1);
-            ValidatePrefabInstanceCount("Assets/GAME/Prefabs/Interaction/ProductionNpcInteraction.prefab", 0);
+            ValidatePrefabInstanceCount(ProductionNpcPrefabPath, 1);
 
             foreach (Component component in sceneObjects.SelectMany(item => item.GetComponents<Component>()))
                 ValidateMissingObjectReferences(component);
@@ -343,6 +365,64 @@ namespace Game.EditorTools
             }
 
             EditorSceneManager.MarkSceneDirty(productionScene);
+        }
+
+        private static void PlaceProductionNpc(Scene productionScene)
+        {
+            if (productionScene.path != ProductionScenePath)
+                throw new InvalidOperationException($"Expected production scene '{ProductionScenePath}', found '{productionScene.path}'.");
+
+            Transform destinationRoot = FindRequired("Actors/NPCs");
+            Transform existing = destinationRoot.Find(ProductionNpcName);
+            if (existing != null)
+                UnityEngine.Object.DestroyImmediate(existing.gameObject);
+
+            if (destinationRoot.GetComponentsInChildren<InteractableObject>(true).Length != 0)
+                throw new InvalidOperationException("Actors/NPCs already contains an unexpected interaction object.");
+
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ProductionNpcPrefabPath);
+            if (prefab == null)
+                throw new InvalidOperationException($"Production NPC prefab '{ProductionNpcPrefabPath}' was not found.");
+
+            AcknowledgementInteractionEventSO interactionEvent = EnsureProductionNpcInteractionEvent();
+            GameObject instance = PrefabUtility.InstantiatePrefab(prefab, productionScene) as GameObject;
+            if (instance == null)
+                throw new InvalidOperationException($"Could not instantiate Production NPC prefab '{ProductionNpcPrefabPath}'.");
+
+            instance.name = ProductionNpcName;
+            instance.transform.SetParent(destinationRoot, false);
+            instance.transform.position = ProductionNpcPosition;
+            instance.transform.rotation = Quaternion.identity;
+            instance.transform.localScale = Vector3.one;
+
+            InteractableObject interactable = instance.GetComponent<InteractableObject>();
+            Collider2D trigger = instance.GetComponent<Collider2D>();
+            if (interactable == null || trigger == null || !trigger.isTrigger)
+                throw new InvalidOperationException("Production NPC prefab must provide an InteractableObject and trigger Collider2D.");
+
+            SetString(interactable, "interactionId", ProductionNpcInteractionId);
+            SetReferenceArrayElement(interactable, "events", 0, interactionEvent, 1);
+            EditorSceneManager.MarkSceneDirty(productionScene);
+        }
+
+        private static AcknowledgementInteractionEventSO EnsureProductionNpcInteractionEvent()
+        {
+            AcknowledgementInteractionEventSO existing = AssetDatabase.LoadAssetAtPath<AcknowledgementInteractionEventSO>(ProductionNpcEventPath);
+            if (existing != null)
+                return existing;
+
+            AcknowledgementInteractionEventSO interactionEvent = ScriptableObject.CreateInstance<AcknowledgementInteractionEventSO>();
+            interactionEvent.name = "DungeonOneNpcInteraction";
+            AssetDatabase.CreateAsset(interactionEvent, ProductionNpcEventPath);
+            SerializedObject serialized = new(interactionEvent);
+            SerializedProperty actionId = serialized.FindProperty("actionId");
+            if (actionId == null)
+                throw new InvalidOperationException("AcknowledgementInteractionEventSO.actionId was not found.");
+            actionId.stringValue = "dungeon1.npc.first-talk.interact";
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(interactionEvent);
+            AssetDatabase.SaveAssets();
+            return interactionEvent;
         }
 
         private static void CloneProductionEncounter(
@@ -433,6 +513,39 @@ namespace Game.EditorTools
                     Require(ReadReference<Transform>(patrol, "player") == player,
                         $"Encounter '{spec.EncounterId}' patrol is not bound to the production player.");
             }
+        }
+
+        private static void ValidateProductionNpc()
+        {
+            InteractableObject[] interactables = FindSceneComponents<InteractableObject>();
+            Require(interactables.Length == 1, $"Expected one Production NPC InteractableObject, found {interactables.Length}.");
+
+            Transform npcRoot = FindRequired($"Actors/NPCs/{ProductionNpcName}");
+            InteractableObject npc = interactables[0];
+            Require(npc.transform == npcRoot, "Production NPC interaction is not on the expected NPC root.");
+            Require(Vector3.Distance(npcRoot.position, ProductionNpcPosition) < 0.001f,
+                $"Production NPC position is {npcRoot.position}, expected {ProductionNpcPosition}.");
+            Require(npc.PromptText == "F: 대화", "Production NPC prompt does not use the canonical authored label.");
+            Require(npc.UsePolicy == InteractionUsePolicy.Repeatable,
+                "Production NPC must remain repeatable until Dungeon 1 story content is authored.");
+            Require(npc.InteractionId == ProductionNpcInteractionId,
+                "Production NPC does not have the expected stable interaction ID.");
+            Require(npc.Events.Count == 1 && npc.Events[0] is AcknowledgementInteractionEventSO,
+                "Production NPC must use the authored no-op Production interaction event.");
+            Require(npc.Events[0] == EnsureProductionNpcInteractionEvent(),
+                "Production NPC does not reference the Dungeon 1 authored interaction event.");
+            Require(npc.GetComponent<Collider2D>() is { isTrigger: true },
+                "Production NPC must use a trigger Collider2D for interaction detection.");
+            Require(npc.GetComponentsInChildren<Collider2D>(true).All(collider => collider.isTrigger),
+                "Production NPC must not retain a legacy physical interaction collider.");
+            Require(npc.GetComponentsInChildren<SpriteRenderer>(true).Length == 1,
+                "Production NPC must contain one canonical visual, not a duplicate legacy visual.");
+            Require(npc.GetComponentInChildren<StoryInteractable2D>(true) == null,
+                "Production NPC must not retain StoryInteractable2D ownership.");
+            Require(npc.GetComponent<InteractionController>() == null,
+                "Production NPC must not own InteractionController or input routing.");
+            Require(npc.GetComponent<GameStateMachine>() == null,
+                "Production NPC must not own GameState writes.");
         }
 
         private static void PrepareProductionRoots(out Transform environmentRoot, out Transform collisionRoot)
@@ -661,6 +774,23 @@ namespace Game.EditorTools
             if (property == null)
                 throw new InvalidOperationException($"{owner.GetType().Name}.{propertyName} was not found.");
             property.objectReferenceValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(owner);
+        }
+
+        private static void SetReferenceArrayElement(
+            UnityEngine.Object owner,
+            string propertyName,
+            int index,
+            UnityEngine.Object value,
+            int expectedLength)
+        {
+            SerializedObject serialized = new(owner);
+            SerializedProperty property = serialized.FindProperty(propertyName);
+            if (property == null || !property.isArray)
+                throw new InvalidOperationException($"{owner.GetType().Name}.{propertyName} was not found as an array.");
+            property.arraySize = expectedLength;
+            property.GetArrayElementAtIndex(index).objectReferenceValue = value;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(owner);
         }
