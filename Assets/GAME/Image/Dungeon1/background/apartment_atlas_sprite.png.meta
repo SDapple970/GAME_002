@@ -74,7 +74,7 @@ TextureImporter:
   lightmap: 0
   compressionQuality: 50
   spriteMode: 2
-  spriteExtrude: 1
+  spriteExtrude: 0
   spriteMeshType: 1
   alignment: 0
   spritePivot: {x: 0.5, y: 0.5}
@@ -140,221 +140,221 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: apartment_atlas_sprite 1_0
+      name: apartment_atlas_sprite_0
       rect:
         serializedVersion: 2
-        x: 31
-        y: 305
-        width: 285
-        height: 152
+        x: 32
+        y: 306
+        width: 283
+        height: 150
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: dbc57f22a75643c90800000000000000
-      internalID: -7191011129756787523
+      spriteID: dbb14801507d66347a66dd950c60af5b
+      internalID: -1572968433
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: apartment_atlas_sprite 1_1
+      name: apartment_atlas_sprite_1
       rect:
         serializedVersion: 2
-        x: 323
-        y: 305
-        width: 285
-        height: 152
+        x: 324
+        y: 306
+        width: 283
+        height: 150
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: 5e7c1b6d4fee79e50800000000000000
-      internalID: 6816179296389941221
+      spriteID: 99cd54321e1cb2747b0be2c8884e2848
+      internalID: -1432614257
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: apartment_atlas_sprite 1_2
+      name: apartment_atlas_sprite_2
       rect:
         serializedVersion: 2
-        x: 619
-        y: 305
-        width: 285
-        height: 152
+        x: 620
+        y: 306
+        width: 283
+        height: 150
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: 6c81d915ce1546330800000000000000
-      internalID: 3703174869028772038
+      spriteID: d78da5ca03d4a9249803b05a05f08dbc
+      internalID: 1130275196
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: apartment_atlas_sprite 1_3
+      name: apartment_atlas_sprite_3
       rect:
         serializedVersion: 2
-        x: 921
-        y: 305
-        width: 285
-        height: 152
+        x: 922
+        y: 306
+        width: 283
+        height: 150
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: 9e829d9555a6bb5f0800000000000000
-      internalID: -739880798960146199
+      spriteID: e9a72090d012c4b468851f9acbef157a
+      internalID: -1241099831
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: apartment_atlas_sprite 1_4
+      name: apartment_atlas_sprite_4
       rect:
         serializedVersion: 2
-        x: 1213
-        y: 305
-        width: 253
-        height: 152
+        x: 1214
+        y: 306
+        width: 252
+        height: 150
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: ac51ec480392eaeb0800000000000000
-      internalID: -4706779272192322102
+      spriteID: e20ff73f0704fa44980aca8e4434b80e
+      internalID: 467420159
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: apartment_atlas_sprite 1_5
+      name: apartment_atlas_sprite_5
       rect:
         serializedVersion: 2
-        x: 31
-        y: 141
-        width: 254
-        height: 152
+        x: 32
+        y: 142
+        width: 252
+        height: 150
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: 068e51e377ebb1450800000000000000
-      internalID: 6060647142909143136
+      spriteID: 840eb49a3bbf94f4bb9dc85eb7e33bc3
+      internalID: -1156734609
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: apartment_atlas_sprite 1_6
+      name: apartment_atlas_sprite_6
       rect:
         serializedVersion: 2
-        x: 292
-        y: 141
-        width: 285
-        height: 152
+        x: 293
+        y: 142
+        width: 283
+        height: 150
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: 446b0da498a981f80800000000000000
-      internalID: -8135582812388411836
+      spriteID: 6ebf356b03d28b44cb0b33861d1b5cf6
+      internalID: -629158237
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: apartment_atlas_sprite 1_7
+      name: apartment_atlas_sprite_7
       rect:
         serializedVersion: 2
-        x: 594
-        y: 141
-        width: 285
-        height: 152
+        x: 595
+        y: 142
+        width: 283
+        height: 150
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: dd96676b2e34477b0800000000000000
-      internalID: -5227478626467419683
+      spriteID: 5052d7e2e5d224144bb671bdab12fe70
+      internalID: 1031866817
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: apartment_atlas_sprite 1_8
+      name: apartment_atlas_sprite_8
       rect:
         serializedVersion: 2
-        x: 890
-        y: 141
-        width: 285
-        height: 152
+        x: 891
+        y: 142
+        width: 283
+        height: 150
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: cc36a530d561f5660800000000000000
-      internalID: 7376639303400186828
+      spriteID: 91b1d00ee9adc884eb4afedc85bb105e
+      internalID: 889935605
       vertices: []
       indices: 
       edges: []
       weights: []
     - serializedVersion: 2
-      name: apartment_atlas_sprite 1_9
+      name: apartment_atlas_sprite_9
       rect:
         serializedVersion: 2
-        x: 1182
-        y: 141
-        width: 284
-        height: 152
+        x: 1183
+        y: 142
+        width: 283
+        height: 150
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: 43ca7fcbbb91ca950800000000000000
-      internalID: 6461567859489745972
+      spriteID: 5127c314812959f4f829a43a75f678a5
+      internalID: 939689701
       vertices: []
       indices: 
       edges: []
@@ -363,7 +363,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: 5e97eb03825dee720800000000000000
     internalID: 0
     vertices: []
     indices: 
@@ -371,18 +371,20 @@ TextureImporter:
     weights: []
     secondaryTextures: []
     spriteCustomMetadata:
-      entries: []
+      entries:
+      - key: SpriteEditor.SliceSettings
+        value: '{"sliceOnImport":false,"gridCellCount":{"x":1.0,"y":1.0},"gridSpriteSize":{"x":64.0,"y":64.0},"gridSpriteOffset":{"x":0.0,"y":0.0},"gridSpritePadding":{"x":0.0,"y":0.0},"pivot":{"x":0.5,"y":0.5},"pivotPixels":{"x":0.0,"y":0.0},"autoSlicingMethod":0,"spriteAlignment":0,"pivotUnitMode":0,"slicingType":0,"keepEmptyRects":false,"isAlternate":false}'
     nameFileIdTable:
-      apartment_atlas_sprite 1_0: -7191011129756787523
-      apartment_atlas_sprite 1_1: 6816179296389941221
-      apartment_atlas_sprite 1_2: 3703174869028772038
-      apartment_atlas_sprite 1_3: -739880798960146199
-      apartment_atlas_sprite 1_4: -4706779272192322102
-      apartment_atlas_sprite 1_5: 6060647142909143136
-      apartment_atlas_sprite 1_6: -8135582812388411836
-      apartment_atlas_sprite 1_7: -5227478626467419683
-      apartment_atlas_sprite 1_8: 7376639303400186828
-      apartment_atlas_sprite 1_9: 6461567859489745972
+      apartment_atlas_sprite_0: -1572968433
+      apartment_atlas_sprite_1: -1432614257
+      apartment_atlas_sprite_2: 1130275196
+      apartment_atlas_sprite_3: -1241099831
+      apartment_atlas_sprite_4: 467420159
+      apartment_atlas_sprite_5: -1156734609
+      apartment_atlas_sprite_6: -629158237
+      apartment_atlas_sprite_7: 1031866817
+      apartment_atlas_sprite_8: 889935605
+      apartment_atlas_sprite_9: 939689701
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
