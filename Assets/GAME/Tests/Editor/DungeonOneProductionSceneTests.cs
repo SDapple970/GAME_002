@@ -269,6 +269,133 @@ namespace Game.Tests.Integration
             Assert.That(effect.FindPropertyRelative("questDefinition").objectReferenceValue,
                 Is.SameAs(AssetDatabase.LoadAssetAtPath<QuestDefinitionSO>(
                     "Assets/GAME/Data/Quest/CH01_FindFirstNpc.asset")));
+            SerializedProperty completionEffect = new SerializedObject(intro)
+                .FindProperty("nodes").GetArrayElementAtIndex(1)
+                .FindPropertyRelative("effects").GetArrayElementAtIndex(1);
+            Assert.That(completionEffect.FindPropertyRelative("type").intValue,
+                Is.EqualTo((int)StoryEffectType.MarkEventCompleted));
+            Assert.That(completionEffect.FindPropertyRelative("key").stringValue,
+                Is.EqualTo("dungeon1.intro.story"));
+        }
+
+        [Test]
+        public void ProductionDungeonOne_SceneStartAdapterReevaluatesAfterCoreBecomesAvailable()
+        {
+            StoryEventDefinitionSO intro = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
+                "Assets/GAME/Data/Story/CH01/DungeonOneIntroStory.asset");
+            GameObject narrative = new("DungeonOneDelayedBootstrapNarrative");
+            GameObject adapterObject = new("DungeonOneDelayedBootstrapAdapter");
+            GameObject core = new("DungeonOneDelayedBootstrapCore");
+
+            try
+            {
+                StoryEventRunner runner = narrative.AddComponent<StoryEventRunner>();
+                InvokeAwake(runner);
+                int starts = 0;
+                runner.OnEventStarted += _ => starts++;
+                SceneStartStoryEventAdapter adapter = adapterObject.AddComponent<SceneStartStoryEventAdapter>();
+                SetReference(adapter, "runner", runner);
+                SetReference(adapter, "eventDefinition", intro);
+                InvokeIfPresent(adapter, "OnEnable");
+                InvokeIfPresent(adapter, "Start");
+                Assert.That(runner.IsRunning, Is.False);
+
+                GameStateMachine stateMachine = core.AddComponent<GameStateMachine>();
+                GameFlowController flow = core.AddComponent<GameFlowController>();
+                InvokeAwake(stateMachine);
+                InvokeAwake(flow);
+                InvokeIfPresent(adapter, "OnEnable");
+
+                Assert.That(runner.IsRunning, Is.True);
+                Assert.That(starts, Is.EqualTo(1));
+                InvokeIfPresent(adapter, "OnEnable");
+                Assert.That(starts, Is.EqualTo(1));
+                runner.EndEvent();
+            }
+            finally
+            {
+                Object.DestroyImmediate(adapterObject);
+                Object.DestroyImmediate(narrative);
+                Object.DestroyImmediate(core);
+            }
+        }
+
+        [Test]
+        public void ProductionDungeonOne_SceneStartAdapterDefersForRestoreAndStartsAfterCompletion()
+        {
+            StoryEventDefinitionSO intro = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
+                "Assets/GAME/Data/Story/CH01/DungeonOneIntroStory.asset");
+            GameObject core = new("DungeonOneRestoreCore");
+            GameObject narrative = new("DungeonOneRestoreNarrative");
+            GameObject adapterObject = new("DungeonOneRestoreAdapter");
+
+            try
+            {
+                GameStateMachine stateMachine = core.AddComponent<GameStateMachine>();
+                GameFlowController flow = core.AddComponent<GameFlowController>();
+                SaveLoadService saveLoad = core.AddComponent<SaveLoadService>();
+                InvokeAwake(stateMachine);
+                InvokeAwake(flow);
+                InvokeAwake(saveLoad);
+                SetPrivateField(saveLoad, "_operationState", SaveLoadService.OperationState.Restoring);
+
+                StoryEventRunner runner = narrative.AddComponent<StoryEventRunner>();
+                InvokeAwake(runner);
+                SceneStartStoryEventAdapter adapter = adapterObject.AddComponent<SceneStartStoryEventAdapter>();
+                SetReference(adapter, "runner", runner);
+                SetReference(adapter, "eventDefinition", intro);
+                InvokeIfPresent(adapter, "OnEnable");
+                InvokeIfPresent(adapter, "Start");
+                Assert.That(runner.IsRunning, Is.False);
+
+                SetPrivateField(saveLoad, "_operationState", SaveLoadService.OperationState.Idle);
+                InvokeIfPresent(adapter, "HandleLoadCompleted", true, "Loaded primary save.");
+                Assert.That(runner.IsRunning, Is.True);
+                runner.EndEvent();
+            }
+            finally
+            {
+                Object.DestroyImmediate(adapterObject);
+                Object.DestroyImmediate(narrative);
+                Object.DestroyImmediate(core);
+            }
+        }
+
+        [Test]
+        public void ProductionDungeonOne_SceneStartAdapterSkipsPersistentlyCompletedIntro()
+        {
+            StoryEventDefinitionSO intro = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
+                "Assets/GAME/Data/Story/CH01/DungeonOneIntroStory.asset");
+            GameObject core = new("DungeonOneCompletedIntroCore");
+            GameObject narrative = new("DungeonOneCompletedIntroNarrative");
+            GameObject adapterObject = new("DungeonOneCompletedIntroAdapter");
+
+            try
+            {
+                GameStateMachine stateMachine = core.AddComponent<GameStateMachine>();
+                GameFlowController flow = core.AddComponent<GameFlowController>();
+                StoryProgressManager progress = core.AddComponent<StoryProgressManager>();
+                InvokeAwake(stateMachine);
+                InvokeAwake(flow);
+                InvokeAwake(progress);
+                progress.MarkEventCompleted(intro.EventId);
+
+                StoryEventRunner runner = narrative.AddComponent<StoryEventRunner>();
+                InvokeAwake(runner);
+                SceneStartStoryEventAdapter adapter = adapterObject.AddComponent<SceneStartStoryEventAdapter>();
+                SetReference(adapter, "runner", runner);
+                SetReference(adapter, "eventDefinition", intro);
+                InvokeIfPresent(adapter, "OnEnable");
+                InvokeIfPresent(adapter, "Start");
+
+                Assert.That(runner.IsRunning, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(adapterObject);
+                Object.DestroyImmediate(narrative);
+                Object.DestroyImmediate(core);
+            }
         }
 
         [Test]
@@ -361,12 +488,19 @@ namespace Game.Tests.Integration
             InvokeIfPresent(component, "Awake");
         }
 
-        private static void InvokeIfPresent(MonoBehaviour component, string methodName)
+        private static void InvokeIfPresent(MonoBehaviour component, string methodName, params object[] arguments)
         {
             MethodInfo awake = component.GetType().GetMethod(
                 methodName,
                 BindingFlags.Instance | BindingFlags.NonPublic);
-            awake?.Invoke(component, null);
+            awake?.Invoke(component, arguments);
+        }
+
+        private static void SetPrivateField(object owner, string fieldName, object value)
+        {
+            FieldInfo field = owner.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null, fieldName);
+            field.SetValue(owner, value);
         }
 
         private static void SetReference(UnityEngine.Object owner, string propertyName, UnityEngine.Object value)

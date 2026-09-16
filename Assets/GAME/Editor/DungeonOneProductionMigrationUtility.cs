@@ -578,7 +578,7 @@ namespace Game.EditorTools
             look.FindPropertyRelative("useTimedChoices").boolValue = false;
             look.FindPropertyRelative("nextNodeId").stringValue = string.Empty;
             SerializedProperty effects = look.FindPropertyRelative("effects");
-            effects.arraySize = 1;
+            effects.arraySize = 2;
             SerializedProperty startQuest = effects.GetArrayElementAtIndex(0);
             startQuest.FindPropertyRelative("type").intValue = (int)StoryEffectType.StartQuest;
             startQuest.FindPropertyRelative("key").stringValue = string.Empty;
@@ -595,6 +595,22 @@ namespace Game.EditorTools
             startQuest.FindPropertyRelative("rewardExp").intValue = 0;
             startQuest.FindPropertyRelative("rewardItemId").stringValue = string.Empty;
             startQuest.FindPropertyRelative("rewardItemCount").intValue = 0;
+            SerializedProperty markIntroCompleted = effects.GetArrayElementAtIndex(1);
+            markIntroCompleted.FindPropertyRelative("type").intValue = (int)StoryEffectType.MarkEventCompleted;
+            markIntroCompleted.FindPropertyRelative("key").stringValue = ProductionIntroStoryEventId;
+            markIntroCompleted.FindPropertyRelative("boolValue").boolValue = false;
+            markIntroCompleted.FindPropertyRelative("intValue").intValue = 0;
+            markIntroCompleted.FindPropertyRelative("missionDefinition").objectReferenceValue = null;
+            markIntroCompleted.FindPropertyRelative("missionId").stringValue = string.Empty;
+            markIntroCompleted.FindPropertyRelative("objectiveId").stringValue = string.Empty;
+            markIntroCompleted.FindPropertyRelative("questEventType").intValue = (int)QuestEventType.Unknown;
+            markIntroCompleted.FindPropertyRelative("questTargetId").stringValue = string.Empty;
+            markIntroCompleted.FindPropertyRelative("questDefinition").objectReferenceValue = null;
+            markIntroCompleted.FindPropertyRelative("rewardSourceId").stringValue = string.Empty;
+            markIntroCompleted.FindPropertyRelative("rewardGold").intValue = 0;
+            markIntroCompleted.FindPropertyRelative("rewardExp").intValue = 0;
+            markIntroCompleted.FindPropertyRelative("rewardItemId").stringValue = string.Empty;
+            markIntroCompleted.FindPropertyRelative("rewardItemCount").intValue = 0;
             look.FindPropertyRelative("endEvent").boolValue = true;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(story);
@@ -678,7 +694,7 @@ namespace Game.EditorTools
                 "Scene-start narrative adapter is not bound to the Dungeon 1 intro Story.");
             Require(intro.EventId == ProductionIntroStoryEventId,
                 "Dungeon 1 intro Story does not use its stable Production event ID.");
-            Require(intro.Nodes.Count == 2 && intro.Nodes[1].Effects.Count == 1,
+            Require(intro.Nodes.Count == 2 && intro.Nodes[1].Effects.Count == 2,
                 "Dungeon 1 intro Story does not preserve the authored two-node legacy structure.");
             SerializedProperty effect = new SerializedObject(intro)
                 .FindProperty("nodes").GetArrayElementAtIndex(1)
@@ -686,6 +702,12 @@ namespace Game.EditorTools
             Require(effect.FindPropertyRelative("type").intValue == (int)StoryEffectType.StartQuest &&
                     effect.FindPropertyRelative("questDefinition").objectReferenceValue == EnsureProductionQuestDefinition(),
                 "Dungeon 1 intro Story must start the authored Production quest through StoryEffect.StartQuest.");
+            SerializedProperty completionEffect = new SerializedObject(intro)
+                .FindProperty("nodes").GetArrayElementAtIndex(1)
+                .FindPropertyRelative("effects").GetArrayElementAtIndex(1);
+            Require(completionEffect.FindPropertyRelative("type").intValue == (int)StoryEffectType.MarkEventCompleted &&
+                    completionEffect.FindPropertyRelative("key").stringValue == ProductionIntroStoryEventId,
+                "Dungeon 1 intro Story must persist its canonical completion marker after starting the quest.");
         }
 
         private static void CloneProductionEncounter(

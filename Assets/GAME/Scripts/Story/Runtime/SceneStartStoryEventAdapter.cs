@@ -1,3 +1,4 @@
+using System.Collections;
 using Game.Core;
 using Game.Story.Data;
 using UnityEngine;
@@ -19,11 +20,16 @@ namespace Game.Story
         private bool _subscribedToState;
         private bool _subscribedToLoad;
         private bool _startRequested;
+        private Coroutine _initialReadinessRoutine;
 
         private void OnEnable()
         {
             ResolveAndSubscribe();
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
             SceneManager.sceneLoaded += HandleSceneLoaded;
+            TryStartWhenReady();
+            if (Application.isPlaying)
+                _initialReadinessRoutine = StartCoroutine(WaitForInitialReadiness());
         }
 
         private void Start()
@@ -35,7 +41,20 @@ namespace Game.Story
         private void OnDisable()
         {
             SceneManager.sceneLoaded -= HandleSceneLoaded;
+            if (_initialReadinessRoutine != null)
+                StopCoroutine(_initialReadinessRoutine);
+            _initialReadinessRoutine = null;
             Unsubscribe();
+        }
+
+        private IEnumerator WaitForInitialReadiness()
+        {
+            // RuntimeBootstrapper can be installed after this scene-local component
+            // receives OnEnable. A single lifecycle deferral avoids frame polling.
+            yield return null;
+            _initialReadinessRoutine = null;
+            ResolveAndSubscribe();
+            TryStartWhenReady();
         }
 
         private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -62,6 +81,13 @@ namespace Game.Story
                 return;
 
             ResolveAndSubscribe();
+            if (StoryProgressManager.Instance != null &&
+                StoryProgressManager.Instance.IsEventCompleted(eventDefinition.EventId))
+            {
+                _startRequested = true;
+                return;
+            }
+
             if (runner == null ||
                 _stateMachine == null ||
                 GameFlowController.Instance == null ||
