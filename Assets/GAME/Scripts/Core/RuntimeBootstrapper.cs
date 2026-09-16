@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Game.Interaction;
@@ -25,6 +26,14 @@ namespace Game.Core
         [SerializeField] private bool createMissingCoreServices = true;
         [SerializeField] private bool logWarnings = true;
 
+        private int _initialStateAppliedSceneHandle = int.MinValue;
+
+        /// <summary>
+        /// Raised after a runtime bootstrapper has installed the scene's core/UI services and
+        /// applied that scene's authored initial GameState.
+        /// </summary>
+        public static event Action<Scene> OnInitialStateApplied;
+
         private void Awake()
         {
             BootstrapCoreServices(createMissingCoreServices, logWarnings, false);
@@ -33,7 +42,7 @@ namespace Game.Core
         private void Start()
         {
             if (applyInitialStateOnStart)
-                ApplyInitialState(ResolveInitialState());
+                ApplyInitialStateForActiveScene();
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -44,7 +53,7 @@ namespace Game.Core
             {
                 existing.BootstrapCoreServices(existing.createMissingCoreServices, existing.logWarnings, false);
                 if (existing.applyInitialStateOnStart)
-                    ApplyInitialState(existing.ResolveInitialState());
+                    existing.ApplyInitialStateForActiveScene();
                 return;
             }
 
@@ -52,7 +61,12 @@ namespace Game.Core
             RuntimeBootstrapper bootstrapper = go.AddComponent<RuntimeBootstrapper>();
             bootstrapper.BootstrapCoreServices(true, true, true);
 
-            ApplyInitialState(ResolveInitialStateForScene(SceneManager.GetActiveScene().name));
+            bootstrapper.ApplyInitialStateForActiveScene();
+        }
+
+        public bool HasAppliedInitialStateFor(Scene scene)
+        {
+            return scene.IsValid() && _initialStateAppliedSceneHandle == scene.handle;
         }
 
         private void BootstrapCoreServices(bool createMissing, bool warn, bool compatibilityFallback)
@@ -139,6 +153,17 @@ namespace Game.Core
                 GameFlowController.Instance.RequestState(state, nameof(RuntimeBootstrapper));
             else
                 GameStateMachine.Instance?.TrySetState(state, nameof(RuntimeBootstrapper));
+        }
+
+        private void ApplyInitialStateForActiveScene()
+        {
+            Scene activeScene = SceneManager.GetActiveScene();
+            if (!activeScene.IsValid() || HasAppliedInitialStateFor(activeScene))
+                return;
+
+            ApplyInitialState(ResolveInitialState());
+            _initialStateAppliedSceneHandle = activeScene.handle;
+            OnInitialStateApplied?.Invoke(activeScene);
         }
     }
 }

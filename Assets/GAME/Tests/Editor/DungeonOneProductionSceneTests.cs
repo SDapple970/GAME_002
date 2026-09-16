@@ -321,11 +321,63 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void ProductionDungeonOne_SceneStartAdapterDefersUntilBootstrapUiReadinessIsPublished()
+        {
+            StoryEventDefinitionSO intro = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
+                "Assets/GAME/Data/Story/CH01/DungeonOneIntroStory.asset");
+            GameObject core = new("DungeonOneBootstrapReadyCore");
+            GameObject bootstrapObject = new("DungeonOneBootstrapReadyBootstrap");
+            GameObject narrative = new("DungeonOneBootstrapReadyNarrative");
+            GameObject adapterObject = new("DungeonOneBootstrapReadyAdapter");
+
+            try
+            {
+                GameStateMachine stateMachine = core.AddComponent<GameStateMachine>();
+                GameFlowController flow = core.AddComponent<GameFlowController>();
+                InvokeAwake(stateMachine);
+                InvokeAwake(flow);
+
+                RuntimeBootstrapper bootstrapper = bootstrapObject.AddComponent<RuntimeBootstrapper>();
+                InvokeAwake(bootstrapper);
+
+                StoryEventRunner runner = narrative.AddComponent<StoryEventRunner>();
+                InvokeAwake(runner);
+                int starts = 0;
+                runner.OnEventStarted += _ => starts++;
+
+                SceneStartStoryEventAdapter adapter = adapterObject.AddComponent<SceneStartStoryEventAdapter>();
+                SetReference(adapter, "runner", runner);
+                SetReference(adapter, "eventDefinition", intro);
+                InvokeIfPresent(adapter, "OnEnable");
+                InvokeIfPresent(adapter, "Start");
+
+                Assert.That(runner.IsRunning, Is.False,
+                    "The adapter must wait until the bootstrapper has published UI routing readiness.");
+
+                InvokeIfPresent(bootstrapper, "ApplyInitialStateForActiveScene");
+
+                Assert.That(runner.IsRunning, Is.True);
+                Assert.That(starts, Is.EqualTo(1));
+                InvokeIfPresent(adapter, "OnEnable");
+                Assert.That(starts, Is.EqualTo(1));
+                runner.EndEvent();
+            }
+            finally
+            {
+                Object.DestroyImmediate(adapterObject);
+                Object.DestroyImmediate(narrative);
+                Object.DestroyImmediate(bootstrapObject);
+                Object.DestroyImmediate(core);
+            }
+        }
+
+        [Test]
         public void ProductionDungeonOne_SceneStartAdapterDefersForRestoreAndStartsAfterCompletion()
         {
             StoryEventDefinitionSO intro = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
                 "Assets/GAME/Data/Story/CH01/DungeonOneIntroStory.asset");
             GameObject core = new("DungeonOneRestoreCore");
+            GameObject bootstrapObject = new("DungeonOneRestoreBootstrap");
             GameObject narrative = new("DungeonOneRestoreNarrative");
             GameObject adapterObject = new("DungeonOneRestoreAdapter");
 
@@ -338,6 +390,8 @@ namespace Game.Tests.Integration
                 InvokeAwake(flow);
                 InvokeAwake(saveLoad);
                 SetPrivateField(saveLoad, "_operationState", SaveLoadService.OperationState.Restoring);
+                RuntimeBootstrapper bootstrapper = bootstrapObject.AddComponent<RuntimeBootstrapper>();
+                InvokeAwake(bootstrapper);
 
                 StoryEventRunner runner = narrative.AddComponent<StoryEventRunner>();
                 InvokeAwake(runner);
@@ -346,6 +400,7 @@ namespace Game.Tests.Integration
                 SetReference(adapter, "eventDefinition", intro);
                 InvokeIfPresent(adapter, "OnEnable");
                 InvokeIfPresent(adapter, "Start");
+                InvokeIfPresent(bootstrapper, "ApplyInitialStateForActiveScene");
                 Assert.That(runner.IsRunning, Is.False);
 
                 SetPrivateField(saveLoad, "_operationState", SaveLoadService.OperationState.Idle);
@@ -357,6 +412,7 @@ namespace Game.Tests.Integration
             {
                 Object.DestroyImmediate(adapterObject);
                 Object.DestroyImmediate(narrative);
+                Object.DestroyImmediate(bootstrapObject);
                 Object.DestroyImmediate(core);
             }
         }

@@ -1,4 +1,3 @@
-using System.Collections;
 using Game.Core;
 using Game.Story.Data;
 using UnityEngine;
@@ -12,93 +11,174 @@ namespace Game.Story
     /// </summary>
     public sealed class SceneStartStoryEventAdapter : MonoBehaviour
     {
+        private const string DiagnosticPrefix = "[D1-05 SceneStartStory]";
+
         [SerializeField] private StoryEventRunner runner;
         [SerializeField] private StoryEventDefinitionSO eventDefinition;
 
         private GameStateMachine _stateMachine;
         private SaveLoadService _saveLoadService;
+        private RuntimeBootstrapper _runtimeBootstrapper;
         private bool _subscribedToState;
         private bool _subscribedToLoad;
+        private bool _subscribedToBootstrap;
         private bool _startRequested;
-        private Coroutine _initialReadinessRoutine;
 
         private void OnEnable()
         {
+            LogDiagnostic("OnEnable");
+            SubscribeToBootstrapper();
             ResolveAndSubscribe();
             SceneManager.sceneLoaded -= HandleSceneLoaded;
             SceneManager.sceneLoaded += HandleSceneLoaded;
             TryStartWhenReady();
-            if (Application.isPlaying)
-                _initialReadinessRoutine = StartCoroutine(WaitForInitialReadiness());
         }
 
         private void Start()
         {
+            LogDiagnostic("Start");
             ResolveAndSubscribe();
             TryStartWhenReady();
         }
 
         private void OnDisable()
         {
+            LogDiagnostic("OnDisable");
             SceneManager.sceneLoaded -= HandleSceneLoaded;
-            if (_initialReadinessRoutine != null)
-                StopCoroutine(_initialReadinessRoutine);
-            _initialReadinessRoutine = null;
             Unsubscribe();
-        }
-
-        private IEnumerator WaitForInitialReadiness()
-        {
-            // RuntimeBootstrapper can be installed after this scene-local component
-            // receives OnEnable. A single lifecycle deferral avoids frame polling.
-            yield return null;
-            _initialReadinessRoutine = null;
-            ResolveAndSubscribe();
-            TryStartWhenReady();
         }
 
         private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             if (scene == gameObject.scene)
+            {
+                LogDiagnostic($"SceneLoaded: {scene.name} ({mode})");
                 TryStartWhenReady();
+            }
         }
 
         private void HandleGameStateChanged(GameState previous, GameState next)
         {
+            LogDiagnostic($"GameStateChanged: {previous} -> {next}");
             if (next == GameState.Exploration)
                 TryStartWhenReady();
         }
 
         private void HandleLoadCompleted(bool succeeded, string message)
         {
+            LogDiagnostic($"LoadCompleted: succeeded={succeeded} message={message}");
             if (succeeded)
                 TryStartWhenReady();
         }
 
+        private void HandleInitialStateApplied(Scene scene)
+        {
+            if (scene != gameObject.scene)
+                return;
+
+            LogDiagnostic($"InitialStateApplied: {scene.name}");
+            TryStartWhenReady();
+        }
+
         private void TryStartWhenReady()
         {
-            if (_startRequested || !isActiveAndEnabled || eventDefinition == null)
+            if (_startRequested)
+            {
+                LogDiagnostic("BLOCKED: StartAlreadyRequested");
                 return;
+            }
+
+            if (!isActiveAndEnabled)
+            {
+                LogDiagnostic("BLOCKED: AdapterInactive");
+                return;
+            }
+
+            if (eventDefinition == null)
+            {
+                LogDiagnostic("BLOCKED: EventDefinitionInvalid");
+                return;
+            }
 
             ResolveAndSubscribe();
-            if (StoryProgressManager.Instance != null &&
-                StoryProgressManager.Instance.IsEventCompleted(eventDefinition.EventId))
+            StoryProgressManager storyProgress = StoryProgressManager.Instance;
+            bool storyCompleted = storyProgress != null &&
+                                  storyProgress.IsEventCompleted(eventDefinition.EventId);
+            string gameState = _stateMachine != null ? _stateMachine.Current.ToString() : "unavailable";
+            string saveState = _saveLoadService != null
+                ? _saveLoadService.CurrentOperationState.ToString()
+                : "unavailable";
+            bool bootstrapReady = _runtimeBootstrapper == null ||
+                                  _runtimeBootstrapper.HasAppliedInitialStateFor(gameObject.scene);
+
+            LogDiagnostic(
+                $"Evaluate runner={runner != null} runnerActive={runner != null && runner.isActiveAndEnabled} " +
+                $"event={eventDefinition.EventId} gameState={gameState} saveState={saveState} " +
+                $"storyProgress={storyProgress != null} storyCompleted={storyCompleted} " +
+                $"bootstrapReady={bootstrapReady} startRequested={_startRequested} " +
+                $"runnerRunning={runner != null && runner.IsRunning}");
+
+            if (string.IsNullOrWhiteSpace(eventDefinition.EventId))
+            {
+                LogDiagnostic("BLOCKED: EventDefinitionInvalid (empty event id)");
+                return;
+            }
+
+            if (storyCompleted)
             {
                 _startRequested = true;
+                LogDiagnostic("BLOCKED: StoryAlreadyCompleted");
                 return;
             }
 
-            if (runner == null ||
-                _stateMachine == null ||
-                GameFlowController.Instance == null ||
-                _stateMachine.Current != GameState.Exploration ||
-                (_saveLoadService != null && _saveLoadService.CurrentOperationState != SaveLoadService.OperationState.Idle) ||
-                runner.IsRunning)
+            if (runner == null || !runner.isActiveAndEnabled)
             {
+                LogDiagnostic("BLOCKED: RunnerUnavailable");
                 return;
             }
 
+            if (!bootstrapReady)
+            {
+                LogDiagnostic("BLOCKED: BootstrapPending");
+                return;
+            }
+
+            if (_stateMachine == null || GameFlowController.Instance == null)
+            {
+                LogDiagnostic("BLOCKED: CoreUnavailable");
+                return;
+            }
+
+            if (_saveLoadService != null &&
+                _saveLoadService.CurrentOperationState != SaveLoadService.OperationState.Idle)
+            {
+                LogDiagnostic("BLOCKED: SaveLoadBusy");
+                return;
+            }
+
+            if (_stateMachine.Current != GameState.Exploration)
+            {
+                LogDiagnostic("BLOCKED: WrongGameState");
+                return;
+            }
+
+            if (runner.IsRunning)
+            {
+                LogDiagnostic("BLOCKED: RunnerBusy");
+                return;
+            }
+
+            LogDiagnostic($"CALL TryStartEvent: {eventDefinition.EventId}");
             _startRequested = runner.TryStartEvent(eventDefinition);
+            LogDiagnostic($"RESULT TryStartEvent: {_startRequested}");
+
+            if (!_startRequested)
+                LogDiagnostic("BLOCKED: TryStartEventRejected (see StoryEventRunner warning for reason)");
+        }
+
+        private void LogDiagnostic(string message)
+        {
+            Debug.Log($"{DiagnosticPrefix} {message}", this);
         }
 
         private void ResolveAndSubscribe()
@@ -137,6 +217,8 @@ namespace Game.Story
                 _saveLoadService.OnLoadCompleted += HandleLoadCompleted;
                 _subscribedToLoad = true;
             }
+
+            _runtimeBootstrapper = FindFirstObjectByType<RuntimeBootstrapper>();
         }
 
         private void Unsubscribe()
@@ -145,11 +227,24 @@ namespace Game.Story
                 _stateMachine.OnStateChanged -= HandleGameStateChanged;
             if (_subscribedToLoad && _saveLoadService != null)
                 _saveLoadService.OnLoadCompleted -= HandleLoadCompleted;
+            if (_subscribedToBootstrap)
+                RuntimeBootstrapper.OnInitialStateApplied -= HandleInitialStateApplied;
 
             _subscribedToState = false;
             _subscribedToLoad = false;
+            _subscribedToBootstrap = false;
             _stateMachine = null;
             _saveLoadService = null;
+            _runtimeBootstrapper = null;
+        }
+
+        private void SubscribeToBootstrapper()
+        {
+            if (_subscribedToBootstrap)
+                return;
+
+            RuntimeBootstrapper.OnInitialStateApplied += HandleInitialStateApplied;
+            _subscribedToBootstrap = true;
         }
     }
 }
