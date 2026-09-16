@@ -43,6 +43,7 @@ namespace Game.Story.Data
         [SerializeField] private string missionId;
         [SerializeField] private string objectiveId;
         [SerializeField] private QuestEventType questEventType = QuestEventType.Unknown;
+        [SerializeField] private string questTargetId;
         [SerializeField] private QuestDefinitionSO questDefinition;
         [SerializeField] private string rewardSourceId;
         [SerializeField] private int rewardGold;
@@ -184,7 +185,8 @@ namespace Game.Story.Data
                     GameplayOutcomeSourceType.Story,
                     context.OutcomeId),
                 intValue,
-                context.Source));
+                context.Source,
+                questTargetId));
         }
 
         private void StartQuest()

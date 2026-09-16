@@ -17,7 +17,10 @@ namespace Game.Interaction
 
         public override InteractionEventResult ExecuteProduction(InteractionExecutionContext context)
         {
-            return InteractionEventResult.AcceptedResult(stateChanged: false, irreversible: false);
+            return InteractionEventResult.AcceptedResult(
+                stateChanged: false,
+                irreversible: false,
+                message: "상호작용 완료");
         }
     }
 }

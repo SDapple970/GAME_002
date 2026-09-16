@@ -354,7 +354,7 @@ namespace Game.Dialogue
             text.alignment = alignment;
             text.color = Color.white;
             text.raycastTarget = false;
-            text.enableWordWrapping = true;
+            text.textWrappingMode = TextWrappingModes.Normal;
             return text;
         }
 

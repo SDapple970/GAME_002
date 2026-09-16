@@ -12076,7 +12076,8 @@ Transform:
   m_LocalPosition: {x: -21.2, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 1744284187}
   m_Father: {fileID: 1115213729}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1115213728
@@ -19372,6 +19373,80 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eefb455ed4454aa469c8337c7a47bede, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Interaction.InteractionPromptUI
+--- !u!1001 &1744284186
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1113879640}
+    m_Modifications:
+    - target: {fileID: 100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_Name
+      value: Dungeon1_FirstTalkNpc
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 208.305
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 7.698
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: interactionId
+      value: dungeon1.npc.first-talk
+      objectReference: {fileID: 0}
+    - target: {fileID: 11400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: 'events.Array.data[0]'
+      value: 
+      objectReference: {fileID: 11400000, guid: 10dd8ea12efa4ca6832310bdd2fa2558, type: 2}
+    - target: {fileID: 21200000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+      propertyPath: m_SortingOrder
+      value: 10
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+--- !u!4 &1744284187 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 400000, guid: a1f4c825be984ef581d0fee62cf74e98, type: 3}
+  m_PrefabInstance: {fileID: 1744284186}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1762020231
 GameObject:
   m_ObjectHideFlags: 0
@@ -20313,6 +20388,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1873044935}
   - component: {fileID: 7100000028}
+  - component: {fileID: 7100000029}
   m_Layer: 0
   m_Name: Narrative
   m_TagString: Untagged
@@ -23525,7 +23601,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.QuestRuntime
   missionManager: {fileID: 0}
-  questDefinitions: []
+  questDefinitions:
+  - {fileID: 11400000, guid: 1f4c3e8a9b2d4f57a0c6e18b35d79f42, type: 2}
 --- !u!114 &7100000002
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -23664,6 +23741,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Story.StoryProgressManager
   currentChapter: 1
   mainProgress: 0
+--- !u!114 &7100000029
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1873044934}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44aaa59688274da280721d5e9efcf8d4, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Story.SceneStartStoryEventAdapter
+  runner: {fileID: 964350054}
+  eventDefinition: {fileID: 11400000, guid: 21b950b4fbbc8204b99ff2bf4fe8245b, type: 2}
 --- !u!1001 &1645636291499357858
 PrefabInstance:
   m_ObjectHideFlags: 0

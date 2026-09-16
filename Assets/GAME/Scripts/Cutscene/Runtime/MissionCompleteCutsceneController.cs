@@ -32,10 +32,7 @@ namespace Game.Cutscene
         [Header("Skip")]
         [SerializeField] private bool allowSkip;
 #if ENABLE_INPUT_SYSTEM
-        [SerializeField] private Key skipKey = Key.Escape;
         [SerializeField] private InputActionReference skipAction;
-#else
-        [SerializeField] private KeyCode skipKey = KeyCode.Escape;
 #endif
 
         [Header("Debug")]

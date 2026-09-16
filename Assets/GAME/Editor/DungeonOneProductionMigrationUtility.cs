@@ -7,6 +7,7 @@ using Game.Combat.Core;
 using Game.Combat.Integration;
 using Game.Combat.UI;
 using Game.CameraSys;
+using Game.Core;
 using Game.Daily;
 using Game.Demo;
 using Game.Enemies;
@@ -17,6 +18,7 @@ using Game.Player;
 using Game.Quest;
 using Game.Reward;
 using Game.Story;
+using Game.Story.Data;
 using Game.UI;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -33,7 +35,14 @@ namespace Game.EditorTools
         public const string LegacyScenePath = "Assets/GAME/Scenes/Dungeon 1.unity";
         public const string ProductionScenePath = "Assets/GAME/Scenes/Dungeon_1_Production.unity";
         private const string ProductionNpcPrefabPath = "Assets/GAME/Prefabs/Interaction/ProductionNpcInteraction.prefab";
-        private const string ProductionNpcEventPath = "Assets/GAME/Data/Interaction/DungeonOneNpcInteraction.asset";
+        private const string ProductionNpcEventPath = "Assets/GAME/Data/Interaction/DungeonOneFirstTalkStoryInteraction.asset";
+        private const string ProductionNpcDialoguePath = "Assets/GAME/Data/Interaction/DungeonOneFirstTalkDialogue.asset";
+        private const string ProductionIntroStoryPath = "Assets/GAME/Data/Story/CH01/DungeonOneIntroStory.asset";
+        private const string ProductionQuestDefinitionPath = "Assets/GAME/Data/Quest/CH01_FindFirstNpc.asset";
+        private const string ProductionQuestId = "ch01.find-first-npc";
+        private const string ProductionQuestObjectiveId = "talk_first_npc";
+        private const string ProductionQuestObjectiveTargetId = "dungeon1.npc.first-talk";
+        private const string ProductionIntroStoryEventId = "dungeon1.intro.story";
         private const string ProductionNpcName = "Dungeon1_FirstTalkNpc";
         private const string ProductionNpcInteractionId = "dungeon1.npc.first-talk";
 
@@ -129,6 +138,8 @@ namespace Game.EditorTools
             RepairUnresolvedDestinationSprites(environmentRoot);
             PlaceProductionEncounters(productionScene);
             PlaceProductionNpc(productionScene);
+            ConfigureProductionQuest(productionScene);
+            ConfigureProductionSceneStartNarrative(productionScene);
             EditorSceneManager.MarkSceneDirty(productionScene);
 
             ValidateProductionScene();
@@ -167,6 +178,8 @@ namespace Game.EditorTools
         {
             EditorSceneManager.OpenScene(ProductionScenePath, OpenSceneMode.Single);
             PlaceProductionNpc(SceneManager.GetActiveScene());
+            ConfigureProductionQuest(SceneManager.GetActiveScene());
+            ConfigureProductionSceneStartNarrative(SceneManager.GetActiveScene());
             ValidateProductionScene();
             EditorSceneManager.SaveOpenScenes();
             AssetDatabase.SaveAssets();
@@ -210,6 +223,7 @@ namespace Game.EditorTools
             RequireCount<UIScreenRouter>(1);
             RequireCount<RewardUIPanel>(1);
             RequireCount<StoryEventRunner>(1);
+            RequireCount<SceneStartStoryEventAdapter>(1);
             RequireCount<StoryProgressManager>(1);
             RequireCount<RewardService>(1);
             RequireCount<CurrencyWallet>(1);
@@ -287,8 +301,12 @@ namespace Game.EditorTools
 
             QuestRuntime questRuntime = FindSceneComponents<QuestRuntime>().Single();
             SerializedProperty questDefinitions = new SerializedObject(questRuntime).FindProperty("questDefinitions");
-            Require(questDefinitions != null && questDefinitions.arraySize == 0,
-                "Dungeon 1 Production must not retain template validation quest content.");
+            Require(questDefinitions != null && questDefinitions.arraySize == 1,
+                "Production QuestRuntime must reference exactly one Dungeon 1 QuestDefinitionSO.");
+            Require(questDefinitions.GetArrayElementAtIndex(0).objectReferenceValue == EnsureProductionQuestDefinition(),
+                "Production QuestRuntime is not bound to the Dungeon 1 QuestDefinitionSO.");
+            ValidateProductionQuest();
+            ValidateProductionSceneStartNarrative();
 
             Require(FindSceneComponents<global::GameInputInstaller>().Length == 0,
                 "The template runtime-bootstrap input path must not be duplicated by a scene-local GameInputInstaller.");
@@ -384,7 +402,7 @@ namespace Game.EditorTools
             if (prefab == null)
                 throw new InvalidOperationException($"Production NPC prefab '{ProductionNpcPrefabPath}' was not found.");
 
-            AcknowledgementInteractionEventSO interactionEvent = EnsureProductionNpcInteractionEvent();
+            StoryInteractionEventSO interactionEvent = EnsureProductionNpcInteractionEvent();
             GameObject instance = PrefabUtility.InstantiatePrefab(prefab, productionScene) as GameObject;
             if (instance == null)
                 throw new InvalidOperationException($"Could not instantiate Production NPC prefab '{ProductionNpcPrefabPath}'.");
@@ -405,24 +423,269 @@ namespace Game.EditorTools
             EditorSceneManager.MarkSceneDirty(productionScene);
         }
 
-        private static AcknowledgementInteractionEventSO EnsureProductionNpcInteractionEvent()
+        private static StoryInteractionEventSO EnsureProductionNpcInteractionEvent()
         {
-            AcknowledgementInteractionEventSO existing = AssetDatabase.LoadAssetAtPath<AcknowledgementInteractionEventSO>(ProductionNpcEventPath);
-            if (existing != null)
-                return existing;
+            StoryInteractionEventSO existing = AssetDatabase.LoadAssetAtPath<StoryInteractionEventSO>(ProductionNpcEventPath);
+            StoryEventDefinitionSO dialogue = EnsureProductionNpcDialogue();
+            StoryInteractionEventSO interactionEvent = existing;
+            if (interactionEvent == null)
+            {
+                interactionEvent = ScriptableObject.CreateInstance<StoryInteractionEventSO>();
+                interactionEvent.name = "DungeonOneFirstTalkStoryInteraction";
+                AssetDatabase.CreateAsset(interactionEvent, ProductionNpcEventPath);
+            }
 
-            AcknowledgementInteractionEventSO interactionEvent = ScriptableObject.CreateInstance<AcknowledgementInteractionEventSO>();
-            interactionEvent.name = "DungeonOneNpcInteraction";
-            AssetDatabase.CreateAsset(interactionEvent, ProductionNpcEventPath);
             SerializedObject serialized = new(interactionEvent);
             SerializedProperty actionId = serialized.FindProperty("actionId");
-            if (actionId == null)
-                throw new InvalidOperationException("AcknowledgementInteractionEventSO.actionId was not found.");
+            SerializedProperty eventDefinition = serialized.FindProperty("eventDefinition");
+            if (actionId == null || eventDefinition == null)
+                throw new InvalidOperationException("StoryInteractionEventSO Production fields were not found.");
             actionId.stringValue = "dungeon1.npc.first-talk.interact";
+            eventDefinition.objectReferenceValue = dialogue;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(interactionEvent);
             AssetDatabase.SaveAssets();
             return interactionEvent;
+        }
+
+        private static StoryEventDefinitionSO EnsureProductionNpcDialogue()
+        {
+            StoryEventDefinitionSO dialogue = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(ProductionNpcDialoguePath);
+            if (dialogue == null)
+            {
+                dialogue = ScriptableObject.CreateInstance<StoryEventDefinitionSO>();
+                dialogue.name = "DungeonOneFirstTalkDialogue";
+                AssetDatabase.CreateAsset(dialogue, ProductionNpcDialoguePath);
+            }
+
+            SerializedObject serialized = new(dialogue);
+            serialized.FindProperty("eventId").stringValue = "dungeon1.npc.first-talk.story";
+            serialized.FindProperty("startNodeId").stringValue = "first-talk";
+
+            SerializedProperty nodes = serialized.FindProperty("nodes");
+            nodes.arraySize = 1;
+            SerializedProperty firstTalk = nodes.GetArrayElementAtIndex(0);
+            firstTalk.FindPropertyRelative("nodeId").stringValue = "first-talk";
+            firstTalk.FindPropertyRelative("speakerName").stringValue = "NPC";
+            firstTalk.FindPropertyRelative("body").stringValue = "여기 ㅈㄴ 위험한 곳임. 들어갈거임?";
+            firstTalk.FindPropertyRelative("choices").arraySize = 0;
+            firstTalk.FindPropertyRelative("useTimedChoices").boolValue = false;
+            firstTalk.FindPropertyRelative("nextNodeId").stringValue = string.Empty;
+            SerializedProperty effects = firstTalk.FindPropertyRelative("effects");
+            effects.arraySize = 1;
+            SerializedProperty objectiveEffect = effects.GetArrayElementAtIndex(0);
+            objectiveEffect.FindPropertyRelative("type").intValue = (int)StoryEffectType.PublishQuestEvent;
+            objectiveEffect.FindPropertyRelative("key").stringValue = string.Empty;
+            objectiveEffect.FindPropertyRelative("boolValue").boolValue = false;
+            objectiveEffect.FindPropertyRelative("intValue").intValue = 1;
+            objectiveEffect.FindPropertyRelative("missionId").stringValue = ProductionQuestId;
+            objectiveEffect.FindPropertyRelative("objectiveId").stringValue = ProductionQuestObjectiveId;
+            objectiveEffect.FindPropertyRelative("questEventType").intValue = (int)QuestEventType.Talk;
+            objectiveEffect.FindPropertyRelative("questTargetId").stringValue = ProductionQuestObjectiveTargetId;
+            objectiveEffect.FindPropertyRelative("questDefinition").objectReferenceValue = null;
+            objectiveEffect.FindPropertyRelative("rewardSourceId").stringValue = string.Empty;
+            objectiveEffect.FindPropertyRelative("rewardGold").intValue = 0;
+            objectiveEffect.FindPropertyRelative("rewardExp").intValue = 0;
+            objectiveEffect.FindPropertyRelative("rewardItemId").stringValue = string.Empty;
+            objectiveEffect.FindPropertyRelative("rewardItemCount").intValue = 0;
+            firstTalk.FindPropertyRelative("endEvent").boolValue = true;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(dialogue);
+            AssetDatabase.SaveAssets();
+            return dialogue;
+        }
+
+        private static void ConfigureProductionQuest(Scene productionScene)
+        {
+            if (productionScene.path != ProductionScenePath)
+                throw new InvalidOperationException($"Expected production scene '{ProductionScenePath}', found '{productionScene.path}'.");
+
+            QuestRuntime questRuntime = FindSceneComponents<QuestRuntime>().Single();
+            SetReferenceArrayElement(questRuntime, "questDefinitions", 0, EnsureProductionQuestDefinition(), 1);
+            EnsureProductionNpcDialogue();
+            EnsureProductionIntroStory();
+            EditorSceneManager.MarkSceneDirty(productionScene);
+        }
+
+        public static void ConfigureProductionSceneStartNarrativeFromCommandLine()
+        {
+            Scene scene = EditorSceneManager.OpenScene(ProductionScenePath, OpenSceneMode.Single);
+            ConfigureProductionSceneStartNarrative(scene);
+            ValidateProductionScene();
+            EditorSceneManager.SaveScene(scene, ProductionScenePath);
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void ConfigureProductionSceneStartNarrative(Scene productionScene)
+        {
+            if (productionScene.path != ProductionScenePath)
+                throw new InvalidOperationException($"Expected production scene '{ProductionScenePath}', found '{productionScene.path}'.");
+
+            Transform narrativeRoot = FindRequired("Runtime/Narrative");
+            StoryEventRunner storyRunner = narrativeRoot.GetComponentInChildren<StoryEventRunner>(true);
+            if (storyRunner == null)
+                throw new InvalidOperationException("Production Narrative root is missing its StoryEventRunner.");
+
+            SceneStartStoryEventAdapter[] adapters = narrativeRoot.GetComponents<SceneStartStoryEventAdapter>();
+            if (adapters.Length > 1)
+                throw new InvalidOperationException("Production Narrative root has duplicate SceneStartStoryEventAdapter components.");
+
+            SceneStartStoryEventAdapter adapter = adapters.Length == 1
+                ? adapters[0]
+                : narrativeRoot.gameObject.AddComponent<SceneStartStoryEventAdapter>();
+            SetReference(adapter, "runner", storyRunner);
+            SetReference(adapter, "eventDefinition", EnsureProductionIntroStory());
+            EditorSceneManager.MarkSceneDirty(productionScene);
+        }
+
+        private static StoryEventDefinitionSO EnsureProductionIntroStory()
+        {
+            const string folderPath = "Assets/GAME/Data/Story/CH01";
+            if (!AssetDatabase.IsValidFolder("Assets/GAME/Data/Story"))
+                AssetDatabase.CreateFolder("Assets/GAME/Data", "Story");
+            if (!AssetDatabase.IsValidFolder(folderPath))
+                AssetDatabase.CreateFolder("Assets/GAME/Data/Story", "CH01");
+
+            StoryEventDefinitionSO story = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(ProductionIntroStoryPath);
+            if (story == null)
+            {
+                story = ScriptableObject.CreateInstance<StoryEventDefinitionSO>();
+                story.name = "DungeonOneIntroStory";
+                AssetDatabase.CreateAsset(story, ProductionIntroStoryPath);
+            }
+
+            SerializedObject serialized = new(story);
+            serialized.FindProperty("eventId").stringValue = ProductionIntroStoryEventId;
+            serialized.FindProperty("startNodeId").stringValue = "start";
+            SerializedProperty nodes = serialized.FindProperty("nodes");
+            nodes.arraySize = 2;
+
+            SerializedProperty start = nodes.GetArrayElementAtIndex(0);
+            start.FindPropertyRelative("nodeId").stringValue = "start";
+            start.FindPropertyRelative("speakerName").stringValue = "System";
+            start.FindPropertyRelative("body").stringValue = "낯선 복도에 도착했다.";
+            start.FindPropertyRelative("choices").arraySize = 0;
+            start.FindPropertyRelative("useTimedChoices").boolValue = false;
+            start.FindPropertyRelative("nextNodeId").stringValue = "look";
+            start.FindPropertyRelative("effects").arraySize = 0;
+            start.FindPropertyRelative("endEvent").boolValue = false;
+
+            SerializedProperty look = nodes.GetArrayElementAtIndex(1);
+            look.FindPropertyRelative("nodeId").stringValue = "look";
+            look.FindPropertyRelative("speakerName").stringValue = "Player";
+            look.FindPropertyRelative("body").stringValue = "여긴 어디지?";
+            look.FindPropertyRelative("choices").arraySize = 0;
+            look.FindPropertyRelative("useTimedChoices").boolValue = false;
+            look.FindPropertyRelative("nextNodeId").stringValue = string.Empty;
+            SerializedProperty effects = look.FindPropertyRelative("effects");
+            effects.arraySize = 1;
+            SerializedProperty startQuest = effects.GetArrayElementAtIndex(0);
+            startQuest.FindPropertyRelative("type").intValue = (int)StoryEffectType.StartQuest;
+            startQuest.FindPropertyRelative("key").stringValue = string.Empty;
+            startQuest.FindPropertyRelative("boolValue").boolValue = false;
+            startQuest.FindPropertyRelative("intValue").intValue = 0;
+            startQuest.FindPropertyRelative("missionDefinition").objectReferenceValue = null;
+            startQuest.FindPropertyRelative("missionId").stringValue = string.Empty;
+            startQuest.FindPropertyRelative("objectiveId").stringValue = string.Empty;
+            startQuest.FindPropertyRelative("questEventType").intValue = (int)QuestEventType.Unknown;
+            startQuest.FindPropertyRelative("questTargetId").stringValue = string.Empty;
+            startQuest.FindPropertyRelative("questDefinition").objectReferenceValue = EnsureProductionQuestDefinition();
+            startQuest.FindPropertyRelative("rewardSourceId").stringValue = string.Empty;
+            startQuest.FindPropertyRelative("rewardGold").intValue = 0;
+            startQuest.FindPropertyRelative("rewardExp").intValue = 0;
+            startQuest.FindPropertyRelative("rewardItemId").stringValue = string.Empty;
+            startQuest.FindPropertyRelative("rewardItemCount").intValue = 0;
+            look.FindPropertyRelative("endEvent").boolValue = true;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(story);
+            AssetDatabase.SaveAssets();
+            return story;
+        }
+
+        private static QuestDefinitionSO EnsureProductionQuestDefinition()
+        {
+            QuestDefinitionSO definition = AssetDatabase.LoadAssetAtPath<QuestDefinitionSO>(ProductionQuestDefinitionPath);
+            if (definition == null)
+            {
+                definition = ScriptableObject.CreateInstance<QuestDefinitionSO>();
+                definition.name = "CH01_FindFirstNpc";
+                AssetDatabase.CreateAsset(definition, ProductionQuestDefinitionPath);
+            }
+
+            SerializedObject serialized = new(definition);
+            serialized.FindProperty("questId").stringValue = ProductionQuestId;
+            serialized.FindProperty("questTitle").stringValue = "낯선 장소";
+            serialized.FindProperty("description").stringValue = "첫 NPC와 대화한다.";
+            serialized.FindProperty("category").intValue = (int)QuestCategory.Unspecified;
+            serialized.FindProperty("missionDayCost").intValue = 0;
+            SerializedProperty objectives = serialized.FindProperty("objectives");
+            objectives.arraySize = 1;
+            SerializedProperty objective = objectives.GetArrayElementAtIndex(0);
+            objective.FindPropertyRelative("objectiveId").stringValue = ProductionQuestObjectiveId;
+            objective.FindPropertyRelative("eventType").intValue = (int)QuestEventType.Talk;
+            objective.FindPropertyRelative("targetId").stringValue = ProductionQuestObjectiveTargetId;
+            objective.FindPropertyRelative("requiredCount").intValue = 1;
+            objective.FindPropertyRelative("optional").boolValue = false;
+            objective.FindPropertyRelative("groupIndex").intValue = 0;
+            objective.FindPropertyRelative("visibility").intValue = (int)QuestObjectiveVisibility.Visible;
+            objective.FindPropertyRelative("description").stringValue = "첫 NPC와 대화한다.";
+            serialized.FindProperty("rewardGold").intValue = 0;
+            serialized.FindProperty("rewardExp").intValue = 0;
+            serialized.FindProperty("retryPolicy").intValue = (int)QuestRetryPolicy.NotRetryable;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(definition);
+            AssetDatabase.SaveAssets();
+            return definition;
+        }
+
+        private static void ValidateProductionQuest()
+        {
+            QuestDefinitionSO definition = EnsureProductionQuestDefinition();
+            Require(definition.QuestId == ProductionQuestId, "Dungeon 1 questId does not match the approved Production ID.");
+            Require(definition.QuestTitle == "낯선 장소", "Dungeon 1 quest title does not match the approved title.");
+            Require(definition.MissionDayCost == 0, "Dungeon 1 quest must not consume calendar days.");
+            Require(definition.RewardGold == 0 && definition.RewardExp == 0, "Dungeon 1 quest must not define rewards.");
+            Require(definition.Objectives != null && definition.Objectives.Length == 1,
+                "Dungeon 1 quest must define exactly one objective.");
+            QuestObjectiveDefinition objective = definition.Objectives[0];
+            Require(objective != null &&
+                    objective.ObjectiveId == ProductionQuestObjectiveId &&
+                    objective.EventType == QuestEventType.Talk &&
+                    objective.TargetId == ProductionQuestObjectiveTargetId &&
+                    objective.RequiredCount == 1,
+                "Dungeon 1 quest objective does not match the approved Talk contract.");
+
+            SerializedProperty effect = new SerializedObject(EnsureProductionNpcDialogue())
+                .FindProperty("nodes").GetArrayElementAtIndex(0)
+                .FindPropertyRelative("effects").GetArrayElementAtIndex(0);
+            Require(effect.FindPropertyRelative("type").intValue == (int)StoryEffectType.PublishQuestEvent &&
+                    effect.FindPropertyRelative("missionId").stringValue == ProductionQuestId &&
+                    effect.FindPropertyRelative("objectiveId").stringValue == ProductionQuestObjectiveId &&
+                    effect.FindPropertyRelative("questEventType").intValue == (int)QuestEventType.Talk &&
+                    effect.FindPropertyRelative("questTargetId").stringValue == ProductionQuestObjectiveTargetId &&
+                    effect.FindPropertyRelative("intValue").intValue == 1,
+                "Dungeon 1 FirstTalk dialogue does not publish the approved canonical Talk QuestEvent.");
+        }
+
+        private static void ValidateProductionSceneStartNarrative()
+        {
+            SceneStartStoryEventAdapter adapter = FindSceneComponents<SceneStartStoryEventAdapter>().Single();
+            StoryEventRunner runner = FindSceneComponents<StoryEventRunner>().Single();
+            StoryEventDefinitionSO intro = EnsureProductionIntroStory();
+            Require(ReadReference<StoryEventRunner>(adapter, "runner") == runner,
+                "Scene-start narrative adapter is not bound to the canonical StoryEventRunner.");
+            Require(ReadReference<StoryEventDefinitionSO>(adapter, "eventDefinition") == intro,
+                "Scene-start narrative adapter is not bound to the Dungeon 1 intro Story.");
+            Require(intro.EventId == ProductionIntroStoryEventId,
+                "Dungeon 1 intro Story does not use its stable Production event ID.");
+            Require(intro.Nodes.Count == 2 && intro.Nodes[1].Effects.Count == 1,
+                "Dungeon 1 intro Story does not preserve the authored two-node legacy structure.");
+            SerializedProperty effect = new SerializedObject(intro)
+                .FindProperty("nodes").GetArrayElementAtIndex(1)
+                .FindPropertyRelative("effects").GetArrayElementAtIndex(0);
+            Require(effect.FindPropertyRelative("type").intValue == (int)StoryEffectType.StartQuest &&
+                    effect.FindPropertyRelative("questDefinition").objectReferenceValue == EnsureProductionQuestDefinition(),
+                "Dungeon 1 intro Story must start the authored Production quest through StoryEffect.StartQuest.");
         }
 
         private static void CloneProductionEncounter(
@@ -527,13 +790,18 @@ namespace Game.EditorTools
                 $"Production NPC position is {npcRoot.position}, expected {ProductionNpcPosition}.");
             Require(npc.PromptText == "F: 대화", "Production NPC prompt does not use the canonical authored label.");
             Require(npc.UsePolicy == InteractionUsePolicy.Repeatable,
-                "Production NPC must remain repeatable until Dungeon 1 story content is authored.");
+                "Production NPC must preserve the authored repeatable interaction contract.");
             Require(npc.InteractionId == ProductionNpcInteractionId,
                 "Production NPC does not have the expected stable interaction ID.");
-            Require(npc.Events.Count == 1 && npc.Events[0] is AcknowledgementInteractionEventSO,
-                "Production NPC must use the authored no-op Production interaction event.");
+            Require(npc.Events.Count == 1 && npc.Events[0] is StoryInteractionEventSO,
+                "Production NPC must use the authored Production Story interaction event.");
             Require(npc.Events[0] == EnsureProductionNpcInteractionEvent(),
                 "Production NPC does not reference the Dungeon 1 authored interaction event.");
+            StoryInteractionEventSO storyEvent = (StoryInteractionEventSO)npc.Events[0];
+            Require(storyEvent.EventDefinition != null,
+                "Production NPC Story interaction event is missing its dialogue definition.");
+            Require(storyEvent.EventDefinition == EnsureProductionNpcDialogue(),
+                "Production NPC Story interaction event does not reference the Dungeon 1 dialogue definition.");
             Require(npc.GetComponent<Collider2D>() is { isTrigger: true },
                 "Production NPC must use a trigger Collider2D for interaction detection.");
             Require(npc.GetComponentsInChildren<Collider2D>(true).All(collider => collider.isTrigger),

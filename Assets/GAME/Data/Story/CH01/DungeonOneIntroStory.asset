@@ -1,0 +1,60 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7c7d016d594474e439b14d03874d8405, type: 3}
+  m_Name: DungeonOneIntroStory
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Story.Data.StoryEventDefinitionSO
+  eventId: dungeon1.intro.story
+  startNodeId: start
+  nodes:
+  - nodeId: start
+    speakerName: System
+    portrait: {fileID: 0}
+    body: "\uB0AF\uC120 \uBCF5\uB3C4\uC5D0 \uB3C4\uCC29\uD588\uB2E4."
+    choices: []
+    useTimedChoices: 0
+    choiceTimeLimitSeconds: 0
+    timeoutChoiceIndex: 0
+    timeoutNodeId: 
+    hideBubbleAfterChoice: 0
+    nextNodeId: look
+    effects: []
+    endEvent: 0
+  - nodeId: look
+    speakerName: Player
+    portrait: {fileID: 0}
+    body: "\uC5EC\uAE34 \uC5B4\uB514\uC9C0?"
+    choices: []
+    useTimedChoices: 0
+    choiceTimeLimitSeconds: 0
+    timeoutChoiceIndex: 0
+    timeoutNodeId: 
+    hideBubbleAfterChoice: 0
+    nextNodeId: 
+    effects:
+    - type: 14
+      key: 
+      boolValue: 0
+      intValue: 0
+      personaStat: 0
+      xpAmount: 0
+      missionDefinition: {fileID: 0}
+      missionId: 
+      objectiveId: 
+      questEventType: 0
+      questTargetId: 
+      questDefinition: {fileID: 11400000, guid: 1f4c3e8a9b2d4f57a0c6e18b35d79f42, type: 2}
+      rewardSourceId: 
+      rewardGold: 0
+      rewardExp: 0
+      rewardItemId: 
+      rewardItemCount: 0
+    endEvent: 1
