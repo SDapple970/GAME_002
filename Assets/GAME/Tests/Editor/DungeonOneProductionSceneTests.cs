@@ -1,11 +1,14 @@
 using System.Linq;
 using System.Reflection;
 using Game.Core;
+using Game.DemoMission;
+using Game.DemoMission.Runtime;
 using Game.EditorTools;
 using Game.Interaction;
 using Game.Quest;
 using Game.Story;
 using Game.Story.Data;
+using Game.Story.Interaction;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -79,6 +82,76 @@ namespace Game.Tests.Integration
             Assert.That(npc.GetComponentInChildren<StoryInteractable2D>(true), Is.Null);
             Assert.That(PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(npc.gameObject), Is.EqualTo(
                 "Assets/GAME/Prefabs/Interaction/ProductionNpcInteraction.prefab"));
+        }
+
+        [Test]
+        public void ProductionDungeonOne_HasExplicitInteractionOwnersWithoutLegacyInteractionPaths()
+        {
+            EditorSceneManager.OpenScene(
+                DungeonOneProductionMigrationUtility.ProductionScenePath,
+                OpenSceneMode.Single);
+
+            Assert.DoesNotThrow(DungeonOneProductionMigrationUtility.ValidateProductionScene);
+
+            InteractionRuntime[] runtimes = Object.FindObjectsByType<InteractionRuntime>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None);
+            InteractionRunner[] runners = Object.FindObjectsByType<InteractionRunner>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None);
+            Assert.That(runtimes, Has.Length.EqualTo(1));
+            Assert.That(runners, Has.Length.EqualTo(1));
+            Assert.That(GetHierarchyPath(runtimes[0].transform), Is.EqualTo("Runtime/Interaction"));
+            Assert.That(runners[0].transform, Is.SameAs(runtimes[0].transform));
+            Assert.That(runners[0].Runtime, Is.SameAs(runtimes[0]));
+            Assert.That(Object.FindObjectsByType<DemoMissionRuntime>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None), Is.Empty);
+            Assert.That(Object.FindObjectsByType<RescueNpcActor>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None), Is.Empty);
+            Assert.That(Object.FindObjectsByType<DemoRescueNpcEndFlow>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None), Is.Empty);
+            Assert.That(Object.FindObjectsByType<StoryInteractionController>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None), Is.Empty);
+        }
+
+        [Test]
+        public void RuntimeBootstrapper_ReusesExplicitInteractionOwners()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            GameObject interactionOwner = new("ExplicitInteractionOwner");
+            GameObject bootstrapOwner = new("InteractionBootstrapTest");
+            bootstrapOwner.SetActive(false);
+
+            try
+            {
+                InteractionRuntime runtime = interactionOwner.AddComponent<InteractionRuntime>();
+                InteractionRunner runner = interactionOwner.AddComponent<InteractionRunner>();
+                RuntimeBootstrapper bootstrapper = bootstrapOwner.AddComponent<RuntimeBootstrapper>();
+
+                MethodInfo bootstrap = typeof(RuntimeBootstrapper).GetMethod(
+                    "BootstrapCoreServices",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(bootstrap, Is.Not.Null);
+                bootstrap.Invoke(bootstrapper, new object[] { false, false, false });
+
+                Assert.That(Object.FindObjectsByType<InteractionRuntime>(
+                    FindObjectsInactive.Include,
+                    FindObjectsSortMode.None), Has.Length.EqualTo(1));
+                Assert.That(Object.FindObjectsByType<InteractionRunner>(
+                    FindObjectsInactive.Include,
+                    FindObjectsSortMode.None), Has.Length.EqualTo(1));
+                Assert.That(runner.Runtime, Is.SameAs(runtime));
+                Assert.That(runner.IsCompatibilityFallback, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(bootstrapOwner);
+                Object.DestroyImmediate(interactionOwner);
+            }
         }
 
         [Test]

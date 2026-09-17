@@ -10,6 +10,8 @@ using Game.CameraSys;
 using Game.Core;
 using Game.Daily;
 using Game.Demo;
+using Game.DemoMission;
+using Game.DemoMission.Runtime;
 using Game.Enemies;
 using Game.Input;
 using Game.Interaction;
@@ -19,6 +21,7 @@ using Game.Quest;
 using Game.Reward;
 using Game.Story;
 using Game.Story.Data;
+using Game.Story.Interaction;
 using Game.UI;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -229,10 +232,16 @@ namespace Game.EditorTools
             RequireCount<CurrencyWallet>(1);
             RequireCount<PlayerInputController>(1);
             RequireCount<InteractionController>(1);
+            RequireCount<InteractionRuntime>(1);
+            RequireCount<InteractionRunner>(1);
             RequireCount<CameraFollow2D>(1);
 
             RequireCount<QuestManager>(0);
             RequireCount<Game.Mission.MissionManager>(0);
+            RequireCount<DemoMissionRuntime>(0);
+            RequireCount<RescueNpcActor>(0);
+            RequireCount<DemoRescueNpcEndFlow>(0);
+            RequireCount<StoryInteractionController>(0);
             RequireCount<DungeonObjectiveManager>(0);
             RequireCount<Game.Tutorial.TutorialQuestCombatBridge>(0);
             CombatEncounterGroup[] authoredGroups = FindSceneComponents<CombatEncounterGroup>();
@@ -246,6 +255,15 @@ namespace Game.EditorTools
             RequireCount<CombatQuestObjectivePublisher>(0);
             RequireCount<InteractionQuestObjectivePublisher>(0);
             ValidateProductionNpc();
+
+            InteractionRuntime interactionRuntime = FindSceneComponents<InteractionRuntime>().Single();
+            InteractionRunner interactionRunner = FindSceneComponents<InteractionRunner>().Single();
+            Require(GetHierarchyPath(interactionRuntime.transform) == "Runtime/Interaction",
+                "Production InteractionRuntime must live at 'Runtime/Interaction'.");
+            Require(interactionRunner.transform == interactionRuntime.transform,
+                "Production InteractionRunner must share the explicit InteractionRuntime owner.");
+            Require(ReadReference<InteractionRuntime>(interactionRunner, "runtime") == interactionRuntime,
+                "Production InteractionRunner must explicitly reference the scene InteractionRuntime.");
 
             MonoBehaviour[] behaviours = FindSceneComponents<MonoBehaviour>();
             MonoBehaviour forbidden = behaviours.FirstOrDefault(component =>
