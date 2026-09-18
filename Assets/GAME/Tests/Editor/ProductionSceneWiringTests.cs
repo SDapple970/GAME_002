@@ -33,6 +33,7 @@ namespace Game.Tests.Integration
     public sealed class ProductionSceneWiringTests
     {
         private const string Dungeon = "Assets/GAME/Scenes/Dungeon 1.unity";
+        private const string ProductionDungeon = "Assets/GAME/Scenes/Dungeon_1_Production.unity";
         private const string DungeonTemplate = "Assets/GAME/Scenes/Dungeon_Template.unity";
         private const string TestingDungeonTemplate = "Assets/GAME/Scenes/Testing_Dungeon_Template.unity";
         private const string Title = "Assets/GAME/Scenes/TitleScene.unity";
@@ -50,7 +51,9 @@ namespace Game.Tests.Integration
         }
 
         [TestCase(Dungeon)]
+        [TestCase(ProductionDungeon)]
         [TestCase(Title)]
+        [Category("D108Gate")]
         public void ProductionScene_HasNoMissingScripts(string path)
         {
             Open(path);
@@ -171,11 +174,13 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        [Category("D108Gate")]
         public void BuildSettingsContainCanonicalSceneTargets()
         {
             string[] enabled = EditorBuildSettings.scenes.Where(scene => scene.enabled).Select(scene => scene.path).ToArray();
             Assert.That(enabled, Does.Contain(Title));
-            Assert.That(enabled, Does.Contain(Dungeon));
+            Assert.That(enabled, Does.Contain(ProductionDungeon));
+            Assert.That(enabled, Does.Not.Contain(Dungeon));
         }
 
         [Test]

@@ -1,6 +1,5 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro;
 using Game.Core;
@@ -401,13 +400,15 @@ namespace GAME.Title
 
         private static void LoadDungeonScene(string sceneName)
         {
-            if (SceneFlowController.Instance != null)
+            SceneFlowController sceneFlow = SceneFlowController.Instance;
+            if (sceneFlow == null)
             {
-                SceneFlowController.Instance.LoadScene(sceneName);
+                Debug.LogError(
+                    $"[TitleSceneController] SceneFlowController is required to load '{sceneName}'.");
                 return;
             }
 
-            SceneManager.LoadScene(sceneName);
+            sceneFlow.LoadScene(sceneName);
         }
     }
 }

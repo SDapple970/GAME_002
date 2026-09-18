@@ -1,19 +1,31 @@
+using System.Collections;
 using System.Linq;
 using System.Reflection;
+using Game.CameraSys;
+using Game.Combat.Core;
+using Game.Combat.Integration;
+using Game.Combat.UI;
 using Game.Core;
 using Game.DemoMission;
 using Game.DemoMission.Runtime;
 using Game.EditorTools;
 using Game.Interaction;
+using Game.Player;
 using Game.Quest;
+using Game.Reward;
 using Game.Story;
 using Game.Story.Data;
 using Game.Story.Interaction;
+using Game.UI;
+using Game.World;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
+using UnityEngine.TestTools;
+using UnityEngine.UI;
 
 namespace Game.Tests.Integration
 {
@@ -32,6 +44,7 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        [Category("D108Gate")]
         public void ProductionDungeonOne_IsCleanEnvironmentMigration()
         {
             Scene scene = EditorSceneManager.OpenScene(
@@ -54,6 +67,320 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        [Category("D108Gate")]
+        public void RuntimeDestinationsAndBuildSettingsUseProductionDungeonOne()
+        {
+            const string titlePath = "Assets/GAME/Scenes/TitleScene.unity";
+            const string casePath = "Assets/GAME/Data/Tutorial/Case_Dungeon01_1.asset";
+
+            EditorSceneManager.OpenScene(titlePath, OpenSceneMode.Single);
+            GAME.Title.TitleSceneController titleController = Object.FindFirstObjectByType<GAME.Title.TitleSceneController>();
+            Assert.That(titleController, Is.Not.Null);
+            Assert.That(new SerializedObject(titleController).FindProperty("dungeonSceneName").stringValue,
+                Is.EqualTo("Dungeon_1_Production"));
+
+            CaseFileDataSO caseFile = AssetDatabase.LoadAssetAtPath<CaseFileDataSO>(casePath);
+            Assert.That(caseFile, Is.Not.Null);
+            Assert.That(caseFile.TargetSceneName, Is.EqualTo("Dungeon_1_Production"));
+            Assert.That(caseFile.TargetSpawnPointId, Is.EqualTo("Dungeon1_Start"));
+
+            string[] enabledScenes = EditorBuildSettings.scenes
+                .Where(scene => scene.enabled)
+                .Select(scene => scene.path)
+                .ToArray();
+            Assert.That(enabledScenes, Does.Contain(titlePath));
+            Assert.That(enabledScenes, Does.Contain(DungeonOneProductionMigrationUtility.ProductionScenePath));
+            Assert.That(enabledScenes, Does.Not.Contain(DungeonOneProductionMigrationUtility.LegacyScenePath));
+            Assert.That(DungeonOneProductionMigrationUtility.LegacyScenePath,
+                Is.EqualTo("Assets/GAME/Scenes/Dungeon 1.unity"));
+        }
+
+        [Test]
+        [Category("D108Gate")]
+        public void ProductionDungeonOne_PreservesDungeonOneStartSpawnContract()
+        {
+            EditorSceneManager.OpenScene(
+                DungeonOneProductionMigrationUtility.ProductionScenePath,
+                OpenSceneMode.Single);
+
+            SceneSpawnPoint[] spawnPoints = Object.FindObjectsByType<SceneSpawnPoint>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None);
+            Assert.That(spawnPoints, Has.Length.EqualTo(1));
+            Assert.That(GetHierarchyPath(spawnPoints[0].transform), Is.EqualTo("World/SpawnPoints/PlayerSpawn"));
+            Assert.That(spawnPoints[0].SpawnPointId, Is.EqualTo("Dungeon1_Start"));
+
+            GameObject player = GameObject.FindWithTag("Player");
+            Assert.That(player, Is.Not.Null);
+            Assert.That(Vector3.Distance(player.transform.position, spawnPoints[0].transform.position),
+                Is.LessThan(0.001f));
+        }
+
+        [Test]
+        [Category("D108Gate")]
+        public void SceneTravelService_RemainsCompatibleAndDelegatesProductionLoadingToSceneFlow()
+        {
+            MethodInfo staticApi = typeof(SceneTravelService).GetMethod(
+                "TravelTo",
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                new[] { typeof(string), typeof(string) },
+                null);
+            MethodInfo instanceApi = typeof(SceneTravelService).GetMethod(
+                "Travel",
+                BindingFlags.Public | BindingFlags.Instance,
+                null,
+                new[] { typeof(string), typeof(string) },
+                null);
+            Assert.That(staticApi, Is.Not.Null);
+            Assert.That(instanceApi, Is.Not.Null);
+
+            string travelSource = System.IO.File.ReadAllText("Assets/GAME/Scripts/Story/SceneTravelService.cs");
+            string flowSource = System.IO.File.ReadAllText("Assets/GAME/Scripts/Core/SceneFlowController.cs");
+            string titleSource = System.IO.File.ReadAllText("Assets/GAME/Scripts/Title/Runtime/TitleSceneController.cs");
+            Assert.That(travelSource, Does.Contain("sceneFlow.LoadScene(sceneName, HandleSceneLoadCompleted)"));
+            Assert.That(travelSource, Does.Not.Contain("SceneManager.LoadSceneAsync"));
+            Assert.That(travelSource, Does.Not.Contain("GameStateMachine.Instance.SetState"));
+            Assert.That(titleSource, Does.Contain("sceneFlow.LoadScene(sceneName)"));
+            Assert.That(titleSource, Does.Not.Contain("SceneManager.LoadScene"));
+            Assert.That(flowSource, Does.Contain("SceneManager.LoadSceneAsync"));
+        }
+
+        [Test]
+        [Category("D108Gate")]
+        public void ProductionDungeonOne_HasQuestDerivedCompletionContractWithoutLegacyExitOrFallbackDestination()
+        {
+            EditorSceneManager.OpenScene(
+                DungeonOneProductionMigrationUtility.ProductionScenePath,
+                OpenSceneMode.Single);
+
+            Assert.DoesNotThrow(DungeonOneProductionMigrationUtility.ValidateProductionScene);
+
+            DungeonCompletionFlow[] completionFlows = FindAll<DungeonCompletionFlow>();
+            QuestRuntime questRuntime = FindAll<QuestRuntime>().Single();
+            Assert.That(completionFlows, Has.Length.EqualTo(1));
+            Assert.That(GetHierarchyPath(completionFlows[0].transform), Is.EqualTo("Runtime/DungeonCompletion"));
+            Assert.That(new SerializedObject(completionFlows[0]).FindProperty("questRuntime").objectReferenceValue,
+                Is.SameAs(questRuntime));
+            Assert.That(completionFlows[0].DungeonId, Is.EqualTo("dungeon1"));
+            Assert.That(completionFlows[0].CompletionQuestId, Is.EqualTo("ch01.find-first-npc"));
+            Assert.That(completionFlows[0].HasAuthoredDestination, Is.False);
+            Assert.That(Object.FindObjectsByType<DemoRescueNpcEndFlow>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.None), Is.Empty);
+
+            string completionSource = System.IO.File.ReadAllText(
+                "Assets/GAME/Scripts/World/DungeonCompletionFlow.cs");
+            Assert.That(completionSource, Does.Contain("SceneFlowController"));
+            Assert.That(completionSource, Does.Not.Contain("SceneManager.LoadScene"));
+            Assert.That(completionSource, Does.Not.Contain("GameStateMachine.Instance.SetState"));
+            Assert.That(completionSource, Does.Not.Contain("RewardService"));
+            Assert.That(completionSource, Does.Not.Contain("GrantQuestCompletion"));
+        }
+
+        [Test]
+        [Category("D108Gate")]
+        public void DungeonCompletionFlow_DerivesItsRequestFromPersistedQuestStateWithoutGrantingRewardsOrTraveling()
+        {
+            QuestDefinitionSO definition = AssetDatabase.LoadAssetAtPath<QuestDefinitionSO>(
+                "Assets/GAME/Data/Quest/CH01_FindFirstNpc.asset");
+            GameObject owner = new("DungeonCompletionFlowTestOwner");
+
+            try
+            {
+                QuestRuntime runtime = owner.AddComponent<QuestRuntime>();
+                DungeonCompletionFlow completionFlow = owner.AddComponent<DungeonCompletionFlow>();
+                SetReference(completionFlow, "questRuntime", runtime);
+                SetPrivateField(completionFlow, "dungeonId", "dungeon1");
+                SetPrivateField(completionFlow, "completionQuestId", definition.QuestId);
+                SetPrivateField(completionFlow, "destinationSceneName", string.Empty);
+                SetPrivateField(completionFlow, "destinationSpawnPointId", string.Empty);
+                SetPrivateField(completionFlow, "travelWhenCompletionReady", false);
+                InvokeIfPresent(completionFlow, "OnEnable");
+
+                int requests = 0;
+                DungeonCompletionRequest request = default;
+                completionFlow.OnCompletionReady += value =>
+                {
+                    requests++;
+                    request = value;
+                };
+
+                runtime.StartQuest(definition);
+                runtime.CompleteQuest(definition.QuestId);
+
+                Assert.That(completionFlow.IsCompletionReady, Is.True);
+                Assert.That(requests, Is.EqualTo(1));
+                Assert.That(request.DungeonId, Is.EqualTo("dungeon1"));
+                Assert.That(request.CompletionQuestId, Is.EqualTo(definition.QuestId));
+                Assert.That(request.DestinationSceneName, Is.Empty);
+                Assert.That(completionFlow.TryTravelToAuthoredDestination(), Is.False);
+
+                Game.NonCombat.Save.GameSaveData snapshot = new();
+                runtime.CaptureSaveData(snapshot);
+                runtime.RestoreSaveData(snapshot);
+
+                Assert.That(completionFlow.IsCompletionReady, Is.True);
+                Assert.That(requests, Is.EqualTo(2),
+                    "Restored QuestRuntime state must be sufficient to reconstruct the completion contract.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(owner);
+            }
+        }
+
+        [Test]
+        [Category("D108Gate")]
+        public void SceneTravelService_ValidSpawnUsesTheExactMatchingPoint()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            GameObject player = CreatePlayerAt(new Vector3(12f, 4f, 0f));
+            CreateSpawnPoint("Exact", new Vector3(3f, 7f, 0f));
+            CreateSpawnPoint("Other", new Vector3(-4f, 2f, 0f));
+
+            InvokeSpawnMove("Exact");
+
+            Assert.That(player.transform.position, Is.EqualTo(new Vector3(3f, 7f, 0f)));
+        }
+
+        [Test]
+        [Category("D108Gate")]
+        public void SceneTravelService_MissingSpawnKeepsTheAuthoredPlayerPosition()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            Vector3 authoredPosition = new(12f, 4f, 0f);
+            GameObject player = CreatePlayerAt(authoredPosition);
+            CreateSpawnPoint("Other", new Vector3(-4f, 2f, 0f));
+
+            InvokeSpawnMove("Missing");
+
+            Assert.That(player.transform.position, Is.EqualTo(authoredPosition));
+        }
+
+        [Test]
+        [Category("D108Gate")]
+        public void SceneTravelService_DuplicateSpawnIsAmbiguousAndDoesNotTeleport()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            Vector3 authoredPosition = new(12f, 4f, 0f);
+            GameObject player = CreatePlayerAt(authoredPosition);
+            CreateSpawnPoint("Duplicate", new Vector3(3f, 7f, 0f));
+            CreateSpawnPoint("Duplicate", new Vector3(-4f, 2f, 0f));
+
+            InvokeSpawnMove("Duplicate");
+
+            Assert.That(player.transform.position, Is.EqualTo(authoredPosition));
+        }
+
+        [UnityTest]
+        [Category("D108Gate")]
+        public IEnumerator TitleScene_StartFlowLoadsProductionDungeonThroughProductionSceneFlow()
+        {
+            EditorSceneManager.OpenScene("Assets/GAME/Scenes/TitleScene.unity", OpenSceneMode.Single);
+            yield return new EnterPlayMode();
+            yield return null;
+
+            GAME.Title.TitleSceneController titleController = Object.FindFirstObjectByType<GAME.Title.TitleSceneController>();
+            Assert.That(titleController, Is.Not.Null);
+            SerializedObject serializedTitle = new(titleController);
+            Button startButton = serializedTitle.FindProperty("startButton").objectReferenceValue as Button;
+            Button paperClickButton = serializedTitle.FindProperty("paperClickButton").objectReferenceValue as Button;
+            Assert.That(startButton, Is.Not.Null);
+            Assert.That(paperClickButton, Is.Not.Null);
+
+            float deadline = Time.realtimeSinceStartup + 30f;
+            startButton.onClick.Invoke();
+            while (!paperClickButton.interactable && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            Assert.That(paperClickButton.interactable, Is.True, "NPC request paper did not become interactive.");
+
+            paperClickButton.onClick.Invoke();
+            while (!paperClickButton.interactable && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            Assert.That(paperClickButton.interactable, Is.True, "Monster request paper did not become interactive.");
+
+            paperClickButton.onClick.Invoke();
+            while ((SceneManager.GetActiveScene().name != "Dungeon_1_Production" ||
+                    GameStateMachine.Instance == null ||
+                    GameStateMachine.Instance.Current != GameState.Exploration) &&
+                   Time.realtimeSinceStartup < deadline)
+                yield return null;
+
+            string loadedSceneName = SceneManager.GetActiveScene().name;
+            GameState? loadedState = GameStateMachine.Instance != null
+                ? GameStateMachine.Instance.Current
+                : null;
+
+            yield return new ExitPlayMode();
+
+            Assert.That(loadedSceneName, Is.EqualTo("Dungeon_1_Production"));
+            Assert.That(loadedState, Is.EqualTo(GameState.Exploration));
+        }
+
+        [Test]
+        [Category("D108Gate")]
+        public void ProductionDungeonOne_HasCanonicalCombatRewardUiCameraAndBootstrapOwners()
+        {
+            EditorSceneManager.OpenScene(
+                DungeonOneProductionMigrationUtility.ProductionScenePath,
+                OpenSceneMode.Single);
+
+            Assert.DoesNotThrow(DungeonOneProductionMigrationUtility.ValidateProductionScene);
+            Assert.That(FindAll<RuntimeBootstrapper>(), Has.Length.EqualTo(1));
+            Assert.That(FindAll<CombatEntryPoint>(), Has.Length.EqualTo(1));
+            Assert.That(FindAll<CombatWorldLifecycleAdapter>(), Has.Length.EqualTo(1));
+            Assert.That(FindAll<CombatRewardUIBinder>(), Has.Length.EqualTo(1));
+            Assert.That(FindAll<RewardService>(), Has.Length.EqualTo(1));
+            Assert.That(FindAll<RewardUIPanel>(), Has.Length.EqualTo(1));
+            Assert.That(FindAll<UIScreenRouter>(), Has.Length.EqualTo(1));
+            Assert.That(FindAll<GameUIRootController>(), Has.Length.EqualTo(1));
+            Assert.That(FindAll<EventSystem>(), Has.Length.EqualTo(1));
+
+            CombatEntryPoint entryPoint = FindAll<CombatEntryPoint>().Single();
+            Assert.That(GetHierarchyPath(entryPoint.transform),
+                Is.EqualTo("Runtime/Combat/CombatRuntime"));
+
+            CombatEncounterTrigger2D[] triggers = FindAll<CombatEncounterTrigger2D>();
+            Assert.That(triggers, Has.Length.EqualTo(3));
+            foreach (CombatEncounterTrigger2D trigger in triggers)
+            {
+                Assert.That(new SerializedObject(trigger).FindProperty("entryPoint").objectReferenceValue,
+                    Is.SameAs(entryPoint),
+                    GetHierarchyPath(trigger.transform));
+            }
+
+            PlayerFieldAttackController[] fieldAttacks = FindAll<PlayerFieldAttackController>();
+            Assert.That(fieldAttacks, Has.Length.EqualTo(1));
+            Assert.That(new SerializedObject(fieldAttacks[0]).FindProperty("entryPoint").objectReferenceValue,
+                Is.SameAs(entryPoint));
+
+            CombatRewardUIBinder binder = FindAll<CombatRewardUIBinder>().Single();
+            SerializedObject serializedBinder = new(binder);
+            Assert.That(serializedBinder.FindProperty("entryPoint").objectReferenceValue, Is.SameAs(entryPoint));
+            Assert.That(serializedBinder.FindProperty("rewardPanel").objectReferenceValue,
+                Is.SameAs(FindAll<RewardUIPanel>().Single()));
+            Object rewardServiceReference = serializedBinder.FindProperty("rewardService").objectReferenceValue;
+            Assert.That(
+                rewardServiceReference == null || rewardServiceReference == FindAll<RewardService>().Single(),
+                Is.True,
+                "The binder may resolve the unique persistent/local RewardService at runtime, but must not reference a competing service.");
+
+            GameObject player = GameObject.FindWithTag("Player");
+            Assert.That(player, Is.Not.Null);
+            Assert.That(player.GetComponent<Rigidbody2D>(), Is.Not.Null);
+            Assert.That(player.GetComponentsInChildren<Collider2D>(true), Is.Not.Empty);
+            CameraFollow2D cameraFollow = FindAll<CameraFollow2D>().Single();
+            Assert.That(cameraFollow.GetTarget(), Is.Not.Null);
+            Assert.That(
+                cameraFollow.GetTarget() == player.transform ||
+                cameraFollow.GetTarget().IsChildOf(player.transform) ||
+                player.transform.IsChildOf(cameraFollow.GetTarget()),
+                Is.True);
+        }
+
+        [Test]
+        [Category("D108Gate")]
         public void ProductionDungeonOne_HasOneCanonicalRepeatableNpcInteraction()
         {
             EditorSceneManager.OpenScene(
@@ -85,6 +412,7 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        [Category("D108Gate")]
         public void ProductionDungeonOne_HasExplicitInteractionOwnersWithoutLegacyInteractionPaths()
         {
             EditorSceneManager.OpenScene(
@@ -155,6 +483,7 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        [Category("D108Gate")]
         public void ProductionDungeonOne_NpcFirstTalkUsesChoiceFreeLegacyContentThroughStoryContract()
         {
             StoryInteractionEventSO interactionEvent = AssetDatabase.LoadAssetAtPath<StoryInteractionEventSO>(
@@ -188,6 +517,7 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        [Category("D108Gate")]
         public void ProductionDungeonOne_HasApprovedQuestDefinitionOnItsCanonicalRuntime()
         {
             QuestDefinitionSO definition = AssetDatabase.LoadAssetAtPath<QuestDefinitionSO>(
@@ -219,6 +549,7 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        [Category("D108Gate")]
         public void ProductionDungeonOne_FirstTalkStoryStartsAndRestoresExploration()
         {
             StoryInteractionEventSO interactionEvent = AssetDatabase.LoadAssetAtPath<StoryInteractionEventSO>(
@@ -252,6 +583,7 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        [Category("D108Gate")]
         public void ProductionDungeonOne_FirstTalkPublishesItsQuestObjectiveOnlyOnce()
         {
             QuestDefinitionSO definition = AssetDatabase.LoadAssetAtPath<QuestDefinitionSO>(
@@ -310,6 +642,7 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        [Category("D108Gate")]
         public void ProductionDungeonOne_SceneStartAdapterUsesCanonicalRunnerAndIntroStory()
         {
             StoryEventDefinitionSO intro = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
@@ -394,6 +727,7 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        [Category("KnownD105Blocker")]
         public void ProductionDungeonOne_SceneStartAdapterDefersUntilBootstrapUiReadinessIsPublished()
         {
             StoryEventDefinitionSO intro = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
@@ -612,6 +946,11 @@ namespace Game.Tests.Integration
             return path;
         }
 
+        private static T[] FindAll<T>() where T : Object
+        {
+            return Object.FindObjectsByType<T>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        }
+
         private static void InvokeAwake(MonoBehaviour component)
         {
             InvokeIfPresent(component, "Awake");
@@ -623,6 +962,34 @@ namespace Game.Tests.Integration
                 methodName,
                 BindingFlags.Instance | BindingFlags.NonPublic);
             awake?.Invoke(component, arguments);
+        }
+
+        private static GameObject CreatePlayerAt(Vector3 position)
+        {
+            GameObject player = new("Player");
+            player.tag = "Player";
+            player.transform.position = position;
+            player.AddComponent<Rigidbody2D>();
+            return player;
+        }
+
+        private static void CreateSpawnPoint(string id, Vector3 position)
+        {
+            GameObject owner = new($"Spawn_{id}");
+            owner.transform.position = position;
+            SceneSpawnPoint point = owner.AddComponent<SceneSpawnPoint>();
+            SerializedObject serialized = new(point);
+            serialized.FindProperty("spawnPointId").stringValue = id;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void InvokeSpawnMove(string spawnPointId)
+        {
+            MethodInfo method = typeof(SceneTravelService).GetMethod(
+                "MovePlayerToSpawnPoint",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+            method.Invoke(null, new object[] { spawnPointId, "Player" });
         }
 
         private static void SetPrivateField(object owner, string fieldName, object value)
