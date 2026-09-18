@@ -23,6 +23,7 @@ using Game.Story;
 using Game.Story.Data;
 using Game.Story.Interaction;
 using Game.UI;
+using Game.World;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditorInternal;
@@ -45,6 +46,7 @@ namespace Game.EditorTools
         private const string ProductionQuestId = "ch01.find-first-npc";
         private const string ProductionQuestObjectiveId = "talk_first_npc";
         private const string ProductionQuestObjectiveTargetId = "dungeon1.npc.first-talk";
+        private const string ProductionDungeonId = "dungeon1";
         private const string ProductionIntroStoryEventId = "dungeon1.intro.story";
         private const string ProductionNpcName = "Dungeon1_FirstTalkNpc";
         private const string ProductionNpcInteractionId = "dungeon1.npc.first-talk";
@@ -114,6 +116,7 @@ namespace Game.EditorTools
             Scene productionScene = EditorSceneManager.OpenScene(ProductionScenePath, OpenSceneMode.Single);
             RemoveTemplateValidationContent();
             PrepareProductionRoots(out Transform environmentRoot, out Transform collisionRoot);
+            EnsureProductionRuntimeBootstrapper();
             PositionProductionPlayerSpawnAndCamera();
 
             Scene legacyScene = EditorSceneManager.OpenScene(LegacyScenePath, OpenSceneMode.Additive);
@@ -142,6 +145,7 @@ namespace Game.EditorTools
             PlaceProductionEncounters(productionScene);
             PlaceProductionNpc(productionScene);
             ConfigureProductionQuest(productionScene);
+            ConfigureProductionDungeonCompletion(productionScene);
             ConfigureProductionSceneStartNarrative(productionScene);
             EditorSceneManager.MarkSceneDirty(productionScene);
 
@@ -182,11 +186,93 @@ namespace Game.EditorTools
             EditorSceneManager.OpenScene(ProductionScenePath, OpenSceneMode.Single);
             PlaceProductionNpc(SceneManager.GetActiveScene());
             ConfigureProductionQuest(SceneManager.GetActiveScene());
+            ConfigureProductionDungeonCompletion(SceneManager.GetActiveScene());
             ConfigureProductionSceneStartNarrative(SceneManager.GetActiveScene());
             ValidateProductionScene();
             EditorSceneManager.SaveOpenScenes();
             AssetDatabase.SaveAssets();
             Debug.Log($"[DungeonOneProductionMigration] Placed Production NPC interaction in '{ProductionScenePath}'.");
+        }
+
+        public static void RepairProductionSpriteReferencesFromCommandLine()
+        {
+            Scene productionScene = EditorSceneManager.OpenScene(ProductionScenePath, OpenSceneMode.Single);
+            Transform environmentRoot = FindRequired("World/Environment/Dungeon1");
+            SpriteRenderer[] unresolved = environmentRoot
+                .GetComponentsInChildren<SpriteRenderer>(true)
+                .Where(renderer => renderer.sprite == null)
+                .ToArray();
+            if (unresolved.Length == 0)
+            {
+                ValidateProductionScene();
+                Debug.Log("[DungeonOneProductionMigration] Production Sprite references are already valid.");
+                return;
+            }
+
+            Scene legacyScene = EditorSceneManager.OpenScene(LegacyScenePath, OpenSceneMode.Additive);
+            int repairedCount = 0;
+            try
+            {
+                SceneManager.SetActiveScene(productionScene);
+                Dictionary<string, Sprite> legacySpritesByObjectName = legacyScene
+                    .GetRootGameObjects()
+                    .SelectMany(root => root.GetComponentsInChildren<SpriteRenderer>(true))
+                    .Where(renderer => renderer.sprite != null)
+                    .GroupBy(renderer => NormalizeCloneName(renderer.transform.name), StringComparer.Ordinal)
+                    .ToDictionary(
+                        group => group.Key,
+                        group =>
+                        {
+                            Sprite[] sprites = group.Select(renderer => renderer.sprite).Distinct().ToArray();
+                            if (sprites.Length != 1)
+                            {
+                                throw new InvalidOperationException(
+                                    $"Legacy Sprite source name '{group.Key}' resolves to {sprites.Length} different Sprites.");
+                            }
+
+                            return sprites[0];
+                        },
+                        StringComparer.Ordinal);
+
+                foreach (SpriteRenderer destinationRenderer in unresolved)
+                {
+                    string sourceName = NormalizeCloneName(destinationRenderer.transform.name);
+                    if (!legacySpritesByObjectName.TryGetValue(sourceName, out Sprite sourceSprite))
+                    {
+                        throw new InvalidOperationException(
+                            $"Legacy Sprite reference could not be resolved for " +
+                            $"'{GetHierarchyPath(destinationRenderer.transform)}'.");
+                    }
+
+                    destinationRenderer.sprite = sourceSprite;
+                    EditorUtility.SetDirty(destinationRenderer);
+                    repairedCount++;
+                }
+            }
+            finally
+            {
+                EditorSceneManager.CloseScene(legacyScene, true);
+                SceneManager.SetActiveScene(productionScene);
+            }
+
+            Require(repairedCount == unresolved.Length,
+                $"Expected to repair {unresolved.Length} Sprite references, repaired {repairedCount}.");
+            EditorSceneManager.MarkSceneDirty(productionScene);
+            if (!EditorSceneManager.SaveScene(productionScene, ProductionScenePath))
+                throw new InvalidOperationException($"Unity could not save '{ProductionScenePath}'.");
+
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene(ProductionScenePath, OpenSceneMode.Single);
+            ValidateProductionScene();
+            Debug.Log(
+                $"[DungeonOneProductionMigration] Repaired and persisted {repairedCount} exact Sprite references " +
+                $"from '{LegacyScenePath}'.");
+        }
+
+        [MenuItem("GAME/Production Migration/Repair Dungeon 1 Production Sprite References")]
+        public static void RepairProductionSpriteReferencesFromMenu()
+        {
+            RepairProductionSpriteReferencesFromCommandLine();
         }
 
         [MenuItem("GAME/Production Migration/Place Dungeon 1 Production NPC Interaction")]
@@ -216,6 +302,7 @@ namespace Game.EditorTools
             RequireCount<QuestRuntime>(1);
             RequireCount<QuestObjectiveTracker>(1);
             RequireCount<QuestCompletionFlow>(1);
+            RequireCount<DungeonCompletionFlow>(1);
             RequireCount<QuestCalendarIntegration>(1);
             RequireCount<CalendarService>(1);
             RequireCount<CombatEntryPoint>(1);
@@ -286,7 +373,13 @@ namespace Game.EditorTools
                 .GetComponentsInChildren<SpriteRenderer>(true);
             Require(renderers.Length == ExpectedSpriteRendererCount,
                 $"Expected {ExpectedSpriteRendererCount} SpriteRenderers, found {renderers.Length}.");
-            Require(renderers.All(renderer => renderer.sprite != null), "One or more migrated SpriteRenderers have no Sprite.");
+            string[] missingSpritePaths = renderers
+                .Where(renderer => renderer.sprite == null)
+                .Select(renderer => GetHierarchyPath(renderer.transform))
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToArray();
+            Require(missingSpritePaths.Length == 0,
+                $"Migrated SpriteRenderers have no Sprite: {string.Join(", ", missingSpritePaths)}.");
 
             Collider2D[] colliders = FindRequired("World/Collision")
                 .GetComponentsInChildren<Collider2D>(true);
@@ -316,16 +409,25 @@ namespace Game.EditorTools
                 "Production Player wrapper does not match the migrated start position.");
             Require(Vector3.Distance(FindRequired("World/SpawnPoints/PlayerSpawn").position, ProductionStartPosition) < 0.001f,
                 "PlayerSpawn does not match the migrated start position.");
+            SceneSpawnPoint[] spawnPoints = FindSceneComponents<SceneSpawnPoint>();
+            Require(spawnPoints.Length == 1, $"Expected one Production SceneSpawnPoint, found {spawnPoints.Length}.");
+            Require(GetHierarchyPath(spawnPoints[0].transform) == "World/SpawnPoints/PlayerSpawn",
+                "Production SceneSpawnPoint must be owned by World/SpawnPoints/PlayerSpawn.");
+            Require(spawnPoints[0].SpawnPointId == "Dungeon1_Start",
+                "Production PlayerSpawn must preserve the Dungeon1_Start travel contract.");
 
             QuestRuntime questRuntime = FindSceneComponents<QuestRuntime>().Single();
             SerializedProperty questDefinitions = new SerializedObject(questRuntime).FindProperty("questDefinitions");
             Require(questDefinitions != null && questDefinitions.arraySize == 1,
                 "Production QuestRuntime must reference exactly one Dungeon 1 QuestDefinitionSO.");
-            Require(questDefinitions.GetArrayElementAtIndex(0).objectReferenceValue == EnsureProductionQuestDefinition(),
+            Require(questDefinitions.GetArrayElementAtIndex(0).objectReferenceValue ==
+                    LoadRequiredAsset<QuestDefinitionSO>(ProductionQuestDefinitionPath),
                 "Production QuestRuntime is not bound to the Dungeon 1 QuestDefinitionSO.");
             ValidateProductionQuest();
+            ValidateProductionDungeonCompletion(questRuntime);
             ValidateProductionSceneStartNarrative();
 
+            RequireCount<RuntimeBootstrapper>(1);
             Require(FindSceneComponents<global::GameInputInstaller>().Length == 0,
                 "The template runtime-bootstrap input path must not be duplicated by a scene-local GameInputInstaller.");
             MethodInfo bootstrapMethod = typeof(Game.Core.RuntimeBootstrapper).GetMethod(
@@ -525,6 +627,43 @@ namespace Game.EditorTools
             EditorSceneManager.MarkSceneDirty(productionScene);
         }
 
+        private static void ConfigureProductionDungeonCompletion(Scene productionScene)
+        {
+            if (productionScene.path != ProductionScenePath)
+                throw new InvalidOperationException($"Expected production scene '{ProductionScenePath}', found '{productionScene.path}'.");
+
+            Transform runtimeRoot = FindRequired("Runtime");
+            Transform completionRoot = runtimeRoot.Find("DungeonCompletion") ??
+                                       CreateIdentityChild(runtimeRoot, "DungeonCompletion");
+            DungeonCompletionFlow completionFlow = completionRoot.GetComponent<DungeonCompletionFlow>();
+            if (completionFlow == null)
+                completionFlow = completionRoot.gameObject.AddComponent<DungeonCompletionFlow>();
+
+            SetReference(completionFlow, "questRuntime", FindSceneComponents<QuestRuntime>().Single());
+            SetString(completionFlow, "dungeonId", ProductionDungeonId);
+            SetString(completionFlow, "completionQuestId", ProductionQuestId);
+            SetString(completionFlow, "destinationSceneName", string.Empty);
+            SetString(completionFlow, "destinationSpawnPointId", string.Empty);
+            SetBool(completionFlow, "travelWhenCompletionReady", false);
+            EditorSceneManager.MarkSceneDirty(productionScene);
+        }
+
+        public static void ConfigureProductionDungeonCompletionFromCommandLine()
+        {
+            Scene scene = EditorSceneManager.OpenScene(ProductionScenePath, OpenSceneMode.Single);
+            ConfigureProductionDungeonCompletion(scene);
+            ValidateProductionScene();
+            EditorSceneManager.SaveScene(scene, ProductionScenePath);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[DungeonOneProductionMigration] Configured Dungeon 1 completion contract in '{ProductionScenePath}'.");
+        }
+
+        [MenuItem("GAME/Production Migration/Configure Dungeon 1 Completion Contract")]
+        public static void ConfigureProductionDungeonCompletionFromMenu()
+        {
+            ConfigureProductionDungeonCompletionFromCommandLine();
+        }
+
         public static void ConfigureProductionSceneStartNarrativeFromCommandLine()
         {
             Scene scene = EditorSceneManager.OpenScene(ProductionScenePath, OpenSceneMode.Single);
@@ -674,7 +813,7 @@ namespace Game.EditorTools
 
         private static void ValidateProductionQuest()
         {
-            QuestDefinitionSO definition = EnsureProductionQuestDefinition();
+            QuestDefinitionSO definition = LoadRequiredAsset<QuestDefinitionSO>(ProductionQuestDefinitionPath);
             Require(definition.QuestId == ProductionQuestId, "Dungeon 1 questId does not match the approved Production ID.");
             Require(definition.QuestTitle == "낯선 장소", "Dungeon 1 quest title does not match the approved title.");
             Require(definition.MissionDayCost == 0, "Dungeon 1 quest must not consume calendar days.");
@@ -701,11 +840,30 @@ namespace Game.EditorTools
                 "Dungeon 1 FirstTalk dialogue does not publish the approved canonical Talk QuestEvent.");
         }
 
+        private static void ValidateProductionDungeonCompletion(QuestRuntime questRuntime)
+        {
+            DungeonCompletionFlow completionFlow = FindSceneComponents<DungeonCompletionFlow>().Single();
+            Require(GetHierarchyPath(completionFlow.transform) == "Runtime/DungeonCompletion",
+                "Production DungeonCompletionFlow must live at 'Runtime/DungeonCompletion'.");
+            Require(ReadReference<QuestRuntime>(completionFlow, "questRuntime") == questRuntime,
+                "Production DungeonCompletionFlow must explicitly reference the canonical QuestRuntime.");
+            Require(ReadString(completionFlow, "dungeonId") == ProductionDungeonId,
+                "Production DungeonCompletionFlow has an unexpected dungeon ID.");
+            Require(ReadString(completionFlow, "completionQuestId") == ProductionQuestId,
+                "Production DungeonCompletionFlow must derive completion from the authored Dungeon 1 quest.");
+            Require(string.IsNullOrWhiteSpace(ReadString(completionFlow, "destinationSceneName")),
+                "Dungeon 1 has no authored completion destination yet; do not add a fallback destination.");
+            Require(string.IsNullOrWhiteSpace(ReadString(completionFlow, "destinationSpawnPointId")),
+                "Dungeon 1 has no authored completion spawn destination yet.");
+            Require(!ReadBool(completionFlow, "travelWhenCompletionReady"),
+                "Dungeon 1 must not auto-travel until a completion destination is authored.");
+        }
+
         private static void ValidateProductionSceneStartNarrative()
         {
             SceneStartStoryEventAdapter adapter = FindSceneComponents<SceneStartStoryEventAdapter>().Single();
             StoryEventRunner runner = FindSceneComponents<StoryEventRunner>().Single();
-            StoryEventDefinitionSO intro = EnsureProductionIntroStory();
+            StoryEventDefinitionSO intro = LoadRequiredAsset<StoryEventDefinitionSO>(ProductionIntroStoryPath);
             Require(ReadReference<StoryEventRunner>(adapter, "runner") == runner,
                 "Scene-start narrative adapter is not bound to the canonical StoryEventRunner.");
             Require(ReadReference<StoryEventDefinitionSO>(adapter, "eventDefinition") == intro,
@@ -718,7 +876,8 @@ namespace Game.EditorTools
                 .FindProperty("nodes").GetArrayElementAtIndex(1)
                 .FindPropertyRelative("effects").GetArrayElementAtIndex(0);
             Require(effect.FindPropertyRelative("type").intValue == (int)StoryEffectType.StartQuest &&
-                    effect.FindPropertyRelative("questDefinition").objectReferenceValue == EnsureProductionQuestDefinition(),
+                    effect.FindPropertyRelative("questDefinition").objectReferenceValue ==
+                    LoadRequiredAsset<QuestDefinitionSO>(ProductionQuestDefinitionPath),
                 "Dungeon 1 intro Story must start the authored Production quest through StoryEffect.StartQuest.");
             SerializedProperty completionEffect = new SerializedObject(intro)
                 .FindProperty("nodes").GetArrayElementAtIndex(1)
@@ -878,7 +1037,22 @@ namespace Game.EditorTools
             playerWrapper.position = ProductionStartPosition;
             playerRoot.localPosition = Vector3.zero;
             spawn.position = ProductionStartPosition;
+            SceneSpawnPoint spawnPoint = spawn.GetComponent<SceneSpawnPoint>();
+            if (spawnPoint == null)
+                spawnPoint = spawn.gameObject.AddComponent<SceneSpawnPoint>();
+            SetString(spawnPoint, "spawnPointId", "Dungeon1_Start");
             mainCamera.position = new Vector3(ProductionStartPosition.x, ProductionStartPosition.y, mainCamera.position.z);
+        }
+
+        private static void EnsureProductionRuntimeBootstrapper()
+        {
+            RuntimeBootstrapper[] bootstrappers = FindSceneComponents<RuntimeBootstrapper>();
+            if (bootstrappers.Length > 1)
+                throw new InvalidOperationException(
+                    $"Expected at most one RuntimeBootstrapper before Production configuration, found {bootstrappers.Length}.");
+
+            if (bootstrappers.Length == 0)
+                FindRequired("Runtime").gameObject.AddComponent<RuntimeBootstrapper>();
         }
 
         private static GameObject CloneVisualBranch(Transform source, Transform destinationParent)
@@ -888,7 +1062,10 @@ namespace Game.EditorTools
 
             GameObject destination = CreateCleanClone(source, destinationParent);
             foreach (SpriteRenderer renderer in source.GetComponents<SpriteRenderer>())
+            {
                 CopyComponent(renderer, destination);
+                destination.GetComponents<SpriteRenderer>().Last().sprite = renderer.sprite;
+            }
             foreach (Transform child in source)
                 CloneVisualBranch(child, destination.transform);
             return destination;
@@ -988,6 +1165,11 @@ namespace Game.EditorTools
             return null;
         }
 
+        private static string NormalizeCloneName(string objectName)
+        {
+            return Regex.Replace(objectName ?? string.Empty, @" \(\d+\)$", string.Empty);
+        }
+
         private static GameObject CreateCleanClone(Transform source, Transform destinationParent)
         {
             GameObject destination = new(source.name);
@@ -1026,6 +1208,14 @@ namespace Game.EditorTools
             if (matches.Length != 1)
                 throw new InvalidOperationException($"Expected one legacy root named '{name}', found {matches.Length}.");
             return matches[0];
+        }
+
+        private static T LoadRequiredAsset<T>(string path) where T : UnityEngine.Object
+        {
+            T asset = AssetDatabase.LoadAssetAtPath<T>(path);
+            if (asset == null)
+                throw new InvalidOperationException($"Required asset '{path}' was not found or is not a {typeof(T).Name}.");
+            return asset;
         }
 
         private static Transform FindRequired(string path)

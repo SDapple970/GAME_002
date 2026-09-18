@@ -17,7 +17,7 @@ Dungeon 1's entire `Systems` or `UI` hierarchy.
 |---|---|---|---|
 | Global state | `GameStateMachine` | Production global service | One persistent instance; never add to the dungeon-runtime prefab. |
 | Global flow | `GameFlowController` | Production global service | One instance; combat and reward request states through it. |
-| Bootstrap | `RuntimeBootstrapper` | Production global service creator | Let the bootstrap find/create services. Do not copy it with a dungeon. |
+| Bootstrap | `RuntimeBootstrapper` | Production global service creator | Author one per Production Build dungeon on `Runtime`; it adopts/reuses persistent services and must not be duplicated. |
 | Rewards | `RewardService` | Production global service | One instance; `CombatRewardUIBinder` resolves it if its field is empty. |
 | Input | `GameInputInstaller`, `InputService`, `InputRouter` | Production global input | One persistent installer; exploration commands are allowed only in `Exploration`. |
 | UI routing | `UIScreenRouter`, `GameUIRootController` | Production global UI ownership | One routing path; do not duplicate it in the runtime prefab. |
@@ -33,7 +33,7 @@ Dungeon 1's entire `Systems` or `UI` hierarchy.
 | Debug tools | `CombatFieldCallDebug`, `CombatStartSmokeTest`, `CombatTestRunner`, `CombatAutoPlanner`, `VerticalSliceSceneValidator` | Debug/test | Excluded; never required by production flow. |
 | Old battle path | `SeamlessBattleManager`, `BattleTrigger2D`, battle transition components | Legacy | Retained in the repository but must not be connected to production encounters. |
 
-Dungeon 1 currently places global services, Demo/Debug components, and production services together on `Systems`. `GameStateMachine` calls `DontDestroyOnLoad` on that GameObject, so copying `Systems` can persist and duplicate everything attached to it. A new dungeon must receive global services from the existing bootstrap/persistent root, not from `DungeonCombatRuntime`.
+Legacy `Dungeon 1` places global services, Demo/Debug components, and production services together on `Systems`. `GameStateMachine` calls `DontDestroyOnLoad` on that GameObject, so copying `Systems` can persist and duplicate everything attached to it. A new Production dungeon authors one lightweight `RuntimeBootstrapper`, which adopts/reuses persistent services, and must not copy the legacy `Systems` hierarchy or put global services into `DungeonCombatRuntime`.
 
 ## Reusable dungeon-local runtime
 
@@ -134,7 +134,7 @@ The current compatibility example has three independent single-enemy triggers an
 ## Create a new dungeon
 
 1. Copy `Assets/GAME/Scenes/Dungeon_Template.unity` to the new authored dungeon path. Never copy from `Testing_Dungeon_Template` or treat Dungeon 1 as the template.
-2. Enter the dungeon through the existing Production bootstrap/scene flow. Do not copy Dungeon 1's old `Systems` hierarchy into the new scene.
+2. Keep one authored `RuntimeBootstrapper` on the dungeon `Runtime` root, then enter through the existing Production scene flow. Do not copy Legacy Dungeon 1's old `Systems` hierarchy into the new scene.
 3. Keep exactly one dungeon-local `CombatRuntime` prefab instance and one `CombatEntryPoint`.
 4. Add or reuse one `ProductionDungeonUI` instance. Remove it only when a bootstrap scene demonstrably supplies one persistent HUD, reward panel, and EventSystem.
 5. Connect `CombatPlanningHUD` to the prefab instance's entry point and flow orchestrator. Verify all HUD child references.

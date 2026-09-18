@@ -466,7 +466,7 @@ MonoBehaviour:
   stampCanvasGroup: {fileID: 685664693}
   fadeCanvasGroup: {fileID: 1029423276}
   titleSceneAnimator: {fileID: 202108192}
-  dungeonSceneName: Dungeon 1
+  dungeonSceneName: Dungeon_1_Production
 --- !u!1 &208714906
 GameObject:
   m_ObjectHideFlags: 0

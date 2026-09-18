@@ -16,7 +16,7 @@ MonoBehaviour:
   caseTitle: "1\uAD6C\uC5ED \uC2E0\uC131 \uBC18\uC751 \uC870\uC0AC"
   description: "\uC2DC\uC9C0\uD504\uC2A4\uC2DC 1\uAD6C\uC5ED\uC5D0\uC11C \uBC1C\uC0DD\uD55C
     \uC774\uC0C1 \uC2E0\uC131 \uBC18\uC751\uC744 \uC870\uC0AC\uD55C\uB2E4."
-  targetSceneName: Dungeon 1
+  targetSceneName: Dungeon_1_Production
   targetSpawnPointId: Dungeon1_Start
   unlocked: 1
   startQuest: {fileID: 11400000, guid: 539d737e74432a946a4dfa0e76dde8fc, type: 2}

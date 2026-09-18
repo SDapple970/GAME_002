@@ -8,7 +8,7 @@ GUID remains unchanged, rename the copy, and add the new scene to Build
 Settings or the existing content selection path. Never duplicate Dungeon 1's
 `Systems`, Demo, Debug, Legacy, quest-content, or narrative-content hierarchy.
 
-The repository's current title flow loads `Dungeon 1` by name. To test a copied
+The repository's current title flow loads `Dungeon_1_Production` by name. To test a copied
 scene through the canonical Production route, temporarily point the authored
 title/mission destination to the copied scene or add an equivalent existing
 scene-flow destination. Direct Play from the template is supported by
@@ -58,6 +58,11 @@ Each loaded dungeon has exactly one `CombatRuntime`, `CombatEntryPoint`,
 `Assets/GAME/Prefabs/CombatRuntime.prefab`; the UI prefab is
 `Assets/GAME/Prefabs/UI/ProductionDungeonUI.prefab`.
 
+Each Production Build dungeon authors exactly one `RuntimeBootstrapper` on its
+`Runtime` root so validators and direct-Play entry have a deterministic bootstrap
+point. The bootstrapper adopts/reuses persistent services before creating anything
+missing; it is not permission to duplicate a global manager set under each dungeon.
+
 `RuntimeBootstrapper` supplies or reuses `GameStateMachine`,
 `GameFlowController`, `SceneFlowController`, `SaveLoadService`,
 `GameInputInstaller`, `RewardService`, `GameUIRootController`, and
@@ -69,7 +74,7 @@ dungeon-local roots. `InputService` and `InputRouter` are owned by
 
 The controller's `promptUI` reference is explicitly connected to `ProductionDungeonUI/FieldRoot/InteractionPromptHost`. The host stays active and owns a small field overlay Canvas plus `InteractionPromptUI`; only its child `InteractionPromptRoot` is toggled. `PromptText` uses `UI.Text` for compatibility with the existing serialized prompt API. This UI displays prompt text only and does not own input, `GameState`, target selection, or interaction execution.
 
-Never copy `Systems`, `RuntimeBootstrapper`, a second UI router, another reward
+Never copy legacy `Systems`, a second `RuntimeBootstrapper`, a second UI router, another reward
 binder, `CombatStateSyncer`, `CombatDemoFlowController`, debug start/smoke-test
 tools, auto planners, `SeamlessBattleManager`, or Legacy battle triggers into a
 dungeon.
@@ -79,9 +84,12 @@ dungeon.
 Replace content below `World/Environment`. Replace colliders below
 `World/Collision`, retaining the project Ground layer for walkable surfaces.
 Move `World/SpawnPoints/PlayerSpawn` to the intended entry position and place
-the Player wrapper at that position. The current scene-flow layer has no
-spawn-ID routing for this marker, so it is an authored marker until an existing
-stage/spawn integration explicitly consumes it; do not add a spawn manager.
+the Player wrapper at that position. Add the existing `SceneSpawnPoint` component
+with a stable, unique ID. `SceneTravelService` stores an authored pending spawn,
+delegates the load to `SceneFlowController`, and applies the exact ID after the
+Core load completes. An empty ID keeps the authored Player position; a missing or
+duplicate ID logs a warning and does not choose an arbitrary point. Do not add a
+spawn manager.
 
 The Main Camera uses `CameraFollow2D` and follows the Player wrapper.
 `CombatCameraController` is attached as a scene override to `CombatRuntime`,
@@ -137,6 +145,23 @@ dungeon integrations. They must call the existing Production flow/services and
 must not become alternate owners. Authored quest, dialogue, choice, and save
 data are intentionally absent from this template.
 
+## Dungeon completion and exit contracts
+
+When a dungeon has an authored completion condition, add one small completion
+integration below `Runtime/DungeonCompletion`. It may observe the canonical
+`QuestRuntime` and publish a dungeon completion request, but it must not own
+quest progress, reward grants, or a duplicate save flag. If the quest state is
+already persisted, derive completion from that state rather than expanding the
+save schema.
+
+An authored destination is optional. Leave its scene and spawn IDs empty when
+the next destination has not been designed; do not add a Title fallback. A
+future exit interaction may request travel through this completion integration,
+which uses `SceneFlowController` (or the existing spawn-aware
+`SceneTravelService` adapter) as the only load path. Exit interactables remain
+canonical `InteractableObject`/`InteractionRunner` users and never load scenes,
+change global state, complete quests, or grant rewards directly.
+
 ## Production Narrative and NPC interaction
 
 `Runtime/Narrative/StoryEventRunner` is the single scene-local Production Story owner. It is explicitly connected to `ProductionDungeonUI/DialogueRoot/StoryDialogueHUD`. The HUD reuses the existing `WorldDialogueBubble` and `TimedChoicePanel` Production presenters; `UIScreenRouter` continues to activate `DialogueRoot` and `ChoiceRoot` from `GameState`.
@@ -163,8 +188,8 @@ data are intentionally absent from this template.
 
 - The template scene is not enabled in Build Settings; a duplicated production
   scene must be added or referenced by an existing content route.
-- `PlayerSpawn` is an authored marker because current `SceneFlowController`
-  does not route by spawn ID.
+- `PlayerSpawn` is consumed by the existing `SceneTravelService` adapter for
+  spawn-aware authored travel; `SceneFlowController` remains the sole scene-load owner.
 - Multi-enemy support is implemented and covered by EditMode logic tests, but
   every authored multi-enemy scene still needs Play Mode validation.
 - Dungeon 1 retains its existing mixed compatibility content and is not a

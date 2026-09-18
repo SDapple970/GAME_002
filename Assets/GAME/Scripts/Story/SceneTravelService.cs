@@ -1,4 +1,4 @@
-using System.Collections;
+using System.Linq;
 using Game.Core;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -13,6 +13,7 @@ namespace Game.Story
         [SerializeField] private string playerTag = "Player";
 
         private static string _pendingSpawnPointId;
+        private static string _pendingPlayerTag;
         private static bool _hasPendingSpawnPoint;
 
         private void Awake()
@@ -27,16 +28,6 @@ namespace Game.Story
 
             if (dontDestroyOnLoad)
                 DontDestroyOnLoad(gameObject);
-        }
-
-        private void OnEnable()
-        {
-            SceneManager.sceneLoaded += HandleSceneLoaded;
-        }
-
-        private void OnDisable()
-        {
-            SceneManager.sceneLoaded -= HandleSceneLoaded;
         }
 
         public static void TravelTo(string sceneName, string spawnPointId)
@@ -69,53 +60,60 @@ namespace Game.Story
             }
 
             _pendingSpawnPointId = spawnPointId;
+            _pendingPlayerTag = playerTag;
             _hasPendingSpawnPoint = !string.IsNullOrEmpty(spawnPointId);
 
-            if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(GameState.Cutscene);
-
-            StartCoroutine(Co_LoadScene(sceneName));
-        }
-
-        private IEnumerator Co_LoadScene(string sceneName)
-        {
-            AsyncOperation operation = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
-            if (operation == null)
+            SceneFlowController sceneFlow = SceneFlowController.Instance;
+            if (sceneFlow == null)
+                sceneFlow = Object.FindFirstObjectByType<SceneFlowController>();
+            if (sceneFlow == null)
             {
-                Debug.LogError($"[SceneTravelService] Failed to load scene: {sceneName}", this);
-                RestoreExplorationState();
-                yield break;
-            }
-
-            while (!operation.isDone)
-                yield return null;
-        }
-
-        private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
-        {
-            if (_hasPendingSpawnPoint)
-            {
-                MovePlayerToSpawnPoint(_pendingSpawnPointId);
-                _pendingSpawnPointId = null;
-                _hasPendingSpawnPoint = false;
-            }
-
-            RestoreExplorationState();
-        }
-
-        private void MovePlayerToSpawnPoint(string spawnPointId)
-        {
-            SceneSpawnPoint spawnPoint = FindSpawnPoint(spawnPointId);
-            if (spawnPoint == null)
-            {
-                Debug.LogWarning($"[SceneTravelService] Spawn point not found: {spawnPointId}", this);
+                ClearPendingSpawn();
+                Debug.LogError(
+                    $"[SceneTravelService] SceneFlowController is required to travel to '{sceneName}'.",
+                    this);
                 return;
             }
 
-            GameObject player = GameObject.FindGameObjectWithTag(playerTag);
+            sceneFlow.LoadScene(sceneName, HandleSceneLoadCompleted);
+        }
+
+        private static void HandleSceneLoadCompleted(bool succeeded)
+        {
+            if (succeeded && _hasPendingSpawnPoint)
+                MovePlayerToSpawnPoint(_pendingSpawnPointId, _pendingPlayerTag);
+
+            ClearPendingSpawn();
+        }
+
+        private static void MovePlayerToSpawnPoint(string spawnPointId, string targetPlayerTag)
+        {
+            SceneSpawnPoint[] matches = FindSpawnPoints(spawnPointId);
+            if (matches.Length == 0)
+            {
+                Debug.LogWarning(
+                    $"[SceneTravelService] Spawn point '{spawnPointId}' was not found in " +
+                    $"scene '{SceneManager.GetActiveScene().name}'. Keeping the authored Player position.");
+                return;
+            }
+
+            if (matches.Length > 1)
+            {
+                Debug.LogWarning(
+                    $"[SceneTravelService] Spawn point '{spawnPointId}' is ambiguous in " +
+                    $"scene '{SceneManager.GetActiveScene().name}' ({matches.Length} matches). " +
+                    "Keeping the authored Player position.");
+                return;
+            }
+
+            SceneSpawnPoint spawnPoint = matches[0];
+            string resolvedPlayerTag = string.IsNullOrWhiteSpace(targetPlayerTag) ? "Player" : targetPlayerTag;
+            GameObject player = GameObject.FindGameObjectWithTag(resolvedPlayerTag);
             if (player == null)
             {
-                Debug.LogWarning("[SceneTravelService] Player with tag 'Player' was not found.", this);
+                Debug.LogWarning(
+                    $"[SceneTravelService] Player with tag '{resolvedPlayerTag}' was not found in " +
+                    $"scene '{SceneManager.GetActiveScene().name}'.");
                 return;
             }
 
@@ -129,23 +127,24 @@ namespace Game.Story
             }
         }
 
-        private static SceneSpawnPoint FindSpawnPoint(string spawnPointId)
+        private static SceneSpawnPoint[] FindSpawnPoints(string spawnPointId)
         {
-            SceneSpawnPoint[] spawnPoints = Object.FindObjectsByType<SceneSpawnPoint>(FindObjectsSortMode.None);
-            for (int i = 0; i < spawnPoints.Length; i++)
-            {
-                SceneSpawnPoint spawnPoint = spawnPoints[i];
-                if (spawnPoint != null && spawnPoint.SpawnPointId == spawnPointId)
-                    return spawnPoint;
-            }
-
-            return null;
+            Scene activeScene = SceneManager.GetActiveScene();
+            return Object.FindObjectsByType<SceneSpawnPoint>(
+                    FindObjectsInactive.Include,
+                    FindObjectsSortMode.None)
+                .Where(spawnPoint =>
+                    spawnPoint != null &&
+                    spawnPoint.gameObject.scene == activeScene &&
+                    spawnPoint.SpawnPointId == spawnPointId)
+                .ToArray();
         }
 
-        private static void RestoreExplorationState()
+        private static void ClearPendingSpawn()
         {
-            if (GameStateMachine.Instance != null)
-                GameStateMachine.Instance.SetState(GameState.Exploration);
+            _pendingSpawnPointId = null;
+            _pendingPlayerTag = null;
+            _hasPendingSpawnPoint = false;
         }
     }
 }

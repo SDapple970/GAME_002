@@ -23,13 +23,19 @@ namespace Game.Core
 
         public void LoadScene(string sceneName)
         {
+            LoadScene(sceneName, null);
+        }
+
+        public void LoadScene(string sceneName, Action<bool> sceneLoaded)
+        {
             if (string.IsNullOrWhiteSpace(sceneName))
             {
                 Debug.LogWarning("[SceneFlowController] Scene name is empty.", this);
+                sceneLoaded?.Invoke(false);
                 return;
             }
 
-            StartCoroutine(Co_LoadScene(sceneName));
+            StartCoroutine(Co_LoadScene(sceneName, true, sceneLoaded));
         }
 
         public void LoadSceneForRestore(string sceneName, Action<bool> completed)
@@ -65,6 +71,8 @@ namespace Game.Core
             while (!operation.isDone)
                 yield return null;
 
+            completed?.Invoke(true);
+
             if (enterExploration)
             {
                 if (GameFlowController.Instance != null)
@@ -73,7 +81,6 @@ namespace Game.Core
                     GameStateMachine.Instance?.TrySetState(GameState.Exploration, nameof(SceneFlowController));
             }
 
-            completed?.Invoke(true);
         }
     }
 }
