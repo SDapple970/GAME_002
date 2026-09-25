@@ -5,7 +5,7 @@ using UnityEngine;
 namespace Game.Systems.Persona
 {
     /// <summary>Canonical save bridge for the separate social/persona progression domain.</summary>
-    public sealed class PersonaSaveAdapter : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class PersonaSaveAdapter : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         [SerializeField] private PersonaStatusManager personaStatusManager;
 
@@ -25,6 +25,14 @@ namespace Game.Systems.Persona
             if (persona == null || saveData?.progression?.personaStats == null) return;
             foreach (PersonaStatSaveData entry in saveData.progression.personaStats)
                 if (entry != null && Enum.TryParse(entry.stat, out PersonaStat stat)) persona.SetStat(stat, entry.level, entry.xp);
+        }
+
+        public void ResetForNewGame()
+        {
+            PersonaStatusManager persona = ResolvePersona();
+            if (persona == null) return;
+            foreach (PersonaStat stat in Enum.GetValues(typeof(PersonaStat)))
+                persona.SetStat(stat, 1, 0);
         }
 
         private PersonaStatusManager ResolvePersona()

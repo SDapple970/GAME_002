@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace Game.Daily
 {
-    public sealed class CalendarService : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class CalendarService : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         public static CalendarService Instance { get; private set; }
 
@@ -12,6 +12,10 @@ namespace Game.Daily
         [SerializeField] private int currentWeek = 1;
         [SerializeField] private string currentChapterId;
         [SerializeField] private DayPhase currentPhase = DayPhase.None;
+        private int _initialDay;
+        private int _initialWeek;
+        private string _initialChapterId;
+        private DayPhase _initialPhase;
 
         public int CurrentDay => currentDay;
         public int CurrentWeek => currentWeek;
@@ -30,6 +34,10 @@ namespace Game.Daily
             }
 
             Instance = this;
+            _initialDay = Mathf.Max(1, currentDay);
+            _initialWeek = Mathf.Max(1, currentWeek);
+            _initialChapterId = currentChapterId;
+            _initialPhase = currentPhase;
         }
 
         public void SetPhase(DayPhase nextPhase)
@@ -93,6 +101,14 @@ namespace Game.Daily
 
             if (Enum.TryParse(saveData.futureDaily.currentDayPhase, out DayPhase restoredPhase))
                 SetPhase(restoredPhase);
+        }
+
+        public void ResetForNewGame()
+        {
+            currentDay = _initialDay;
+            currentWeek = _initialWeek;
+            currentChapterId = _initialChapterId;
+            currentPhase = _initialPhase;
         }
     }
 }

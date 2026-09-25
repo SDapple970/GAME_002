@@ -34,7 +34,9 @@ namespace Game.Combat.Core
                     var enemy = session.Enemies[i];
                     if (enemy == null) continue;
 
-                    if (enemy.HP <= 0)
+                    int remainingHp = GetRemainingHp(session, enemy);
+                    result.RemainingHpByCombatantId[enemy.Id.Value] = remainingHp;
+                    if (remainingHp <= 0)
                         result.DefeatedEnemyIds.Add(enemy.Id.Value);
                 }
             }
@@ -46,12 +48,21 @@ namespace Game.Combat.Core
                     var ally = session.Allies[i];
                     if (ally == null) continue;
 
-                    if (ally.HP > 0)
+                    int remainingHp = GetRemainingHp(session, ally);
+                    result.RemainingHpByCombatantId[ally.Id.Value] = remainingHp;
+                    if (remainingHp > 0)
                         result.SurvivedAllyIds.Add(ally.Id.Value);
                 }
             }
 
             return result;
+        }
+
+        private static int GetRemainingHp(CombatSession session, ICombatant combatant)
+        {
+            return session.TryGetCombatState(combatant, out CombatantCombatState state)
+                ? state.CurrentHp
+                : combatant.HP;
         }
     }
 }

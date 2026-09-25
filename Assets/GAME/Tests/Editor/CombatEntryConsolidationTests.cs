@@ -441,8 +441,8 @@ namespace Game.Tests.Combat
             Assert.That(_entryPoint.StartCombat(CreateRequest(
                 new[] { CreateCombatant("Ally") },
                 new[] { enemyOne, enemyTwo })), Is.True);
-            enemyOne.GetComponent<CombatHpComponent>().HP = 0;
-            enemyTwo.GetComponent<CombatHpComponent>().HP = 0;
+            _entryPoint.ActiveSession.Enemies[0].ApplyDamage(int.MaxValue);
+            _entryPoint.ActiveSession.Enemies[1].ApplyDamage(int.MaxValue);
 
             InvokePrivate(_entryPoint, "ApplyCombatOutcomeToField", _entryPoint.ActiveSession);
 

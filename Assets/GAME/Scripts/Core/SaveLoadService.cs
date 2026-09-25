@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Game.NonCombat.Save;
 using Game.Story;
+using Game.Interaction;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -11,7 +12,7 @@ namespace Game.Core
 {
     public sealed class SaveLoadService : MonoBehaviour
     {
-        public enum OperationState { Idle, Capturing, Writing, Reading, Migrating, WaitingForScene, Restoring, Completed, Failed }
+        public enum OperationState { Idle, Capturing, Writing, Reading, Migrating, WaitingForScene, Restoring, Completed, Failed, ResettingForNewGame }
 
         public static SaveLoadService Instance { get; private set; }
         public event Action<bool, string> OnSaveCompleted;
@@ -51,6 +52,35 @@ namespace Game.Core
 
         public void Save() => TrySave(out _);
         public void Load() => TryLoad(out _);
+
+        public bool TryResetForNewGame(out string message)
+        {
+            GameStateMachine stateMachine = GameStateMachine.Instance;
+            if (_operationState != OperationState.Idle || stateMachine == null ||
+                stateMachine.Current != GameState.Title)
+            {
+                message = "New Game requires an idle SaveLoadService and the Title game state.";
+                return false;
+            }
+
+            _operationState = OperationState.ResettingForNewGame;
+            try
+            {
+                foreach (INewGameRuntimeReset owner in Discover<INewGameRuntimeReset>())
+                    owner.ResetForNewGame();
+
+                message = "New Game runtime state reset; existing save files were preserved.";
+                _operationState = OperationState.Idle;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                message = $"New Game runtime reset failed: {exception.Message}";
+                Debug.LogError($"[SaveLoadService] {message}", this);
+                _operationState = OperationState.Idle;
+                return false;
+            }
+        }
 
         public bool TrySave(out string message)
         {
@@ -197,6 +227,12 @@ namespace Game.Core
             List<T> result = new();
             foreach (MonoBehaviour item in ordered)
             {
+                if (item is InteractionRuntime interactionRuntime && interactionRuntime != InteractionRuntime.Instance)
+                {
+                    Debug.LogWarning($"[SaveLoadService] Non-owner InteractionRuntime ignored on '{item.name}'.");
+                    continue;
+                }
+
                 bool collectionParticipant = item.GetType().FullName != null && item.GetType().FullName.Contains("CombatEncounter");
                 if (!collectionParticipant && !claimedTypes.Add(item.GetType()))
                 {
@@ -226,13 +262,17 @@ namespace Game.Core
 
         private void CaptureLocation(GameSaveData data)
         {
-            SceneSpawnPoint[] points = FindObjectsByType<SceneSpawnPoint>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            Scene activeScene = SceneManager.GetActiveScene();
+            SceneSpawnPoint[] points = FindObjectsByType<SceneSpawnPoint>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .Where(point => point != null && point.gameObject.scene == activeScene && !string.IsNullOrWhiteSpace(point.SpawnPointId))
+                .ToArray();
             Transform target = ResolvePlayer();
             if (target == null) return;
             data.location.hasPositionFallback = true;
             data.location.positionX = target.position.x; data.location.positionY = target.position.y; data.location.positionZ = target.position.z;
-            SceneSpawnPoint nearest = points.Where(point => point != null && !string.IsNullOrWhiteSpace(point.SpawnPointId)).OrderBy(point => Vector3.SqrMagnitude(point.transform.position - target.position)).FirstOrDefault();
-            data.header.playerSpawnId = nearest != null && Vector3.SqrMagnitude(nearest.transform.position - target.position) <= 0.0625f
+            SceneSpawnPoint nearest = points.OrderBy(point => Vector3.SqrMagnitude(point.transform.position - target.position)).FirstOrDefault();
+            bool uniqueId = nearest != null && points.Count(point => point.SpawnPointId == nearest.SpawnPointId) == 1;
+            data.header.playerSpawnId = uniqueId && Vector3.SqrMagnitude(nearest.transform.position - target.position) <= 0.0625f
                 ? nearest.SpawnPointId
                 : string.Empty;
         }
@@ -240,9 +280,18 @@ namespace Game.Core
         private void RestoreLocation(GameSaveData data)
         {
             Transform target = ResolvePlayer(); if (target == null || data?.location == null) return;
-            SceneSpawnPoint point = FindObjectsByType<SceneSpawnPoint>(FindObjectsInactive.Include, FindObjectsSortMode.None).FirstOrDefault(item => item != null && item.SpawnPointId == data.header.playerSpawnId);
-            if (point != null) target.position = point.transform.position;
+            string spawnId = data.header?.playerSpawnId;
+            Scene activeScene = SceneManager.GetActiveScene();
+            SceneSpawnPoint[] matches = string.IsNullOrWhiteSpace(spawnId)
+                ? Array.Empty<SceneSpawnPoint>()
+                : FindObjectsByType<SceneSpawnPoint>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                    .Where(point => point != null && point.gameObject.scene == activeScene && point.SpawnPointId == spawnId)
+                    .Take(2)
+                    .ToArray();
+            if (matches.Length == 1) target.position = matches[0].transform.position;
             else if (data.location.hasPositionFallback) target.position = new Vector3(data.location.positionX, data.location.positionY, data.location.positionZ);
+            if (matches.Length > 1)
+                Debug.LogWarning($"[SaveLoadService] Spawn point '{spawnId}' is ambiguous in scene '{activeScene.name}'. Keeping the saved position fallback when available.", this);
             Rigidbody2D body = target.GetComponent<Rigidbody2D>(); if (body != null) { body.linearVelocity = Vector2.zero; body.angularVelocity = 0f; }
         }
 

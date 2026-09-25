@@ -7,6 +7,9 @@ namespace Game.Combat.Model
         private double _mpRecoveryRemainder;
 
         public ICombatant Combatant { get; }
+        public int CurrentHp { get; private set; }
+        public int MaxHp { get; }
+        public bool IsAlive => CurrentHp > 0;
         public int CurrentMp { get; private set; }
         public int MaxMp { get; private set; }
         public int CurrentPosture { get; private set; }
@@ -16,10 +19,28 @@ namespace Game.Combat.Model
         public CombatantCombatState(ICombatant combatant, CombatRuntimeConfig config)
         {
             Combatant = combatant ?? throw new ArgumentNullException(nameof(combatant));
+            MaxHp = Math.Max(0, combatant.MaxHP);
+            CurrentHp = Clamp(combatant.HP, MaxHp);
             MaxMp = config.MaxMp;
             CurrentMp = config.InitialMp;
             MaxPosture = config.MaxPosture;
             CurrentPosture = config.InitialPosture;
+        }
+
+        public void ApplyDamage(int amount)
+        {
+            if (amount <= 0)
+                return;
+
+            CurrentHp = Math.Max(0, CurrentHp - amount);
+        }
+
+        public void RestoreHp(int amount)
+        {
+            if (amount <= 0)
+                return;
+
+            CurrentHp = AddClamped(CurrentHp, amount, MaxHp);
         }
 
         public void SetMaxMp(int value)

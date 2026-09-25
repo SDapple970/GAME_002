@@ -20,6 +20,13 @@ namespace Game.UI.Editor
             "Assets/GAME/Scenes/Dungeon_Template.unity"
         };
 
+        private static readonly string[] ValidationScenes =
+        {
+            "Assets/GAME/Scenes/Dungeon 1.unity",
+            "Assets/GAME/Scenes/Dungeon_Template.unity",
+            "Assets/GAME/Scenes/Dungeon_1_Production.unity"
+        };
+
         [MenuItem("Tools/GAME/Validate Production UI Routing")]
         public static void ValidateMenu()
         {
@@ -55,7 +62,7 @@ namespace Game.UI.Editor
                     ValidateInteractionPrompt(prefabRoots.SingleOrDefault(), prefabPrompts[0], prefabPath, issues);
                 ValidateNarrativeCanvas(prefabRoots.SingleOrDefault(), prefab, prefabPath, issues);
             }
-            foreach (string path in ProductionScenes)
+            foreach (string path in ValidationScenes)
             {
                 if (!System.IO.File.Exists(path)) { issues.Add($"[Production UI] Missing scene: {path}"); continue; }
                 UnityEngine.SceneManagement.Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);

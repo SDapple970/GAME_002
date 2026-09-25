@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace Game.NonCombat.Party
 {
-    public sealed class PartyRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class PartyRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         public static PartyRuntime Instance { get; private set; }
         private readonly List<string> _members = new();
@@ -93,6 +93,14 @@ namespace Game.NonCombat.Party
                     string id = CharacterIdentity.Normalize(value);
                     if (id != null && _members.Contains(id)) AddUnique(_combatLineup, id);
                 }
+            Refreshed?.Invoke();
+        }
+
+        public void ResetForNewGame()
+        {
+            _members.Clear();
+            _combatLineup.Clear();
+            _leaderCharacterId = null;
             Refreshed?.Invoke();
         }
 

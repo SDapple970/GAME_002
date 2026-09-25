@@ -9,4 +9,9 @@ namespace Game.NonCombat.Save
     {
         void RestoreSaveData(GameSaveData saveData);
     }
+
+    public interface INewGameRuntimeReset
+    {
+        void ResetForNewGame();
+    }
 }

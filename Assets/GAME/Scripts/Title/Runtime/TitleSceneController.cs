@@ -3,7 +3,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using Game.Core;
-using Game.DemoMission.Runtime;
 
 namespace GAME.Title
 {
@@ -47,6 +46,10 @@ namespace GAME.Title
 
         private void Start()
         {
+            // The Title controller can outlive the scene's bootstrap root when that
+            // root contains duplicate persistent Core services. Reassert the Title
+            // state through the canonical flow owner on every Title scene entry.
+            GameFlowController.Instance?.RequestState(GameState.Title, nameof(TitleSceneController));
             InitializeState();
             SubscribeToLoadCompletion();
         }
@@ -195,8 +198,20 @@ namespace GAME.Title
             if (delay > 0f)
                 yield return new WaitForSecondsRealtime(delay);
 
-            if (DemoMissionRuntime.Instance != null)
-                DemoMissionRuntime.Instance.ResetMissionProgress();
+            SaveLoadService service = SaveLoadService.Instance;
+            if (service == null || SceneFlowController.Instance == null)
+            {
+                Debug.LogError("[TitleSceneController] New Game requires SaveLoadService and SceneFlowController.", this);
+                _transitioning = false;
+                yield break;
+            }
+
+            if (!service.TryResetForNewGame(out string message))
+            {
+                Debug.LogError($"[TitleSceneController] New Game failed: {message}", this);
+                _transitioning = false;
+                yield break;
+            }
 
             LoadDungeonScene(dungeonSceneName);
         }

@@ -19,5 +19,6 @@ namespace Game.Combat.Model
 
         public readonly List<int> DefeatedEnemyIds = new();
         public readonly List<int> SurvivedAllyIds = new();
+        public readonly Dictionary<int, int> RemainingHpByCombatantId = new();
     }
 }

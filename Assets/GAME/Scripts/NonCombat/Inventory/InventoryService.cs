@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Game.NonCombat.Inventory
 {
-    public sealed class InventoryService : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class InventoryService : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         public static InventoryService Instance { get; private set; }
 
@@ -102,6 +102,8 @@ namespace Game.NonCombat.Inventory
                 }
             Refreshed?.Invoke();
         }
+
+        public void ResetForNewGame() => ImportItems(null);
 
         public void CaptureSaveData(GameSaveData saveData)
         {

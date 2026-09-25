@@ -72,7 +72,6 @@ namespace Game.Tests.Combat
         {
             GameObject ally = CreateCombatant("Ally");
             GameObject enemy = CreateCombatant("Enemy");
-            CombatHpComponent enemyHp = enemy.GetComponent<CombatHpComponent>();
 
             List<GameState> enteredStates = new();
             _stateMachine.OnStateChanged += (_, next) => enteredStates.Add(next);
@@ -104,7 +103,7 @@ namespace Game.Tests.Combat
             _entryPoint.ActiveStateMachine.Tick();
             Assert.That(_stateMachine.Current, Is.EqualTo(GameState.CombatPlanning));
 
-            enemyHp.HP = 0;
+            _entryPoint.ActiveSession.Enemies[0].ApplyDamage(int.MaxValue);
             Assert.That(_entryPoint.SubmitCurrentTurn(), Is.True);
             _entryPoint.ActiveStateMachine.Tick();
             _entryPoint.ActiveStateMachine.Tick();

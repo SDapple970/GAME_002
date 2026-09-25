@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Game.NonCombat.Progress
 {
-    public sealed class CharacterProgressionService : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class CharacterProgressionService : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         private sealed class State { public int Level; public int Experience; public CharacterProgressionDefinitionSO Definition; }
 
@@ -104,6 +104,12 @@ namespace Game.NonCombat.Progress
                     _states[pair.Key] = new State { Definition = null, Level = Mathf.Max(1, pair.Value.level), Experience = Mathf.Max(0, pair.Value.experience) };
                 }
             }
+            Refreshed?.Invoke();
+        }
+
+        public void ResetForNewGame()
+        {
+            BuildAuthoredStates();
             Refreshed?.Invoke();
         }
 

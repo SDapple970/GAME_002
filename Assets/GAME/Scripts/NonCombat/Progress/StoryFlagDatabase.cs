@@ -4,7 +4,7 @@ using Game.NonCombat.Save;
 
 namespace Game.NonCombat.Progress
 {
-    public sealed class StoryFlagDatabase : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class StoryFlagDatabase : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         public static StoryFlagDatabase Instance { get; private set; }
 
@@ -48,6 +48,8 @@ namespace Game.NonCombat.Progress
                     _flags[pair.Key] = pair.Value;
             }
         }
+
+        public void ResetForNewGame() => ImportFlags(null);
 
         public void CaptureSaveData(GameSaveData saveData)
         {

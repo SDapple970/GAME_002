@@ -1,8 +1,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Game.Combat.Actions;
+using Game.Combat.Adapters;
 using Game.Combat.Core;
+using Game.Combat.Data;
 using Game.Combat.Integration;
+using Game.Combat.Model;
 using Game.Combat.UI;
 using Game.Core;
 using Game.Daily;
@@ -135,6 +139,61 @@ namespace Game.Tests.Integration
             Assert.That(fieldLock.FindProperty("behavioursToDisable").arraySize, Is.GreaterThanOrEqualTo(3));
             Assert.That(fieldLock.FindProperty("freezeBodies2D").arraySize, Is.GreaterThanOrEqualTo(1));
             Assert.That(fieldLock.FindProperty("disableColliders2D").arraySize, Is.GreaterThanOrEqualTo(1));
+        }
+
+        [TestCase(ProductionDungeon)]
+        [TestCase(DungeonTemplate)]
+        public void ProductionCombatRegistry_UsesUniqueCanonicalSkillIdsAndResolvesAuthoredLoadouts(string path)
+        {
+            Open(path);
+
+            CombatEntryPoint entryPoint = FindAll<CombatEntryPoint>().Single();
+            SerializedProperty definitionsProperty = new SerializedObject(entryPoint).FindProperty("skillDefinitions");
+            SkillDefinitionSO[] definitions = Enumerable.Range(0, definitionsProperty.arraySize)
+                .Select(index => definitionsProperty.GetArrayElementAtIndex(index).objectReferenceValue as SkillDefinitionSO)
+                .ToArray();
+
+            Assert.That(definitions, Has.None.Null, path);
+            int[] registeredIds = definitions.Select(definition => definition.skillId).ToArray();
+            Assert.That(registeredIds, Has.All.GreaterThan(0), path);
+            Assert.That(registeredIds, Is.EquivalentTo(new[] { 1, 2, 11, 12 }), path);
+            Assert.That(registeredIds.Distinct().Count(), Is.EqualTo(registeredIds.Length), path);
+
+            SkillDefinitionSO basicAttack = definitions.Single(definition => definition.skillId == 1);
+            Assert.That(AssetDatabase.GetAssetPath(basicAttack), Is.EqualTo(
+                "Assets/GAME/Data/Skill/Skill_BasicAttack.asset"), path);
+
+            foreach (CombatSkillLoadoutComponent loadout in FindAll<CombatSkillLoadoutComponent>())
+            {
+                Assert.That(loadout.SkillIds, Is.Not.Null, loadout.name);
+                Assert.That(loadout.SkillIds.All(registeredIds.Contains), Is.True,
+                    $"{path}: {loadout.name} contains a Skill ID that is absent from CombatEntryPoint.skillDefinitions.");
+            }
+        }
+
+        [Test]
+        public void SkillBook_DuplicateRegistrationIsRejectedWithoutOrderDependentOverwrite()
+        {
+            SkillDefinitionSO canonicalDefinition = AssetDatabase.LoadAssetAtPath<SkillDefinitionSO>(
+                "Assets/GAME/Data/Skill/Skill_BasicAttack.asset");
+            SkillDefinitionSO compatibilityDefinition = AssetDatabase.LoadAssetAtPath<SkillDefinitionSO>(
+                "Assets/GAME/Combat/Data/Skills/SO_Skill_BasicAttack.asset");
+            Assert.That(canonicalDefinition, Is.Not.Null);
+            Assert.That(compatibilityDefinition, Is.Not.Null);
+            Assert.That(canonicalDefinition.skillId, Is.EqualTo(compatibilityDefinition.skillId));
+
+            SoSkill canonicalSkill = new(canonicalDefinition);
+            SoSkill compatibilitySkill = new(compatibilityDefinition);
+
+            SkillBook canonicalFirst = new();
+            canonicalFirst.Register(canonicalSkill);
+            Assert.Throws<System.InvalidOperationException>(() => canonicalFirst.Register(compatibilitySkill));
+            Assert.That(canonicalFirst.Get(canonicalSkill.Id), Is.SameAs(canonicalSkill));
+
+            SkillBook compatibilityFirst = new();
+            compatibilityFirst.Register(compatibilitySkill);
+            Assert.Throws<System.InvalidOperationException>(() => compatibilityFirst.Register(canonicalSkill));
+            Assert.That(compatibilityFirst.Get(compatibilitySkill.Id), Is.SameAs(compatibilitySkill));
         }
 
         [Test]

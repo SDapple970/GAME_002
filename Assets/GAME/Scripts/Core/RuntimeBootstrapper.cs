@@ -106,7 +106,7 @@ namespace Game.Core
                 : ResolveInitialStateForScene(SceneManager.GetActiveScene().name);
         }
 
-        private static GameState ResolveInitialStateForScene(string sceneName)
+        internal static GameState ResolveInitialStateForScene(string sceneName)
         {
             if (string.IsNullOrWhiteSpace(sceneName))
                 return GameState.Exploration;

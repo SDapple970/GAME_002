@@ -708,6 +708,54 @@ namespace Game.Tests.Combat
             Assert.That(_world.OutcomeApplicationCount, Is.EqualTo(1));
         }
 
+        [TestCase(CombatEndReason.Defeat)]
+        [TestCase(CombatEndReason.Escape)]
+        [TestCase(CombatEndReason.Abort)]
+        public void NonVictoryCombatEnd_WritesRuntimeHpBackAtLifecycleBoundary(CombatEndReason reason)
+        {
+            SessionFixture fixture = CreateSessionFixture();
+            fixture.Session.InitializeCombatStates(CombatRuntimeConfig.Compatibility);
+            StartWorld(fixture.Session);
+
+            ICombatant player = fixture.Session.Allies[0];
+            ICombatant enemy = fixture.Session.Enemies[0];
+            CombatHpComponent playerHp = fixture.Player.GetComponent<CombatHpComponent>();
+            player.ApplyDamage(3);
+            enemy.ApplyDamage(4);
+
+            Assert.That(playerHp.HP, Is.EqualTo(10));
+            Assert.That(fixture.EnemyHp[0].HP, Is.EqualTo(10));
+
+            CombatResult result = CombatResultBuilder.Build(fixture.Session, reason);
+            EndWorld(result);
+
+            Assert.That(playerHp.HP, Is.EqualTo(7));
+            Assert.That(fixture.EnemyHp[0].HP, Is.EqualTo(6));
+            Assert.That(fixture.Player.activeSelf, Is.True);
+            Assert.That(fixture.Enemies[0].activeSelf, Is.True);
+        }
+
+        [Test]
+        public void Victory_WritesPlayerHpAndDefeatedEnemyHpBeforeWorldCleanup()
+        {
+            SessionFixture fixture = CreateSessionFixture();
+            fixture.Session.InitializeCombatStates(CombatRuntimeConfig.Compatibility);
+            StartWorld(fixture.Session);
+
+            ICombatant player = fixture.Session.Allies[0];
+            ICombatant enemy = fixture.Session.Enemies[0];
+            CombatHpComponent playerHp = fixture.Player.GetComponent<CombatHpComponent>();
+            player.ApplyDamage(3);
+            enemy.ApplyDamage(int.MaxValue);
+
+            CombatResult result = CombatResultBuilder.Build(fixture.Session, CombatEndReason.Victory);
+            EndWorld(result);
+
+            Assert.That(playerHp.HP, Is.EqualTo(7));
+            Assert.That(fixture.EnemyHp[0].HP, Is.Zero);
+            Assert.That(fixture.Enemies[0].activeSelf, Is.False);
+        }
+
         [Test]
         public void Victory_DoesNotClearUnrelatedEnemy()
         {

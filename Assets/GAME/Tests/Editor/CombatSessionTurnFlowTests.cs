@@ -917,13 +917,15 @@ namespace Game.Tests.Combat
             }
         }
 
-        private sealed class TestCombatant : ICombatant
+        private sealed class TestCombatant : ICombatant, ICombatantRuntimeStateBinding
         {
             private readonly List<ISkill> _skills = new();
+            private CombatantCombatState _runtimeState;
+            private int _hp;
 
             public CombatantId Id { get; }
             public Side Side { get; }
-            public int HP { get; private set; }
+            public int HP => _runtimeState != null ? _runtimeState.CurrentHp : _hp;
             public int MaxHP { get; }
             public KeywordMask Weakness { get; set; }
             public KeywordMask Resist { get; set; }
@@ -938,7 +940,7 @@ namespace Game.Tests.Combat
             {
                 Id = new CombatantId(id);
                 Side = side;
-                HP = hp;
+                _hp = hp;
                 MaxHP = hp;
             }
 
@@ -949,8 +951,15 @@ namespace Game.Tests.Combat
                 if (ThrowOnDamage)
                     throw new InvalidOperationException("Deterministic test damage failure.");
 
-                HP = Math.Max(0, HP - Math.Max(0, amount));
+                if (_runtimeState != null)
+                {
+                    _runtimeState.ApplyDamage(amount);
+                    return;
+                }
+
+                _hp = Math.Max(0, _hp - Math.Max(0, amount));
             }
+            void ICombatantRuntimeStateBinding.BindCombatState(CombatantCombatState state) => _runtimeState = state;
             public void AddStagger(int amount) => Stagger = Math.Min(StaggerMax, Stagger + Math.Max(0, amount));
             public void SetStunned(bool value) => IsStunned = value;
             public void ResetStaggerIfNeededOnStunEnd() => Stagger = 0;

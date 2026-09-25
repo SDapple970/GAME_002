@@ -5,12 +5,14 @@ using Game.NonCombat.Save;
 
 namespace Game.Story
 {
-    public sealed class StoryProgressManager : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class StoryProgressManager : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         public static StoryProgressManager Instance { get; private set; }
 
         [SerializeField] private int currentChapter = 1;
         [SerializeField] private int mainProgress = 0;
+        private int _initialChapter;
+        private int _initialMainProgress;
 
         private readonly HashSet<string> completedEventIds = new();
 
@@ -28,6 +30,8 @@ namespace Game.Story
             Instance = this;
             currentChapter = Mathf.Max(1, currentChapter);
             mainProgress = Mathf.Max(0, mainProgress);
+            _initialChapter = currentChapter;
+            _initialMainProgress = mainProgress;
             if (Application.isPlaying)
                 DontDestroyOnLoad(gameObject);
         }
@@ -86,6 +90,13 @@ namespace Game.Story
             if (saveData.story.completedEventIds == null) return;
             foreach (string id in saveData.story.completedEventIds)
                 if (!string.IsNullOrWhiteSpace(id)) completedEventIds.Add(id);
+        }
+
+        public void ResetForNewGame()
+        {
+            currentChapter = _initialChapter;
+            mainProgress = _initialMainProgress;
+            completedEventIds.Clear();
         }
     }
 }

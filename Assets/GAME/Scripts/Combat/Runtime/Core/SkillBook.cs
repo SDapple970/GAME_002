@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Game.Combat.Model;
 
@@ -9,7 +10,18 @@ namespace Game.Combat.Core
 
         public void Register(ISkill skill)
         {
-            _map[skill.Id.Value] = skill;
+            if (skill == null)
+                throw new ArgumentNullException(nameof(skill));
+
+            int skillId = skill.Id.Value;
+            if (_map.TryGetValue(skillId, out ISkill existing))
+            {
+                throw new InvalidOperationException(
+                    $"Skill ID {skillId} is already registered by '{existing.Name}'. " +
+                    $"Rejected duplicate '{skill.Name}'.");
+            }
+
+            _map.Add(skillId, skill);
         }
 
         public ISkill Get(SkillId id)

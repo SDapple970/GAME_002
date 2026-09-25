@@ -1,8 +1,12 @@
 #if UNITY_INCLUDE_TESTS
+using System.Collections.Generic;
+using Game.Combat.Actions;
 using Game.Combat.Adapters;
 using Game.Combat.Core;
+using Game.Combat.Data;
 using Game.Combat.Model;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace Game.Tests.Combat
 {
@@ -20,6 +24,104 @@ namespace Game.Tests.Combat
             Assert.That(state.MaxMp, Is.EqualTo(5));
             Assert.That(state.CurrentPosture, Is.Zero);
             Assert.That(state.MaxPosture, Is.Zero);
+        }
+
+        [Test]
+        public void FieldCombatant_SnapshotsHpAndIgnoresFieldMutationDuringCombat()
+        {
+            GameObject fieldObject = new GameObject("RuntimeStateFieldCombatant");
+            try
+            {
+                CombatHpComponent fieldHp = fieldObject.AddComponent<CombatHpComponent>();
+                fieldHp.MaxHP = 20;
+                fieldHp.HP = 15;
+                FieldCombatantAdapter combatant = new FieldCombatantAdapter(
+                    1,
+                    Side.Allies,
+                    fieldObject,
+                    HpAccessor.TryCreate(fieldObject),
+                    6);
+                CombatSession session = CreateSession(Side.Allies);
+                session.Allies.Add(combatant);
+                session.InitializeCombatStates(CombatRuntimeConfig.Compatibility);
+
+                CombatantCombatState state = session.GetCombatState(combatant);
+                fieldHp.HP = 3;
+                combatant.ApplyDamage(5);
+
+                Assert.That(state.MaxHp, Is.EqualTo(20));
+                Assert.That(state.CurrentHp, Is.EqualTo(10));
+                Assert.That(state.IsAlive, Is.True);
+                Assert.That(combatant.HP, Is.EqualTo(10));
+                Assert.That(fieldHp.HP, Is.EqualTo(3));
+            }
+            finally
+            {
+                Object.DestroyImmediate(fieldObject);
+            }
+        }
+
+        [Test]
+        public void SkillRunner_DamagesRuntimeStateWithoutMutatingFieldHp()
+        {
+            GameObject fieldObject = new GameObject("RuntimeStateSkillTarget");
+            try
+            {
+                CombatHpComponent fieldHp = fieldObject.AddComponent<CombatHpComponent>();
+                fieldHp.MaxHP = 10;
+                fieldHp.HP = 10;
+                FieldCombatantAdapter target = new FieldCombatantAdapter(
+                    100,
+                    Side.Enemies,
+                    fieldObject,
+                    HpAccessor.TryCreate(fieldObject),
+                    8);
+                DummyCombatant actor = CreateCombatant(1, Side.Allies);
+                RuntimeStateSkill skill = new RuntimeStateSkill(4);
+                actor.AddSkill(skill);
+
+                CombatSession session = CreateSession(Side.Allies);
+                session.Allies.Add(actor);
+                session.Enemies.Add(target);
+                session.InitializeCombatStates(CombatRuntimeConfig.Compatibility);
+                CombatSkillExecutionRequest request = new CombatSkillExecutionRequest(
+                    actor,
+                    skill,
+                    new List<ICombatant> { target },
+                    target,
+                    CombatClashOutcome.AttackerWin);
+
+                Assert.That(SkillRunner.TryExecute(session, request, out CombatSkillExecutionResult result), Is.True);
+                Assert.That(result.TargetResults[0].HpBefore, Is.EqualTo(10));
+                Assert.That(result.TargetResults[0].HpAfter, Is.EqualTo(6));
+                Assert.That(session.GetCombatState(target).CurrentHp, Is.EqualTo(6));
+                Assert.That(fieldHp.HP, Is.EqualTo(10));
+            }
+            finally
+            {
+                Object.DestroyImmediate(fieldObject);
+            }
+        }
+
+        [Test]
+        public void ResultBuilder_UsesRuntimeHpForDeathAndWritebackSnapshot()
+        {
+            CombatSession session = CreateSession(Side.Allies);
+            DummyCombatant ally = CreateCombatant(1, Side.Allies);
+            DummyCombatant enemy = CreateCombatant(100, Side.Enemies);
+            session.Allies.Add(ally);
+            session.Enemies.Add(enemy);
+            session.InitializeCombatStates(CombatRuntimeConfig.Compatibility);
+
+            enemy.ApplyDamage(int.MaxValue);
+            CombatResult result = CombatResultBuilder.Build(session, CombatEndReason.Victory);
+
+            Assert.That(session.GetCombatState(enemy).CurrentHp, Is.Zero);
+            Assert.That(session.GetCombatState(enemy).IsAlive, Is.False);
+            Assert.That(result.DefeatedEnemyIds, Does.Contain(100));
+            Assert.That(result.SurvivedAllyIds, Does.Contain(1));
+            Assert.That(result.RemainingHpByCombatantId[100], Is.Zero);
+            Assert.That(result.RemainingHpByCombatantId[1], Is.EqualTo(10));
         }
 
         [Test]
@@ -182,6 +284,30 @@ namespace Game.Tests.Combat
                 session.Allies.Add(CreateCombatant(1, Side.Allies));
                 session.Allies.Add(CreateCombatant(2, Side.Allies));
                 session.Enemies.Add(CreateCombatant(100, Side.Enemies));
+            }
+        }
+
+        private sealed class RuntimeStateSkill : ISkill
+        {
+            public SkillId Id { get; } = new SkillId(777);
+            public string Name => "Runtime State Test";
+            public int InspirationCost => 0;
+            public KeywordMask Keywords => KeywordMask.None;
+            public SkillTag Tag => SkillTag.Attack;
+            public TargetingRule Targeting => TargetingRule.SingleEnemy;
+            public SkillMovementMode MovementMode => SkillMovementMode.None;
+            public float DesiredTargetDistance => 0f;
+            public float MoveSpeed => 0f;
+            public float ActionDelayAfterMove => 0f;
+            public int BaseDamage { get; }
+            public int BaseStagger => 0;
+            public int WeaknessStaggerBonus => 0;
+            public int Speed => 0;
+            public bool ConsumesTurn => true;
+
+            public RuntimeStateSkill(int baseDamage)
+            {
+                BaseDamage = baseDamage;
             }
         }
     }

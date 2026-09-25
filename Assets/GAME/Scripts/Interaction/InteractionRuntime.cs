@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Game.Interaction
 {
-    public sealed class InteractionRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class InteractionRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         public static InteractionRuntime Instance { get; private set; }
 
@@ -165,6 +165,8 @@ namespace Game.Interaction
 
             StateRestored?.Invoke();
         }
+
+        public void ResetForNewGame() => RestoreSaveData(null);
 
         internal void ResetSessionForTests()
         {

@@ -71,14 +71,22 @@ namespace Game.Core
             while (!operation.isDone)
                 yield return null;
 
+            // Allow scene Awake/Start work to register scene-authored restore
+            // participants before the completion callback runs.
+            yield return null;
+
             completed?.Invoke(true);
 
-            if (enterExploration)
+            // A scene whose bootstrap root is removed together with duplicate Core
+            // services still needs the same initial-state policy as RuntimeBootstrapper.
+            // In particular, loading Title must not be forced into Exploration.
+            if (enterExploration && GameStateMachine.Instance?.Current == GameState.Loading)
             {
+                GameState initialState = RuntimeBootstrapper.ResolveInitialStateForScene(sceneName);
                 if (GameFlowController.Instance != null)
-                    GameFlowController.Instance.EnterExploration();
+                    GameFlowController.Instance.RequestState(initialState, nameof(SceneFlowController));
                 else
-                    GameStateMachine.Instance?.TrySetState(GameState.Exploration, nameof(SceneFlowController));
+                    GameStateMachine.Instance?.TrySetState(initialState, nameof(SceneFlowController));
             }
 
         }

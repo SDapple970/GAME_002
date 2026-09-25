@@ -90,6 +90,18 @@ namespace Game.UI
                     if (logWarnings) WarnOnce(names[i] + ":duplicate", $"[GameUIRootController] {first} and {names[i]} reference the same incompatible global root '{root.name}'.");
                 }
                 else assigned.Add(root, names[i]);
+
+                for (int j = 0; j < i; j++)
+                {
+                    GameObject other = roots[j];
+                    if (other == null || other == root) continue;
+                    if (!root.transform.IsChildOf(other.transform) && !other.transform.IsChildOf(root.transform)) continue;
+
+                    valid = false;
+                    if (logWarnings)
+                        WarnOnce(names[i] + ":nested:" + names[j],
+                            $"[GameUIRootController] {names[j]} and {names[i]} are nested global roots and cannot be routed independently.");
+                }
             }
             return valid;
         }

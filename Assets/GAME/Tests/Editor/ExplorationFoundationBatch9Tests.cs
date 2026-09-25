@@ -9,8 +9,13 @@ namespace Game.Tests.Integration
 {
     public sealed class ExplorationFoundationBatch9Tests
     {
+        [SetUp]
+        public void SetUp() => DestroyFixtureServices();
+
         [TearDown]
-        public void TearDown()
+        public void TearDown() => DestroyFixtureServices();
+
+        private static void DestroyFixtureServices()
         {
             foreach (MonoBehaviour item in Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 if (item is ExplorationResourceRuntime || item is PersistentConditionRuntime || item is FeastService || item is InventoryService)
@@ -103,7 +108,14 @@ namespace Game.Tests.Integration
             Object.DestroyImmediate(catalog); Object.DestroyImmediate(definition);
         }
 
-        private static T New<T>() where T : MonoBehaviour => new GameObject(typeof(T).Name).AddComponent<T>();
+        private static T New<T>() where T : MonoBehaviour
+        {
+            T component = new GameObject(typeof(T).Name).AddComponent<T>();
+            MethodInfo awake = typeof(T).GetMethod("Awake", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(awake, Is.Not.Null, $"Missing Unity lifecycle method {typeof(T).Name}.Awake");
+            awake.Invoke(component, null);
+            return component;
+        }
 
         private static void InvokeNormalize(GameSaveData data)
         {

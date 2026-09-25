@@ -224,12 +224,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Player.PlayerFieldAttackController
   animationController: {fileID: 0}
-  attackOrigin: {fileID: 0}
+  attackOrigin: {fileID: 6259194885021415050}
   hitBoxSize: {x: 1.2, y: 0.8}
   hitBoxOffset: {x: 0, y: 0}
   targetMask:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 128
   hitDelay: 0.12
   cooldown: 0.35
   entryPoint: {fileID: 0}

@@ -6,7 +6,7 @@ using UnityEngine;
 namespace Game.Quest
 {
     [DisallowMultipleComponent]
-    public sealed class QuestCalendarIntegration : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class QuestCalendarIntegration : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         private static readonly Dictionary<int, QuestCalendarIntegration> OwnersByRuntimeId = new();
 
@@ -92,6 +92,8 @@ namespace Game.Quest
                     _appliedQuestIds.Add(questId.Trim());
             }
         }
+
+        public void ResetForNewGame() => _appliedQuestIds.Clear();
 
         private void ResolveReferences()
         {

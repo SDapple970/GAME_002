@@ -8,12 +8,13 @@ using UnityEngine;
 
 namespace Game.Quest
 {
-    public sealed class QuestRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class QuestRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         [SerializeField] private MissionManager missionManager;
         [SerializeField] private QuestDefinitionSO[] questDefinitions;
 
         private readonly Dictionary<string, RuntimeQuestState> _runtimeByQuestId = new();
+        private readonly HashSet<string> _ambiguousSerializedDefinitionIds = new(StringComparer.Ordinal);
         private bool _missingPersistentEventIdWarned;
 
         public event Action<string> OnQuestStarted;
@@ -47,7 +48,15 @@ namespace Game.Quest
                 return;
             }
 
-            string questId = GetQuestId(definition);
+            string questId = NormalizeId(definition.QuestId);
+            if (string.IsNullOrWhiteSpace(questId))
+            {
+                Debug.LogError(
+                    $"[QuestRuntime] StartQuest ignored because QuestDefinitionSO '{definition.name}' has an empty questId.",
+                    this);
+                return;
+            }
+
             RuntimeQuestState state = GetOrCreateState(questId, definition);
             state.Definition = definition;
             state.NormalizeRestoredGroup();
@@ -384,10 +393,12 @@ namespace Game.Quest
 
         public bool TryGetDefinition(string questId, out QuestDefinitionSO definition)
         {
-            definition = FindDefinition(questId);
+            string normalizedQuestId = NormalizeId(questId);
+            definition = FindDefinition(normalizedQuestId);
             if (definition == null &&
-                !string.IsNullOrWhiteSpace(questId) &&
-                _runtimeByQuestId.TryGetValue(questId, out RuntimeQuestState state))
+                !_ambiguousSerializedDefinitionIds.Contains(normalizedQuestId) &&
+                !string.IsNullOrWhiteSpace(normalizedQuestId) &&
+                _runtimeByQuestId.TryGetValue(normalizedQuestId, out RuntimeQuestState state))
             {
                 definition = state.Definition;
             }
@@ -484,6 +495,16 @@ namespace Game.Quest
 
         public void RestoreSaveData(GameSaveData saveData)
         {
+            // Dynamically started quests can be authored by the current scene rather than
+            // the serialized definition list. Keep their definitions only long enough to
+            // rebuild quest IDs that are actually present in the authoritative snapshot.
+            Dictionary<string, QuestDefinitionSO> definitionsBeforeRestore = new(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, RuntimeQuestState> entry in _runtimeByQuestId)
+            {
+                if (entry.Value?.Definition != null)
+                    definitionsBeforeRestore[entry.Key] = entry.Value.Definition;
+            }
+
             // A load snapshot is authoritative. Clear pre-load state first so loading an
             // older or payload-less save cannot retain an active/completed quest from the
             // current session. Re-register authored definitions as inactive defaults.
@@ -503,7 +524,22 @@ namespace Game.Quest
                 if (questState == null || string.IsNullOrWhiteSpace(questState.questId))
                     continue;
 
-                RuntimeQuestState state = GetOrCreateState(questState.questId, FindDefinition(questState.questId));
+                string questId = NormalizeId(questState.questId);
+                QuestDefinitionSO definition = FindDefinition(questId);
+                if (definition == null && !_ambiguousSerializedDefinitionIds.Contains(questId))
+                    definitionsBeforeRestore.TryGetValue(questState.questId, out definition);
+
+                if (definition == null)
+                {
+                    string resolution = _ambiguousSerializedDefinitionIds.Contains(questId)
+                        ? "multiple serialized definitions use this ID"
+                        : "no serialized definition is registered for this ID";
+                    Debug.LogWarning(
+                        $"[QuestRuntime] Saved quest definition could not be resolved. questId='{questState.questId}', reason={resolution}.",
+                        this);
+                }
+
+                RuntimeQuestState state = GetOrCreateState(questState.questId, definition);
                 state.Status = TryParseStatus(questState.status, out QuestStatus status)
                     ? status
                     : questState.completed
@@ -523,6 +559,14 @@ namespace Game.Quest
                 state.NormalizeRestoredGroup();
             }
 
+            OnStateRestored?.Invoke();
+        }
+
+        public void ResetForNewGame()
+        {
+            _runtimeByQuestId.Clear();
+            _missingPersistentEventIdWarned = false;
+            RegisterSerializedDefinitions();
             OnStateRestored?.Invoke();
         }
 
@@ -583,14 +627,36 @@ namespace Game.Quest
 
         private void RegisterSerializedDefinitions()
         {
+            _ambiguousSerializedDefinitionIds.Clear();
             if (questDefinitions == null)
                 return;
 
+            HashSet<string> registeredQuestIds = new(StringComparer.Ordinal);
             for (int i = 0; i < questDefinitions.Length; i++)
             {
                 QuestDefinitionSO definition = questDefinitions[i];
-                if (definition != null)
-                    GetOrCreateState(GetQuestId(definition), definition);
+                if (definition == null)
+                    continue;
+
+                string questId = NormalizeId(definition.QuestId);
+                if (string.IsNullOrWhiteSpace(questId))
+                {
+                    Debug.LogError(
+                        $"[QuestRuntime] Serialized QuestDefinitionSO '{definition.name}' has an empty questId and cannot resolve saved state.",
+                        this);
+                    continue;
+                }
+
+                if (!registeredQuestIds.Add(questId))
+                {
+                    _ambiguousSerializedDefinitionIds.Add(questId);
+                    Debug.LogError(
+                        $"[QuestRuntime] Duplicate serialized QuestDefinitionSO questId '{questId}' cannot resolve saved state deterministically.",
+                        this);
+                    continue;
+                }
+
+                GetOrCreateState(questId, definition);
             }
         }
 
@@ -615,13 +681,15 @@ namespace Game.Quest
 
         private QuestDefinitionSO FindDefinition(string questId)
         {
-            if (questDefinitions == null)
+            if (string.IsNullOrWhiteSpace(questId) ||
+                _ambiguousSerializedDefinitionIds.Contains(questId) ||
+                questDefinitions == null)
                 return null;
 
             for (int i = 0; i < questDefinitions.Length; i++)
             {
                 QuestDefinitionSO definition = questDefinitions[i];
-                if (definition != null && GetQuestId(definition) == questId)
+                if (definition != null && NormalizeId(definition.QuestId) == questId)
                     return definition;
             }
 
@@ -633,9 +701,7 @@ namespace Game.Quest
             if (definition == null)
                 return string.Empty;
 
-            return !string.IsNullOrWhiteSpace(definition.QuestId)
-                ? definition.QuestId
-                : definition.name;
+            return NormalizeId(definition.QuestId);
         }
 
         private sealed class RuntimeQuestState

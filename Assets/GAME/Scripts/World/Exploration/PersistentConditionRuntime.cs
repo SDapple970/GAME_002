@@ -26,7 +26,7 @@ namespace Game.World.Exploration
         public bool Acquired { get; }
     }
 
-    public sealed class PersistentConditionRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class PersistentConditionRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         public static PersistentConditionRuntime Instance { get; private set; }
         private readonly Dictionary<string, HashSet<string>> _diseases = new(StringComparer.Ordinal);
@@ -114,6 +114,8 @@ namespace Game.World.Exploration
                 }
             Refreshed?.Invoke();
         }
+
+        public void ResetForNewGame() => RestoreSaveData(null);
 
         private Dictionary<string, HashSet<string>> GetSource(PersistentConditionCategory category) =>
             category == PersistentConditionCategory.Quirk ? _quirks : _diseases;

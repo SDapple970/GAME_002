@@ -4,10 +4,11 @@ using UnityEngine;
 
 namespace Game.NonCombat.Inventory
 {
-    public sealed class CurrencyWallet : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class CurrencyWallet : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         public static CurrencyWallet Instance { get; private set; }
         [SerializeField] private int gold;
+        private int _initialGold;
 
         public int Gold => gold;
         public event Action<CurrencyMutationResult> Changed;
@@ -20,6 +21,7 @@ namespace Game.NonCombat.Inventory
         {
             if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
+            _initialGold = Mathf.Max(0, gold);
             if (Application.isPlaying) DontDestroyOnLoad(gameObject);
         }
         private void OnDestroy() { if (Instance == this) Instance = null; }
@@ -62,6 +64,12 @@ namespace Game.NonCombat.Inventory
             int previous = gold;
             gold = next;
             Changed?.Invoke(new CurrencyMutationResult(next - previous, next - previous, gold, CurrencyMutationStatus.Success));
+        }
+
+        public void ResetForNewGame()
+        {
+            gold = _initialGold;
+            Refreshed?.Invoke();
         }
 
         public void CaptureSaveData(GameSaveData saveData) { if (saveData == null) return; saveData.currency ??= new CurrencySaveData(); saveData.currency.gold = gold; }

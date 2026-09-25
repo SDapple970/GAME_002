@@ -2505,7 +2505,7 @@ namespace Game.Tests.Combat
             Assert.That(policy.CallCount, Is.EqualTo(1));
 
             SetPhase(fixture.StateMachine, Phase.EnterCombat);
-            SetCombatantHp(fixture.Enemy, fixture.Enemy.MaxHP);
+            fixture.Session.GetCombatState(fixture.Enemy).RestoreHp(fixture.Enemy.MaxHP);
             Assert.That(fixture.StateMachine.EnterStandoff(), Is.True);
             Assert.That(fixture.Session.ExchangeState.IsTerminalDecisionPrepared, Is.False);
             Assert.That(fixture.Session.ExchangeState.CurrentTerminalDecision, Is.Null);
@@ -2779,15 +2779,6 @@ namespace Game.Tests.Combat
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             Assert.That(property, Is.Not.Null);
             property.SetValue(stateMachine, phase);
-        }
-
-        private static void SetCombatantHp(DummyCombatant combatant, int hp)
-        {
-            PropertyInfo property = typeof(DummyCombatant).GetProperty(
-                nameof(DummyCombatant.HP),
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            Assert.That(property, Is.Not.Null);
-            property.SetValue(combatant, hp);
         }
 
         private static void SetCurrentTurn(CombatSession session, CombatTurn turn)

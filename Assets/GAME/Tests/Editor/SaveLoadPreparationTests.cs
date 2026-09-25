@@ -3,12 +3,20 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using Game.Common.Identity;
+using Game.Combat.Integration;
 using Game.Core;
+using Game.Daily;
+using Game.Interaction;
 using Game.NonCombat.Inventory;
+using Game.NonCombat.Party;
+using Game.NonCombat.Progress;
 using Game.NonCombat.Save;
 using Game.Quest;
 using Game.Reward;
 using Game.Story;
+using Game.Supply;
+using Game.Systems.Persona;
+using Game.World.Exploration;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -60,6 +68,84 @@ namespace Game.Tests.Integration
             Assert.That(restored.header.formatId, Is.EqualTo(GameSaveDataFormat.FormatId));
             Assert.That(restored.header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion));
             Assert.That(restored.currency.gold, Is.EqualTo(42));
+        }
+
+        [Test]
+        public void DuplicateSpawnId_CapturesAndRestoresSavedPositionInsteadOfArbitraryMarker()
+        {
+            string spawnId = "save-duplicate-" + Guid.NewGuid().ToString("N");
+            GameObject player = new("SavedPositionPlayer");
+            GameObject first = new("FirstSpawn");
+            GameObject second = new("SecondSpawn");
+            try
+            {
+                player.transform.position = new Vector3(2f, 3f, 0f);
+                Rigidbody2D body = player.AddComponent<Rigidbody2D>();
+                first.transform.position = player.transform.position;
+                second.transform.position = new Vector3(-4f, 1f, 0f);
+                SetField(first.AddComponent<SceneSpawnPoint>(), "spawnPointId", spawnId);
+                SetField(second.AddComponent<SceneSpawnPoint>(), "spawnPointId", spawnId);
+                SetField(_service, "player", player.transform);
+
+                GameSaveData save = new();
+                Invoke(_service, "CaptureLocation", save);
+                Assert.That(save.location.hasPositionFallback, Is.True);
+                Assert.That(save.header.playerSpawnId, Is.Empty);
+
+                // Older saves can still contain an ambiguous marker ID.
+                save.header.playerSpawnId = spawnId;
+                save.location.positionX = 9f;
+                save.location.positionY = -2f;
+                player.transform.position = Vector3.zero;
+                body.linearVelocity = new Vector2(7f, -3f);
+                UnityEngine.TestTools.LogAssert.Expect(
+                    LogType.Warning,
+                    new System.Text.RegularExpressions.Regex("Spawn point .* is ambiguous"));
+                Invoke(_service, "RestoreLocation", save);
+
+                Assert.That(player.transform.position, Is.EqualTo(new Vector3(9f, -2f, 0f)));
+                Assert.That(body.linearVelocity, Is.EqualTo(Vector2.zero));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(second);
+                UnityEngine.Object.DestroyImmediate(first);
+                UnityEngine.Object.DestroyImmediate(player);
+            }
+        }
+
+        [Test]
+        public void UniqueSavedSpawnId_RestoresMarkerAndMissingIdUsesSavedPosition()
+        {
+            string spawnId = "save-unique-" + Guid.NewGuid().ToString("N");
+            GameObject player = new("UniqueSpawnPlayer");
+            GameObject marker = new("UniqueSpawn");
+            try
+            {
+                marker.transform.position = new Vector3(4f, 5f, 0f);
+                SetField(marker.AddComponent<SceneSpawnPoint>(), "spawnPointId", spawnId);
+                SetField(_service, "player", player.transform);
+
+                GameSaveData save = new();
+                save.header.playerSpawnId = spawnId;
+                save.location.hasPositionFallback = true;
+                save.location.positionX = -3f;
+                save.location.positionY = 2f;
+
+                Invoke(_service, "RestoreLocation", save);
+                Assert.That(player.transform.position, Is.EqualTo(marker.transform.position));
+
+                save.header.playerSpawnId = "missing-" + spawnId;
+                Invoke(_service, "RestoreLocation", save);
+                Assert.That(player.transform.position, Is.EqualTo(new Vector3(-3f, 2f, 0f)));
+                Invoke(_service, "RestoreLocation", save);
+                Assert.That(player.transform.position, Is.EqualTo(new Vector3(-3f, 2f, 0f)));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(marker);
+                UnityEngine.Object.DestroyImmediate(player);
+            }
         }
 
         [TestCase(GameplayOutcomeSourceType.Unknown)]
@@ -154,6 +240,47 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void SaveEligibility_AllowsExplorationAndItsPauseOnly()
+        {
+            GameStateMachine stateMachine = new GameObject("SaveEligibilityState").AddComponent<GameStateMachine>();
+            Invoke(stateMachine, "Awake");
+            Assert.That(_service.CanSave, Is.True);
+
+            Assert.That(stateMachine.TrySetState(GameState.Paused, "exploration pause"), Is.True);
+            Assert.That(_service.CanSave, Is.True);
+            Assert.That(stateMachine.TrySetState(GameState.Exploration, "resume"), Is.True);
+
+            foreach (GameState blocked in new[]
+            {
+                GameState.Dialogue, GameState.Choice, GameState.CombatTransition,
+                GameState.CombatPlanning, GameState.CombatResolving, GameState.Reward,
+                GameState.Cutscene, GameState.Loading, GameState.UIOnly, GameState.Title
+            })
+            {
+                if (blocked == GameState.Choice)
+                    Assert.That(stateMachine.TrySetState(GameState.Dialogue, "choice setup"), Is.True);
+                else if (blocked == GameState.CombatPlanning)
+                    Assert.That(stateMachine.TrySetState(GameState.CombatTransition, "combat setup"), Is.True);
+                else if (blocked == GameState.CombatResolving)
+                {
+                    Assert.That(stateMachine.TrySetState(GameState.CombatTransition, "combat setup"), Is.True);
+                    Assert.That(stateMachine.TrySetState(GameState.CombatPlanning, "resolving setup"), Is.True);
+                }
+
+                Assert.That(stateMachine.TrySetState(blocked, "save eligibility"), Is.True, blocked.ToString());
+                Assert.That(_service.CanSave, Is.False, blocked.ToString());
+                if (blocked == GameState.Dialogue)
+                {
+                    Assert.That(stateMachine.TrySetState(GameState.Paused, "dialogue pause"), Is.True);
+                    Assert.That(_service.CanSave, Is.False);
+                }
+                if (blocked == GameState.CombatTransition)
+                    Assert.That(stateMachine.TrySetState(GameState.CombatPlanning, "combat exit setup"), Is.True);
+                Assert.That(stateMachine.TrySetState(GameState.Exploration, "reset eligibility"), Is.True);
+            }
+        }
+
+        [Test]
         public void ProductionSaveUx_DelegatesToCanonicalOwnersWithoutDirectStorageOrNewGameFlow()
         {
             string pauseSource = File.ReadAllText(ProjectPath("Assets/GAME/Scripts/UI/PauseSavePanel.cs"));
@@ -169,6 +296,358 @@ namespace Game.Tests.Integration
             Assert.That(continueMethod, Does.Not.Contain("ResetMissionProgress"));
             Assert.That(continueMethod, Does.Not.Contain("SceneManager"));
             Assert.That(titleSource, Does.Contain("continueButton.interactable = !_transitioning && service != null && service.CanLoad"));
+        }
+
+        [Test]
+        public void TitleNewGame_DelegatesRuntimeResetWithoutDeletingSaveOrResettingFeaturesDirectly()
+        {
+            string titleSource = File.ReadAllText(ProjectPath("Assets/GAME/Scripts/Title/Runtime/TitleSceneController.cs"));
+            Assert.That(titleSource, Does.Contain("service.TryResetForNewGame(out string message)"));
+            Assert.That(titleSource, Does.Contain("sceneFlow.LoadScene(sceneName)"));
+            Assert.That(titleSource, Does.Not.Contain("ResetMissionProgress"));
+            Assert.That(titleSource, Does.Not.Contain("File.Delete"));
+        }
+
+        [Test]
+        public void NewGameReset_PreservesSaveFileAndRestoresOldTimelineAfterReset()
+        {
+            CharacterProgressionDefinitionSO progressionDefinition = ScriptableObject.CreateInstance<CharacterProgressionDefinitionSO>();
+            QuestDefinitionSO questDefinition = ScriptableObject.CreateInstance<QuestDefinitionSO>();
+            try
+            {
+                SetField(progressionDefinition, "characterId", "hero");
+                SetField(progressionDefinition, "maximumLevel", 3);
+                SetField(progressionDefinition, "experienceRequiredByLevel", new[] { 10, 20 });
+                SetField(questDefinition, "questId", "quest.newgame");
+
+                GameStateMachine state = new GameObject("GameStateMachine").AddComponent<GameStateMachine>();
+                Invoke(state, "Awake");
+                GameFlowController flow = new GameObject("GameFlowController").AddComponent<GameFlowController>();
+                Invoke(flow, "Awake");
+                CurrencyWallet wallet = new GameObject("CurrencyWallet").AddComponent<CurrencyWallet>();
+                Invoke(wallet, "Awake");
+                InventoryService inventory = new GameObject("InventoryService").AddComponent<InventoryService>();
+                PartyRuntime party = new GameObject("PartyRuntime").AddComponent<PartyRuntime>();
+                CharacterProgressionService progression = new GameObject("CharacterProgressionService").AddComponent<CharacterProgressionService>();
+                Invoke(progression, "ConfigureForTests", "hero", new[] { progressionDefinition });
+                PersonaStatusManager persona = new GameObject("PersonaStatusManager").AddComponent<PersonaStatusManager>();
+                new GameObject("PersonaSaveAdapter").AddComponent<PersonaSaveAdapter>();
+                StoryProgressManager story = new GameObject("StoryProgressManager").AddComponent<StoryProgressManager>();
+                Invoke(story, "Awake");
+                StoryFlagDatabase flags = new GameObject("StoryFlagDatabase").AddComponent<StoryFlagDatabase>();
+                QuestRuntime quest = new GameObject("QuestRuntime").AddComponent<QuestRuntime>();
+                SetField(quest, "questDefinitions", new[] { questDefinition });
+                Invoke(quest, "Awake");
+                CalendarService calendar = new GameObject("CalendarService").AddComponent<CalendarService>();
+                Invoke(calendar, "Awake");
+                QuestCalendarIntegration questCalendar = new GameObject("QuestCalendarIntegration").AddComponent<QuestCalendarIntegration>();
+                DaySettlementFlow settlement = new GameObject("DaySettlementFlow").AddComponent<DaySettlementFlow>();
+                RewardService rewards = new GameObject("RewardService").AddComponent<RewardService>();
+                SetField(rewards, "currencyWallet", wallet);
+                SetField(rewards, "inventoryService", inventory);
+                InteractionRuntime interaction = new GameObject("InteractionRuntime").AddComponent<InteractionRuntime>();
+                Invoke(interaction, "Awake");
+                ExplorationResourceRuntime resources = new GameObject("ExplorationResourceRuntime").AddComponent<ExplorationResourceRuntime>();
+                PersistentConditionRuntime conditions = new GameObject("PersistentConditionRuntime").AddComponent<PersistentConditionRuntime>();
+                SupplyLoadoutService supply = new GameObject("SupplyLoadoutService").AddComponent<SupplyLoadoutService>();
+                Invoke(supply, "Awake");
+                CombatEncounterGroup oldEncounter = new GameObject("OldEncounter").AddComponent<CombatEncounterGroup>();
+                SetField(oldEncounter, "encounterId", "encounter.once");
+
+                wallet.SetGold(12);
+                inventory.AddItem("potion", 2);
+                party.AddMember("hero");
+                Assert.That(progression.ApplyExperience("hero", 15).AppliedExperience, Is.EqualTo(15));
+                persona.SetStat(PersonaStat.Courage, 3, 4);
+                story.SetChapter(2);
+                story.SetMainProgress(7);
+                story.MarkEventCompleted("story.event");
+                flags.SetFlag("story.flag", true);
+                quest.StartQuest(questDefinition);
+                GameSaveData questSeed = new();
+                quest.CaptureSaveData(questSeed);
+                questSeed.quest.quests.Single(item => item.questId == "quest.newgame").processedEventIds.Add("quest.event");
+                quest.RestoreSaveData(questSeed);
+                Assert.That(calendar.TryAdvanceDays(2), Is.True);
+                GameSaveData dailySeed = new();
+                dailySeed.futureDaily.appliedQuestDayCostIds.Add("quest.newgame");
+                dailySeed.futureDaily.completedSettlementIds.Add("settlement.once");
+                questCalendar.RestoreSaveData(dailySeed);
+                settlement.RestoreSaveData(dailySeed);
+                interaction.MarkConsumed("loot.once", InteractionUsePolicy.PersistentOnce);
+                interaction.MarkConsumed("talk.once", InteractionUsePolicy.OncePerSession);
+                interaction.RememberResolvedOutcome("loot.once", "open", "rare");
+                resources.TrySetShining(5);
+                resources.TrySetHunger(2);
+                conditions.TryAcquire("hero", "flu", PersistentConditionCategory.Disease);
+                supply.AddItem("supply", 2);
+                GameSaveData worldSeed = new();
+                worldSeed.world.clearedEncounterIds.Add("encounter.once");
+                oldEncounter.RestoreSaveData(worldSeed);
+                RewardGrantRequest grant = new(RewardSourceType.Story, "story.once", 3, 0, "potion", 1, "grant");
+                Assert.That(rewards.GrantReward(grant).DuplicateBlocked, Is.False);
+                Assert.That(_service.TrySave(out _), Is.True);
+                string savedJson = File.ReadAllText(_primary);
+
+                // Scene-owned encounters are destroyed on the Title transition, then reauthored by the starting scene.
+                UnityEngine.Object.DestroyImmediate(oldEncounter.gameObject);
+                Assert.That(state.TrySetState(GameState.Title, "return to title"), Is.True);
+                Assert.That(_service.TryResetForNewGame(out string resetMessage), Is.True, resetMessage);
+                Assert.That(state.Current, Is.EqualTo(GameState.Title));
+                Assert.That(File.ReadAllText(_primary), Is.EqualTo(savedJson));
+                Assert.That(wallet.Gold, Is.Zero);
+                Assert.That(inventory.GetCount("potion"), Is.Zero);
+                Assert.That(party.Members, Is.Empty);
+                Assert.That(progression.TryGetState("hero", out int resetLevel, out int resetExperience), Is.True);
+                Assert.That((resetLevel, resetExperience), Is.EqualTo((1, 0)));
+                Assert.That((persona.GetLevel(PersonaStat.Courage), persona.GetXp(PersonaStat.Courage)), Is.EqualTo((1, 0)));
+                Assert.That((story.CurrentChapter, story.MainProgress, story.IsEventCompleted("story.event")), Is.EqualTo((1, 0, false)));
+                Assert.That(flags.HasFlag("story.flag"), Is.False);
+                Assert.That(quest.GetQuestStatus("quest.newgame"), Is.EqualTo(QuestStatus.Inactive));
+                GameSaveData resetQuest = new();
+                quest.CaptureSaveData(resetQuest);
+                Assert.That(resetQuest.quest.quests.Single(item => item.questId == "quest.newgame").processedEventIds, Is.Empty);
+                Assert.That(calendar.CurrentDay, Is.EqualTo(1));
+                GameSaveData resetDaily = new();
+                questCalendar.CaptureSaveData(resetDaily);
+                settlement.CaptureSaveData(resetDaily);
+                Assert.That(resetDaily.futureDaily.appliedQuestDayCostIds, Is.Empty);
+                Assert.That(resetDaily.futureDaily.completedSettlementIds, Is.Empty);
+                Assert.That(interaction.IsConsumed("loot.once", InteractionUsePolicy.PersistentOnce), Is.False);
+                Assert.That(interaction.IsConsumed("talk.once", InteractionUsePolicy.OncePerSession), Is.False);
+                Assert.That(interaction.TryGetResolvedOutcome("loot.once", "open", out _), Is.False);
+                Assert.That((resources.Shining, resources.Hunger), Is.EqualTo((0, 0)));
+                Assert.That(conditions.HasCondition("hero", "flu", PersistentConditionCategory.Disease), Is.False);
+                Assert.That(supply.GetSnapshot().GetCount("supply"), Is.Zero);
+                Assert.That(rewards.GrantReward(grant).DuplicateBlocked, Is.False);
+
+                CombatEncounterGroup newEncounter = new GameObject("NewEncounter").AddComponent<CombatEncounterGroup>();
+                SetField(newEncounter, "encounterId", "encounter.once");
+                GameSaveData cleanWorld = new();
+                newEncounter.CaptureSaveData(cleanWorld);
+                Assert.That(cleanWorld.world.clearedEncounterIds, Is.Empty);
+
+                Assert.That(_service.TryLoad(out string loadMessage), Is.True, loadMessage);
+                Assert.That(wallet.Gold, Is.EqualTo(15));
+                Assert.That(inventory.GetCount("potion"), Is.EqualTo(3));
+                Assert.That(party.Contains("hero"), Is.True);
+                Assert.That(progression.TryGetState("hero", out int restoredLevel, out int restoredExperience), Is.True);
+                Assert.That((restoredLevel, restoredExperience), Is.EqualTo((2, 5)));
+                Assert.That((persona.GetLevel(PersonaStat.Courage), persona.GetXp(PersonaStat.Courage)), Is.EqualTo((3, 4)));
+                Assert.That((story.CurrentChapter, story.MainProgress, story.IsEventCompleted("story.event")), Is.EqualTo((2, 7, true)));
+                Assert.That(flags.HasFlag("story.flag"), Is.True);
+                Assert.That(quest.GetQuestStatus("quest.newgame"), Is.EqualTo(QuestStatus.Active));
+                GameSaveData restoredQuest = new();
+                quest.CaptureSaveData(restoredQuest);
+                Assert.That(restoredQuest.quest.quests.Single(item => item.questId == "quest.newgame").processedEventIds, Does.Contain("quest.event"));
+                Assert.That(calendar.CurrentDay, Is.EqualTo(3));
+                GameSaveData restoredDaily = new();
+                questCalendar.CaptureSaveData(restoredDaily);
+                settlement.CaptureSaveData(restoredDaily);
+                Assert.That(restoredDaily.futureDaily.appliedQuestDayCostIds, Does.Contain("quest.newgame"));
+                Assert.That(restoredDaily.futureDaily.completedSettlementIds, Does.Contain("settlement.once"));
+                Assert.That(interaction.IsConsumed("loot.once", InteractionUsePolicy.PersistentOnce), Is.True);
+                Assert.That(interaction.TryGetResolvedOutcome("loot.once", "open", out string outcome), Is.True);
+                Assert.That(outcome, Is.EqualTo("rare"));
+                Assert.That((resources.Shining, resources.Hunger), Is.EqualTo((5, 2)));
+                Assert.That(conditions.HasCondition("hero", "flu", PersistentConditionCategory.Disease), Is.True);
+                Assert.That(supply.GetSnapshot().GetCount("supply"), Is.EqualTo(2));
+                Assert.That(rewards.GrantReward(grant).DuplicateBlocked, Is.True);
+                Assert.That(wallet.Gold, Is.EqualTo(15));
+                GameSaveData restoredWorld = new();
+                newEncounter.CaptureSaveData(restoredWorld);
+                Assert.That(restoredWorld.world.clearedEncounterIds, Does.Contain("encounter.once"));
+                Assert.That(File.ReadAllText(_primary), Is.EqualTo(savedJson));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(progressionDefinition);
+                UnityEngine.Object.DestroyImmediate(questDefinition);
+            }
+        }
+
+        [Test]
+        public void NewGameReset_RepeatedRequestIsSafeAndNonTitleRequestIsRejected()
+        {
+            GameStateMachine state = new GameObject("GameStateMachine").AddComponent<GameStateMachine>();
+            Invoke(state, "Awake");
+            new GameObject("GameFlowController").AddComponent<GameFlowController>();
+            CurrencyWallet wallet = new GameObject("CurrencyWallet").AddComponent<CurrencyWallet>();
+            wallet.SetGold(8);
+
+            Assert.That(_service.TryResetForNewGame(out _), Is.False);
+            Assert.That(wallet.Gold, Is.EqualTo(8));
+            Assert.That(state.TrySetState(GameState.Title, "title"), Is.True);
+            Assert.That(_service.TryResetForNewGame(out _), Is.True);
+            Assert.That(_service.TryResetForNewGame(out _), Is.True);
+            Assert.That(wallet.Gold, Is.Zero);
+            Assert.That(_service.CurrentOperationState, Is.EqualTo(SaveLoadService.OperationState.Idle));
+        }
+
+        [Test]
+        public void NewGameReset_UsesAuthoredStartingValuesAndDoesNotReplayQuestEvents()
+        {
+            CharacterProgressionDefinitionSO progressionDefinition = ScriptableObject.CreateInstance<CharacterProgressionDefinitionSO>();
+            QuestDefinitionSO questDefinition = ScriptableObject.CreateInstance<QuestDefinitionSO>();
+            try
+            {
+                SetField(progressionDefinition, "characterId", "hero");
+                SetField(progressionDefinition, "startingLevel", 2);
+                SetField(progressionDefinition, "maximumLevel", 3);
+                SetField(progressionDefinition, "experienceRequiredByLevel", new[] { 10, 20 });
+                SetField(questDefinition, "questId", "quest.authored");
+
+                GameStateMachine state = new GameObject("GameStateMachine").AddComponent<GameStateMachine>();
+                Invoke(state, "Awake");
+                CurrencyWallet wallet = new GameObject("CurrencyWallet").AddComponent<CurrencyWallet>();
+                SetField(wallet, "gold", 7);
+                Invoke(wallet, "Awake");
+                CalendarService calendar = new GameObject("CalendarService").AddComponent<CalendarService>();
+                SetField(calendar, "currentDay", 5);
+                SetField(calendar, "currentWeek", 2);
+                Invoke(calendar, "Awake");
+                StoryProgressManager story = new GameObject("StoryProgressManager").AddComponent<StoryProgressManager>();
+                SetField(story, "currentChapter", 2);
+                SetField(story, "mainProgress", 4);
+                Invoke(story, "Awake");
+                CharacterProgressionService progression = new GameObject("CharacterProgressionService").AddComponent<CharacterProgressionService>();
+                Invoke(progression, "ConfigureForTests", "hero", new[] { progressionDefinition });
+                SupplyLoadoutService supply = new GameObject("SupplyLoadoutService").AddComponent<SupplyLoadoutService>();
+                supply.AddItem("ration", 2);
+                Invoke(supply, "Awake");
+                QuestRuntime quest = new GameObject("QuestRuntime").AddComponent<QuestRuntime>();
+                SetField(quest, "questDefinitions", new[] { questDefinition });
+                Invoke(quest, "Awake");
+                int started = 0;
+                int completed = 0;
+                quest.OnQuestStarted += _ => started++;
+                quest.OnQuestCompleted += _ => completed++;
+
+                wallet.SetGold(20);
+                calendar.TryAdvanceDays(2);
+                story.SetChapter(3);
+                story.SetMainProgress(9);
+                progression.ApplyExperience("hero", 5);
+                supply.AddItem("ration", 3);
+                quest.StartQuest(questDefinition);
+                Assert.That(started, Is.EqualTo(1));
+                Assert.That(state.TrySetState(GameState.Title, "title"), Is.True);
+
+                Assert.That(_service.TryResetForNewGame(out string message), Is.True, message);
+                Assert.That(wallet.Gold, Is.EqualTo(7));
+                Assert.That((calendar.CurrentDay, calendar.CurrentWeek), Is.EqualTo((5, 2)));
+                Assert.That((story.CurrentChapter, story.MainProgress), Is.EqualTo((2, 4)));
+                Assert.That(progression.TryGetState("hero", out int level, out int experience), Is.True);
+                Assert.That((level, experience), Is.EqualTo((2, 0)));
+                Assert.That(supply.GetSnapshot().GetCount("ration"), Is.EqualTo(2));
+                Assert.That(quest.GetQuestStatus("quest.authored"), Is.EqualTo(QuestStatus.Inactive));
+                Assert.That((started, completed), Is.EqualTo((1, 0)));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(progressionDefinition);
+                UnityEngine.Object.DestroyImmediate(questDefinition);
+            }
+        }
+
+        [Test]
+        public void DuplicateSceneInteractionRuntime_CannotReplacePersistentSaveOwner()
+        {
+            InteractionRuntime owner = new GameObject("InteractionRuntime").AddComponent<InteractionRuntime>();
+            Invoke(owner, "Awake");
+            InteractionRuntime duplicate = new GameObject("Interaction").AddComponent<InteractionRuntime>();
+            Invoke(duplicate, "Awake");
+            Assert.That(InteractionRuntime.Instance, Is.SameAs(owner));
+            Assert.That(duplicate.enabled, Is.False);
+
+            owner.MarkConsumed("persistent.loot", InteractionUsePolicy.PersistentOnce);
+            GameSaveData snapshot = _service.CaptureGameSaveDataSnapshot();
+            Assert.That(snapshot.world.interactions.Single(item => item.interactionId == "persistent.loot").consumed,
+                Is.True);
+
+            owner.MarkConsumed("later.timeline", InteractionUsePolicy.PersistentOnce);
+            _service.RestoreGameSaveDataSnapshot(snapshot);
+            _service.RestoreGameSaveDataSnapshot(snapshot);
+
+            Assert.That(owner.IsConsumed("persistent.loot", InteractionUsePolicy.PersistentOnce), Is.True);
+            Assert.That(owner.IsConsumed("later.timeline", InteractionUsePolicy.PersistentOnce), Is.False);
+        }
+
+        [Test]
+        public void SavedFile_RestoresFreshRuntimeOwnersAndRepeatedLoadWithoutRegrant()
+        {
+            CharacterProgressionDefinitionSO definition = ScriptableObject.CreateInstance<CharacterProgressionDefinitionSO>();
+            try
+            {
+                SetField(definition, "characterId", "hero");
+                SetField(definition, "maximumLevel", 3);
+                SetField(definition, "experienceRequiredByLevel", new[] { 10, 20 });
+
+                CurrencyWallet sourceWallet = new GameObject("Wallet").AddComponent<CurrencyWallet>();
+                InventoryService sourceInventory = new GameObject("Inventory").AddComponent<InventoryService>();
+                CharacterProgressionService sourceProgression = new GameObject("Progression").AddComponent<CharacterProgressionService>();
+                Invoke(sourceProgression, "ConfigureForTests", "hero", new[] { definition });
+                RewardService sourceRewards = new GameObject("Rewards").AddComponent<RewardService>();
+                SetField(sourceRewards, "currencyWallet", sourceWallet);
+                SetField(sourceRewards, "inventoryService", sourceInventory);
+                CalendarService sourceCalendar = new GameObject("Calendar").AddComponent<CalendarService>();
+                InteractionRuntime sourceInteraction = new GameObject("InteractionRuntime").AddComponent<InteractionRuntime>();
+                Invoke(sourceInteraction, "Awake");
+
+                sourceWallet.SetGold(12);
+                sourceInventory.AddItem("potion", 2);
+                Assert.That(sourceProgression.ApplyExperience("hero", 15).AppliedExperience, Is.EqualTo(15));
+                Assert.That(sourceCalendar.TryAdvanceDays(2), Is.True);
+                sourceInteraction.MarkConsumed("persistent.loot", InteractionUsePolicy.PersistentOnce);
+                sourceInteraction.RememberResolvedOutcome("persistent.loot", "open", "rare");
+                RewardGrantRequest grant = new(RewardSourceType.Story, "story.once", 3, 0, "potion", 1, "grant");
+                Assert.That(sourceRewards.GrantReward(grant).DuplicateBlocked, Is.False);
+                Assert.That(_service.TrySave(out _), Is.True);
+
+                UnityEngine.Object.DestroyImmediate(_serviceObject);
+                _serviceObject = new GameObject("SaveLoadService_Restored");
+                _service = _serviceObject.AddComponent<SaveLoadService>();
+                Invoke(_service, "SetStoragePathForTests", _primary);
+
+                UnityEngine.Object.DestroyImmediate(sourceWallet.gameObject);
+                UnityEngine.Object.DestroyImmediate(sourceInventory.gameObject);
+                UnityEngine.Object.DestroyImmediate(sourceProgression.gameObject);
+                UnityEngine.Object.DestroyImmediate(sourceRewards.gameObject);
+                UnityEngine.Object.DestroyImmediate(sourceCalendar.gameObject);
+                UnityEngine.Object.DestroyImmediate(sourceInteraction.gameObject);
+
+                CurrencyWallet restoredWallet = new GameObject("Wallet").AddComponent<CurrencyWallet>();
+                InventoryService restoredInventory = new GameObject("Inventory").AddComponent<InventoryService>();
+                CharacterProgressionService restoredProgression = new GameObject("Progression").AddComponent<CharacterProgressionService>();
+                Invoke(restoredProgression, "ConfigureForTests", "hero", new[] { definition });
+                RewardService restoredRewards = new GameObject("Rewards").AddComponent<RewardService>();
+                SetField(restoredRewards, "currencyWallet", restoredWallet);
+                SetField(restoredRewards, "inventoryService", restoredInventory);
+                CalendarService restoredCalendar = new GameObject("Calendar").AddComponent<CalendarService>();
+                InteractionRuntime restoredInteraction = new GameObject("InteractionRuntime").AddComponent<InteractionRuntime>();
+                Invoke(restoredInteraction, "Awake");
+
+                for (int load = 0; load < 2; load++)
+                {
+                    Assert.That(_service.TryLoad(out string message), Is.True, message);
+                    Assert.That(restoredWallet.Gold, Is.EqualTo(15));
+                    Assert.That(restoredInventory.GetCount("potion"), Is.EqualTo(3));
+                    Assert.That(restoredProgression.TryGetState("hero", out int level, out int experience), Is.True);
+                    Assert.That(level, Is.EqualTo(2));
+                    Assert.That(experience, Is.EqualTo(5));
+                    Assert.That(restoredCalendar.CurrentDay, Is.EqualTo(3));
+                    Assert.That(restoredInteraction.IsConsumed("persistent.loot", InteractionUsePolicy.PersistentOnce), Is.True);
+                    Assert.That(restoredInteraction.TryGetResolvedOutcome("persistent.loot", "open", out string outcome), Is.True);
+                    Assert.That(outcome, Is.EqualTo("rare"));
+                    Assert.That(restoredRewards.GrantReward(grant).DuplicateBlocked, Is.True);
+                    Assert.That(restoredWallet.Gold, Is.EqualTo(15));
+                    Assert.That(restoredInventory.GetCount("potion"), Is.EqualTo(3));
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(definition);
+            }
         }
 
         [Test]
@@ -506,7 +985,7 @@ namespace Game.Tests.Integration
         private static void CleanupObjects()
         {
             foreach (MonoBehaviour item in UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-                if (item is SaveLoadService || item is InventoryService || item is CurrencyWallet || item is RewardService || item is StoryProgressManager || item is GameStateMachine || item is GameFlowController)
+                if (item is SaveLoadService || item is InventoryService || item is CurrencyWallet || item is RewardService || item is StoryProgressManager || item is GameStateMachine || item is GameFlowController || item is InteractionRuntime || item is CharacterProgressionService || item is CalendarService || item is PartyRuntime || item is PersonaStatusManager || item is PersonaSaveAdapter || item is StoryFlagDatabase || item is QuestRuntime || item is QuestCalendarIntegration || item is DaySettlementFlow || item is ExplorationResourceRuntime || item is PersistentConditionRuntime || item is SupplyLoadoutService || item is CombatEncounterGroup)
                     UnityEngine.Object.DestroyImmediate(item.gameObject);
         }
     }

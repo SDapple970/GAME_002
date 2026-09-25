@@ -26,6 +26,30 @@ MonoBehaviour:
     groupIndex: 0
     visibility: 0
     description: "\uCCAB NPC\uC640 \uB300\uD654\uD55C\uB2E4."
+  - objectiveId: clear_encounter_01
+    eventType: 20
+    targetId: dungeon1.encounter.01
+    requiredCount: 1
+    optional: 0
+    groupIndex: 0
+    visibility: 0
+    description: ""
+  - objectiveId: clear_encounter_02
+    eventType: 20
+    targetId: dungeon1.encounter.02
+    requiredCount: 1
+    optional: 0
+    groupIndex: 0
+    visibility: 0
+    description: ""
+  - objectiveId: clear_encounter_03
+    eventType: 20
+    targetId: dungeon1.encounter.03
+    requiredCount: 1
+    optional: 0
+    groupIndex: 0
+    visibility: 0
+    description: ""
   rewardGold: 0
   rewardExp: 0
   retryPolicy: 0

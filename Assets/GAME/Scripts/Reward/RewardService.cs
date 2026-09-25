@@ -9,7 +9,7 @@ using Game.NonCombat.Progress;
 
 namespace Game.Reward
 {
-    public sealed class RewardService : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class RewardService : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         private const string LegacyEmptyCombatSourceId = "legacy-empty-combat-result";
 
@@ -198,6 +198,17 @@ namespace Game.Reward
             _duplicateRewardWarned = false;
             _compatibilityIdentityWarned = false;
             _invalidIdentityWarned = false;
+        }
+
+        public void ResetForNewGame()
+        {
+            _grantLedger.Clear();
+            _duplicateRewardWarned = false;
+            _compatibilityIdentityWarned = false;
+            _invalidIdentityWarned = false;
+            _missingCurrencyWalletWarned = false;
+            _missingInventoryServiceWarned = false;
+            _missingProgressionWarned = false;
         }
 
         public void CaptureSaveData(GameSaveData saveData)

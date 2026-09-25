@@ -6,7 +6,7 @@ using Game.Quest;
 
 namespace Game.DemoMission.Runtime
 {
-    public sealed class DemoMissionRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class DemoMissionRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         public const string EnemyDefeatedObjectiveId = "enemy_defeated";
         public const string NpcTalkedObjectiveId = "npc_talked";
@@ -114,6 +114,16 @@ namespace Game.DemoMission.Runtime
             _completionRaised = false;
             ResetQuestRuntimeProgress();
             RaiseProgressChanged();
+        }
+
+        public void ResetForNewGame()
+        {
+            _enemyDefeatCount = 0;
+            _isNpcRescued = false;
+            _completionRaised = false;
+            _compatibilityEventSequence = 0;
+            _missingQuestRuntimeWarned = false;
+            UnsubscribeQuestRuntime();
         }
 
         public void RegisterEnemyDefeated()

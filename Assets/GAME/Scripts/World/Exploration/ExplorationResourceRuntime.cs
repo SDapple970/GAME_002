@@ -24,7 +24,7 @@ namespace Game.World.Exploration
         public int CurrentValue { get; }
     }
 
-    public sealed class ExplorationResourceRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class ExplorationResourceRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         public static ExplorationResourceRuntime Instance { get; private set; }
 
@@ -80,6 +80,8 @@ namespace Game.World.Exploration
             _hunger = Mathf.Max(0, saveData?.exploration?.hunger ?? 0);
             Refreshed?.Invoke();
         }
+
+        public void ResetForNewGame() => RestoreSaveData(null);
 
         private bool TryChange(ExplorationResourceType resource, int amount)
         {

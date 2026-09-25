@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Game.Quest
 {
-    public sealed class QuestCompletionFlow : MonoBehaviour, ISaveDataConsumer
+    public sealed class QuestCompletionFlow : MonoBehaviour, ISaveDataConsumer, INewGameRuntimeReset
     {
         [SerializeField] private QuestRuntime questRuntime;
         [SerializeField] private RewardService rewardService;
@@ -75,6 +75,8 @@ namespace Game.Quest
             _rewardedQuestIds.Clear();
             _pendingQuestIds.Clear();
         }
+
+        public void ResetForNewGame() => RestoreSaveData(null);
 
         private void HandleQuestCompleted(string questId)
         {

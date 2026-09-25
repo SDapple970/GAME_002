@@ -5,22 +5,23 @@ using Game.Combat.Model;
 namespace Game.Combat.Adapters
 {
     /// <summary>
-    /// ÇÊµå GameObject¸¦ ÀüÅõ ICombatant·Î ·¡ÇÎ.
-    /// ±âÁ¸ ÇÊµå ÄÚµå¸¦ ¼öÁ¤ÇÏÁö ¾Ê°í HP¸¦ ÀĞ°í/¾²°Ô ¸¸µå´Â ¸ñÀû.
+    /// í•„ë“œ GameObjectë¥¼ ì „íˆ¬ ICombatantë¡œ ë˜í•‘.
+    /// ì „íˆ¬ ì‹œì‘ snapshotê³¼ ì¢…ë£Œ writeback ì‚¬ì´ì—ëŠ” ì„¸ì…˜ runtime stateë¥¼ íˆ¬ì˜í•œë‹¤.
     /// </summary>
-    public sealed class FieldCombatantAdapter : ICombatant
+    public sealed class FieldCombatantAdapter : ICombatant, ICombatantRuntimeStateBinding
     {
         private readonly List<ISkill> _skills = new();
         private readonly HpAccessor _hp;
+        private CombatantCombatState _runtimeState;
 
         public CombatantId Id { get; }
         public Side Side { get; }
         public GameObject FieldObject { get; }
 
-        public int HP => _hp.GetHp();
-        public int MaxHP => _hp.GetMaxHpOrCurrent();
+        public int HP => _runtimeState != null ? _runtimeState.CurrentHp : _hp.GetHp();
+        public int MaxHP => _runtimeState != null ? _runtimeState.MaxHp : _hp.GetMaxHpOrCurrent();
 
-        // ¾àÁ¡/ÀúÇ×Àº ¾ÆÁ÷ ÇÊµå¿¡ ÀúÀå ±¸Á¶°¡ ¾øÀ¸´Ï, ÀÏ´Ü ±âº»°ª(ÃßÈÄ ÄÄÆ÷³ÍÆ®·Î È®Àå)
+        // ì•½ì /ì €í•­ì€ ì•„ì§ í•„ë“œì— ì €ì¥ êµ¬ì¡°ê°€ ì—†ìœ¼ë‹ˆ, ì¼ë‹¨ ê¸°ë³¸ê°’(ì¶”í›„ ì»´í¬ë„ŒíŠ¸ë¡œ í™•ì¥)
         public KeywordMask Weakness { get; private set; } = KeywordMask.None;
         public KeywordMask Resist { get; private set; } = KeywordMask.None;
 
@@ -55,9 +56,32 @@ namespace Game.Combat.Adapters
         public void ApplyDamage(int amount)
         {
             if (amount <= 0) return;
+
+            if (_runtimeState != null)
+            {
+                _runtimeState.ApplyDamage(amount);
+                return;
+            }
+
             int v = HP - amount;
             if (v < 0) v = 0;
             _hp.SetHp(v);
+        }
+
+        internal void ApplyRuntimeHpToField()
+        {
+            if (_runtimeState != null)
+                _hp.SetHp(_runtimeState.CurrentHp);
+        }
+
+        internal void ApplyResultHpToField(int currentHp)
+        {
+            _hp.SetHp(currentHp);
+        }
+
+        void ICombatantRuntimeStateBinding.BindCombatState(CombatantCombatState state)
+        {
+            _runtimeState = state;
         }
 
         public void AddStagger(int amount)
@@ -71,7 +95,7 @@ namespace Game.Combat.Adapters
 
         public void ResetStaggerIfNeededOnStunEnd()
         {
-            // MVP Á¤Ã¥: ±âÀıÀÌ ³¡³ª¸é ±×·Î±â 0
+            // MVP ì •ì±…: ê¸°ì ˆì´ ëë‚˜ë©´ ê·¸ë¡œê¸° 0
             Stagger = 0;
         }
     }

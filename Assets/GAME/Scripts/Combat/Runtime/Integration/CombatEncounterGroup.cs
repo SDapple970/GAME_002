@@ -22,6 +22,13 @@ namespace Game.Combat.Integration
         private string _processedCompletionId;
         private bool _explorationObserved;
 
+        /// <summary>
+        /// Raised once when this field encounter has been confirmed cleared by the
+        /// World lifecycle after a victorious combat outcome. Save restore deliberately
+        /// does not replay this gameplay event.
+        /// </summary>
+        public event System.Action<CombatEncounterGroup, string> OnEncounterCleared;
+
         internal EncounterRuntimeLifecycle Lifecycle => _lifecycle;
         internal string ActiveCompletionId => _activeCompletionId;
         internal bool HasPlayerPresence => _playerColliderIds.Count > 0;
@@ -168,9 +175,15 @@ namespace Game.Combat.Integration
                            (result.EndReason != CombatEndReason.None
                                ? result.EndReason == CombatEndReason.Victory
                                : result.IsWin);
-            _lifecycle = victory && !hasActiveEnemyMembers
-                ? EncounterRuntimeLifecycle.Cleared
-                : EncounterRuntimeLifecycle.RearmPending;
+            if (victory && !hasActiveEnemyMembers)
+            {
+                _lifecycle = EncounterRuntimeLifecycle.Cleared;
+                OnEncounterCleared?.Invoke(this, _activeCompletionId);
+            }
+            else
+            {
+                _lifecycle = EncounterRuntimeLifecycle.RearmPending;
+            }
             _reservationOwner = null;
         }
 

@@ -1,11 +1,12 @@
 using Game.Core;
+using Game.NonCombat.Save;
 using Game.Reward;
 using System;
 using UnityEngine;
 
 namespace Game.Interaction
 {
-    public sealed class InteractionRunner : MonoBehaviour
+    public sealed class InteractionRunner : MonoBehaviour, INewGameRuntimeReset
     {
         public static InteractionRunner Instance { get; private set; }
 
@@ -219,6 +220,14 @@ namespace Game.Interaction
         internal static void ResetOwnershipForTests()
         {
             ResetStaticOwnership();
+        }
+
+        public void ResetForNewGame()
+        {
+            _resolving = false;
+            _lastExecutionFrame = -1;
+            _lastExecutionId = null;
+            runtime = InteractionRuntime.Instance;
         }
     }
 }

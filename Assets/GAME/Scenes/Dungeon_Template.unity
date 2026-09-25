@@ -3395,7 +3395,7 @@ PrefabInstance:
       objectReference: {fileID: 2122203422}
     - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
       propertyPath: skillDefinitions.Array.size
-      value: 5
+      value: 4
       objectReference: {fileID: 0}
     - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
       propertyPath: 'skillDefinitions.Array.data[0]'
@@ -3408,13 +3408,9 @@ PrefabInstance:
     - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
       propertyPath: 'skillDefinitions.Array.data[2]'
       value: 
-      objectReference: {fileID: 11400000, guid: 6f96b5e4d3eb64c4bb134d957906ad97, type: 2}
-    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
-      propertyPath: 'skillDefinitions.Array.data[3]'
-      value: 
       objectReference: {fileID: 11400000, guid: 3f33bab0ec4af6c4db0b827917ba147d, type: 2}
     - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
-      propertyPath: 'skillDefinitions.Array.data[4]'
+      propertyPath: 'skillDefinitions.Array.data[3]'
       value: 
       objectReference: {fileID: 11400000, guid: 1f9d7ebdbd0b7fd48ace84c03839d87e, type: 2}
     m_RemovedComponents: []

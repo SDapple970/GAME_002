@@ -802,14 +802,14 @@ namespace Game.Combat.Core
             if (flowOrchestrator != null)
                 flowOrchestrator.BindSession(null);
 
-            bool canonicalWorldOwner = CombatWorldLifecycleAdapter.OwnsSession(this, endingSession);
-            if (!canonicalWorldOwner)
-                ApplyCombatOutcomeToField(endingSession);
-
             if (reason == CombatEndReason.None)
                 reason = CombatEndEvaluator.Evaluate(endingSession);
 
             CombatResult result = CombatResultBuilder.Build(endingSession, reason);
+            bool canonicalWorldOwner = CombatWorldLifecycleAdapter.OwnsSession(this, endingSession);
+            if (!canonicalWorldOwner)
+                ApplyCombatOutcomeToField(endingSession);
+
             if (endingSession != null && result.CompletionId != endingSession.CompletionId)
             {
                 Debug.LogError(
@@ -869,11 +869,15 @@ namespace Game.Combat.Core
             for (int i = 0; i < session.Enemies.Count; i++)
             {
                 ICombatant combatant = session.Enemies[i];
-                if (combatant == null || combatant.HP > 0)
+                if (combatant == null)
                     continue;
 
                 FieldCombatantAdapter adapter = combatant as FieldCombatantAdapter;
                 if (adapter == null)
+                    continue;
+
+                adapter.ApplyRuntimeHpToField();
+                if (combatant.HP > 0)
                     continue;
 
                 GameObject fieldObject = adapter.FieldObject;
@@ -884,6 +888,12 @@ namespace Game.Combat.Core
                     Destroy(fieldObject);
                 else if (deactivateDefeatedEnemies)
                     fieldObject.SetActive(false);
+            }
+
+            for (int i = 0; i < session.Allies.Count; i++)
+            {
+                if (session.Allies[i] is FieldCombatantAdapter adapter)
+                    adapter.ApplyRuntimeHpToField();
             }
         }
     }

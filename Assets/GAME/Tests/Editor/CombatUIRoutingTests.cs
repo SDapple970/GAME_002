@@ -536,6 +536,14 @@ namespace Game.Tests.UI
         }
 
         [Test]
+        public void NestedGlobalRoots_AreRejected()
+        {
+            _rootObjects["choiceRoot"].transform.SetParent(_rootObjects["dialogueRoot"].transform);
+
+            Assert.That(_roots.ValidateRootGraph(false), Is.False);
+        }
+
+        [Test]
         public void CombatDemoFlow_DoesNotCompeteWhenCanonicalRoutingExists()
         {
             CombatUIFixture fixture = CreateCombatUIFixture(true);

@@ -81,12 +81,17 @@ namespace Game.Tests.Combat
         {
             string planningHud = Read("Assets/GAME/Scripts/Combat/Runtime/UI/CombatPlanningHUD.cs");
             string flow = Read("Assets/GAME/Scripts/Combat/Runtime/Core/CombatFlowOrchestrator.cs");
+            string enemyPolicy = Read("Assets/GAME/Scripts/Combat/Runtime/Model/DeterministicCycleEnemyCombatPolicy.cs");
             string autoPlanner = Read("Assets/GAME/Scripts/Debugging/Combat/CombatAutoPlanner.cs");
 
             Assert.That(planningHud, Does.Contain("SubmitPlayerDraftAndAdvance"));
             Assert.That(planningHud, Does.Contain("confirmButton.onClick.AddListener(Confirm)"));
-            Assert.That(flow, Does.Contain("BuildDeterministicEnemyPlan"));
-            Assert.That(flow, Does.Contain("_session.TurnIndex % enemy.Skills.Count"));
+            Assert.That(flow, Does.Contain("_enemyPolicy.TryCreatePlan"));
+            Assert.That(flow, Does.Contain("OnEnemyActionRequired"));
+            Assert.That(flow, Does.Not.Contain("TurnIndex %"));
+            Assert.That(flow, Does.Not.Contain("TryChooseEnemyTarget"));
+            Assert.That(enemyPolicy, Does.Contain("session.TurnIndex % skills.Count"));
+            Assert.That(enemyPolicy, Does.Not.Contain("GameObject"));
             Assert.That(autoPlanner, Does.Contain("#if UNITY_EDITOR"));
         }
 

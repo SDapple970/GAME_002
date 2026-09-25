@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Game.Daily
 {
-    public sealed class DaySettlementFlow : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class DaySettlementFlow : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         public static DaySettlementFlow Instance { get; private set; }
 
@@ -140,6 +140,16 @@ namespace Game.Daily
                     _completedSettlementKeys.Add(ResolveSettlementKeyFromSettlementId(settlementId));
                 }
             }
+        }
+
+        public void ResetForNewGame()
+        {
+            _completedSettlementIds.Clear();
+            _completedSettlementKeys.Clear();
+            _activeRequest = null;
+            _activeSettlementKey = null;
+            _duplicateSettlementWarned = false;
+            _invalidRequestWarned = false;
         }
 
         private void ResolveReferences()

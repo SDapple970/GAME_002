@@ -44,8 +44,16 @@ namespace Game.Story
         private void OnDisable()
         {
             LogDiagnostic("OnDisable");
-            SceneManager.sceneLoaded -= HandleSceneLoaded;
-            Unsubscribe();
+            StopListening();
+        }
+
+        private void OnDestroy()
+        {
+            // RuntimeBootstrapper publishes a static event. DestroyImmediate and scene
+            // teardown can bypass the usual enabled-state transition in editor tests,
+            // so retain a terminal, idempotent unsubscribe path as well.
+            LogDiagnostic("OnDestroy");
+            StopListening();
         }
 
         private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -73,6 +81,12 @@ namespace Game.Story
 
         private void HandleInitialStateApplied(Scene scene)
         {
+            // Do not use this as the primary cleanup mechanism: OnDisable/OnDestroy
+            // remove the static listener. It only protects an in-flight invocation
+            // whose target was destroyed during event dispatch.
+            if (!this || !isActiveAndEnabled)
+                return;
+
             if (scene != gameObject.scene)
                 return;
 
@@ -236,6 +250,12 @@ namespace Game.Story
             _stateMachine = null;
             _saveLoadService = null;
             _runtimeBootstrapper = null;
+        }
+
+        private void StopListening()
+        {
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
+            Unsubscribe();
         }
 
         private void SubscribeToBootstrapper()

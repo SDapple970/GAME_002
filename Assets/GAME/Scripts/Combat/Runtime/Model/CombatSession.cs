@@ -130,7 +130,12 @@ namespace Game.Combat.Model
             {
                 ICombatant combatant = combatants[i];
                 if (combatant != null && !_combatStates.ContainsKey(combatant))
-                    _combatStates.Add(combatant, new CombatantCombatState(combatant, config));
+                {
+                    CombatantCombatState state = new CombatantCombatState(combatant, config);
+                    _combatStates.Add(combatant, state);
+                    if (combatant is ICombatantRuntimeStateBinding binding)
+                        binding.BindCombatState(state);
+                }
             }
         }
 
@@ -149,4 +154,5 @@ namespace Game.Combat.Model
             }
         }
     }
+
 }

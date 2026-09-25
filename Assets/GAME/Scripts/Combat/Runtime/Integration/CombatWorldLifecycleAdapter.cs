@@ -387,6 +387,7 @@ namespace Game.Combat.Integration
             _context.OutcomeProcessed = true;
             _outcomeApplicationCount++;
 
+            ApplyHpWriteback(result, _context);
             int clearedCount = ApplyFieldOutcome(result, _context);
             CompleteEncounterOutcomes(result, _context);
 
@@ -394,6 +395,19 @@ namespace Game.Combat.Integration
                 cameraController.HoldResultFrame();
 
             LogDebug($"Outcome={result.EndReason}, cleared={clearedCount}; field remains locked through Reward.");
+        }
+
+        private static void ApplyHpWriteback(CombatResult result, FieldContext context)
+        {
+            for (int i = 0; i < context.Actors.Count; i++)
+            {
+                ActorSnapshot actor = context.Actors[i];
+                if (actor.Combatant is FieldCombatantAdapter adapter &&
+                    result.RemainingHpByCombatantId.TryGetValue(actor.Combatant.Id.Value, out int remainingHp))
+                {
+                    adapter.ApplyResultHpToField(remainingHp);
+                }
+            }
         }
 
         private int ApplyFieldOutcome(CombatResult result, FieldContext context)

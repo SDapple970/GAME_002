@@ -4,6 +4,7 @@ using System.Reflection;
 using Game.CameraSys;
 using Game.Combat.Core;
 using Game.Combat.Integration;
+using Game.Combat.Model;
 using Game.Combat.UI;
 using Game.Core;
 using Game.DemoMission;
@@ -529,11 +530,20 @@ namespace Game.Tests.Integration
             Assert.That(definition.MissionDayCost, Is.Zero);
             Assert.That(definition.RewardGold, Is.Zero);
             Assert.That(definition.RewardExp, Is.Zero);
-            Assert.That(definition.Objectives, Has.Length.EqualTo(1));
+            Assert.That(definition.Objectives, Has.Length.EqualTo(4));
             Assert.That(definition.Objectives[0].ObjectiveId, Is.EqualTo("talk_first_npc"));
             Assert.That(definition.Objectives[0].EventType, Is.EqualTo(QuestEventType.Talk));
             Assert.That(definition.Objectives[0].TargetId, Is.EqualTo("dungeon1.npc.first-talk"));
             Assert.That(definition.Objectives[0].RequiredCount, Is.EqualTo(1));
+            Assert.That(definition.Objectives[1].ObjectiveId, Is.EqualTo("clear_encounter_01"));
+            Assert.That(definition.Objectives[1].EventType, Is.EqualTo(QuestEventType.ClearEncounter));
+            Assert.That(definition.Objectives[1].TargetId, Is.EqualTo("dungeon1.encounter.01"));
+            Assert.That(definition.Objectives[2].ObjectiveId, Is.EqualTo("clear_encounter_02"));
+            Assert.That(definition.Objectives[2].EventType, Is.EqualTo(QuestEventType.ClearEncounter));
+            Assert.That(definition.Objectives[2].TargetId, Is.EqualTo("dungeon1.encounter.02"));
+            Assert.That(definition.Objectives[3].ObjectiveId, Is.EqualTo("clear_encounter_03"));
+            Assert.That(definition.Objectives[3].EventType, Is.EqualTo(QuestEventType.ClearEncounter));
+            Assert.That(definition.Objectives[3].TargetId, Is.EqualTo("dungeon1.encounter.03"));
 
             EditorSceneManager.OpenScene(
                 DungeonOneProductionMigrationUtility.ProductionScenePath,
@@ -546,6 +556,152 @@ namespace Game.Tests.Integration
             SerializedProperty definitions = new SerializedObject(runtimes[0]).FindProperty("questDefinitions");
             Assert.That(definitions.arraySize, Is.EqualTo(1));
             Assert.That(definitions.GetArrayElementAtIndex(0).objectReferenceValue, Is.SameAs(definition));
+
+            DungeonQuestStartAdapter[] startAdapters = FindAll<DungeonQuestStartAdapter>();
+            EncounterQuestObjectivePublisher[] encounterPublishers = FindAll<EncounterQuestObjectivePublisher>();
+            Assert.That(startAdapters, Has.Length.EqualTo(1));
+            Assert.That(new SerializedObject(startAdapters[0]).FindProperty("questRuntime").objectReferenceValue,
+                Is.SameAs(runtimes[0]));
+            Assert.That(new SerializedObject(startAdapters[0]).FindProperty("questDefinition").objectReferenceValue,
+                Is.SameAs(definition));
+            Assert.That(encounterPublishers.Select(item => new SerializedObject(item).FindProperty("objectiveId").stringValue),
+                Is.EquivalentTo(new[] { "clear_encounter_01", "clear_encounter_02", "clear_encounter_03" }));
+        }
+
+        [Test]
+        [Category("D108Gate")]
+        public void DungeonQuestStartAdapter_StartsInactiveQuestOnlyOnceAndNeverAfterObservedRestore()
+        {
+            QuestDefinitionSO definition = AssetDatabase.LoadAssetAtPath<QuestDefinitionSO>(
+                "Assets/GAME/Data/Quest/CH01_FindFirstNpc.asset");
+            GameObject freshOwner = new("DungeonQuestStartAdapterFresh");
+            GameObject restoreServiceOwner = new("DungeonQuestStartAdapterRestoreService");
+            GameObject restoredOwner = new("DungeonQuestStartAdapterRestored");
+
+            try
+            {
+                QuestRuntime freshRuntime = freshOwner.AddComponent<QuestRuntime>();
+                DungeonQuestStartAdapter freshAdapter = freshOwner.AddComponent<DungeonQuestStartAdapter>();
+                SetReference(freshAdapter, "questRuntime", freshRuntime);
+                SetReference(freshAdapter, "questDefinition", definition);
+                int starts = 0;
+                freshRuntime.OnQuestStarted += _ => starts++;
+
+                InvokeIfPresent(freshAdapter, "TryStartFreshQuest");
+                InvokeIfPresent(freshAdapter, "TryStartFreshQuest");
+
+                Assert.That(freshRuntime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Active));
+                Assert.That(starts, Is.EqualTo(1));
+
+                SaveLoadService restoreService = restoreServiceOwner.AddComponent<SaveLoadService>();
+                InvokeAwake(restoreService);
+                SetPrivateField(restoreService, "_operationState", SaveLoadService.OperationState.Restoring);
+                QuestRuntime restoredRuntime = restoredOwner.AddComponent<QuestRuntime>();
+                DungeonQuestStartAdapter restoredAdapter = restoredOwner.AddComponent<DungeonQuestStartAdapter>();
+                SetReference(restoredAdapter, "questRuntime", restoredRuntime);
+                SetReference(restoredAdapter, "questDefinition", definition);
+                InvokeIfPresent(restoredAdapter, "TryStartFreshQuest");
+
+                Assert.That(restoredRuntime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Inactive));
+            }
+            finally
+            {
+                Object.DestroyImmediate(restoredOwner);
+                Object.DestroyImmediate(restoreServiceOwner);
+                Object.DestroyImmediate(freshOwner);
+            }
+        }
+
+        [Test]
+        [Category("D108Gate")]
+        public void EncounterQuestObjectivePublisher_AdvancesOnlyAfterWorldConfirmsEncounterClear()
+        {
+            QuestDefinitionSO definition = AssetDatabase.LoadAssetAtPath<QuestDefinitionSO>(
+                "Assets/GAME/Data/Quest/CH01_FindFirstNpc.asset");
+            GameObject questOwner = new("DungeonEncounterQuestTest");
+            GameObject trackerOwner = new("DungeonEncounterQuestTracker");
+            GameObject encounterOwner = new("DungeonEncounterQuestEncounter");
+            GameObject publisherOwner = new("DungeonEncounterQuestPublisher");
+
+            try
+            {
+                QuestRuntime runtime = questOwner.AddComponent<QuestRuntime>();
+                QuestObjectiveTracker tracker = trackerOwner.AddComponent<QuestObjectiveTracker>();
+                SetReference(tracker, "questRuntime", runtime);
+                InvokeIfPresent(tracker, "OnEnable");
+                runtime.StartQuest(definition);
+
+                CombatEncounterGroup encounter = encounterOwner.AddComponent<CombatEncounterGroup>();
+                SetPrivateField(encounter, "encounterId", "dungeon1.encounter.01");
+                EncounterQuestObjectivePublisher publisher = publisherOwner.AddComponent<EncounterQuestObjectivePublisher>();
+                SetReference(publisher, "targetEncounter", encounter);
+                SetPrivateField(publisher, "questId", definition.QuestId);
+                SetPrivateField(publisher, "objectiveId", "clear_encounter_01");
+                InvokeIfPresent(publisher, "OnEnable");
+
+                CombatResult escaped = new()
+                {
+                    CompletionId = "encounter-escape",
+                    EndReason = CombatEndReason.Escape
+                };
+                InvokeIfPresent(encounter, "AdoptAcceptedSession", escaped.CompletionId);
+                InvokeIfPresent(encounter, "TryBeginOutcome", escaped);
+                InvokeIfPresent(encounter, "CompleteOutcome", escaped, false);
+                Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "clear_encounter_01"), Is.Zero);
+                InvokeIfPresent(encounter, "ObserveExploration");
+
+                CombatResult victory = new()
+                {
+                    CompletionId = "encounter-victory",
+                    EndReason = CombatEndReason.Victory,
+                    IsWin = true
+                };
+                InvokeIfPresent(encounter, "AdoptAcceptedSession", victory.CompletionId);
+                InvokeIfPresent(encounter, "TryBeginOutcome", victory);
+                InvokeIfPresent(encounter, "CompleteOutcome", victory, false);
+                InvokeIfPresent(encounter, "CompleteOutcome", victory, false);
+
+                Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "clear_encounter_01"), Is.EqualTo(1));
+                Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Active));
+            }
+            finally
+            {
+                Object.DestroyImmediate(publisherOwner);
+                Object.DestroyImmediate(encounterOwner);
+                Object.DestroyImmediate(trackerOwner);
+                Object.DestroyImmediate(questOwner);
+            }
+        }
+
+        [Test]
+        [Category("D108Gate")]
+        public void DungeonExitGate_UnlocksFromDungeonCompletionAndDoesNotTravelWithoutDestination()
+        {
+            QuestDefinitionSO definition = AssetDatabase.LoadAssetAtPath<QuestDefinitionSO>(
+                "Assets/GAME/Data/Quest/CH01_FindFirstNpc.asset");
+            GameObject owner = new("DungeonExitGateTest");
+
+            try
+            {
+                QuestRuntime runtime = owner.AddComponent<QuestRuntime>();
+                DungeonCompletionFlow completionFlow = owner.AddComponent<DungeonCompletionFlow>();
+                DungeonExitGate exitGate = owner.AddComponent<DungeonExitGate>();
+                SetReference(completionFlow, "questRuntime", runtime);
+                SetPrivateField(completionFlow, "completionQuestId", definition.QuestId);
+                SetReference(exitGate, "dungeonCompletionFlow", completionFlow);
+
+                runtime.StartQuest(definition);
+                Assert.That(exitGate.IsUnlocked, Is.False);
+                Assert.That(exitGate.TryUseExit(), Is.False);
+
+                runtime.CompleteQuest(definition.QuestId);
+                Assert.That(exitGate.IsUnlocked, Is.True);
+                Assert.That(exitGate.TryUseExit(), Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(owner);
+            }
         }
 
         [Test]
@@ -625,12 +781,12 @@ namespace Game.Tests.Integration
                 InvokeAwake(runner);
 
                 Assert.That(runner.TryStartEvent(dialogue), Is.True);
-                Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Completed));
+                Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Active));
                 Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "talk_first_npc"), Is.EqualTo(1));
 
                 runner.Advance();
                 Assert.That(runner.TryStartEvent(dialogue), Is.True);
-                Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Completed));
+                Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Active));
                 Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "talk_first_npc"), Is.EqualTo(1));
             }
             finally
@@ -682,6 +838,167 @@ namespace Game.Tests.Integration
                 Is.EqualTo((int)StoryEffectType.MarkEventCompleted));
             Assert.That(completionEffect.FindPropertyRelative("key").stringValue,
                 Is.EqualTo("dungeon1.intro.story"));
+        }
+
+        [Test]
+        [Category("D105Lifecycle")]
+        public void SceneStartAdapter_DestroyImmediately_RemovesBootstrapSubscription()
+        {
+            GameObject core = new("D105_DestroyedAdapterCore");
+            GameObject bootstrapOwner = new("D105_DestroyedAdapterBootstrap");
+            GameObject owner = new("D105_DestroyedAdapter");
+            try
+            {
+                GameStateMachine stateMachine = core.AddComponent<GameStateMachine>();
+                GameFlowController flow = core.AddComponent<GameFlowController>();
+                InvokeAwake(stateMachine);
+                InvokeAwake(flow);
+                RuntimeBootstrapper bootstrapper = bootstrapOwner.AddComponent<RuntimeBootstrapper>();
+                InvokeAwake(bootstrapper);
+
+                SceneStartStoryEventAdapter adapter = owner.AddComponent<SceneStartStoryEventAdapter>();
+                Assert.That(CountBootstrapSubscriptions(adapter), Is.EqualTo(1));
+
+                Object.DestroyImmediate(owner);
+
+                Assert.That(CountBootstrapSubscriptions(adapter), Is.Zero,
+                    "DestroyImmediate must not leave a destroyed adapter in RuntimeBootstrapper's static event.");
+                Assert.DoesNotThrow(() => InvokeIfPresent(bootstrapper, "ApplyInitialStateForActiveScene"));
+            }
+            finally
+            {
+                if (owner != null)
+                    Object.DestroyImmediate(owner);
+                Object.DestroyImmediate(bootstrapOwner);
+                Object.DestroyImmediate(core);
+            }
+        }
+
+        [Test]
+        [Category("D105Lifecycle")]
+        public void SceneStartAdapter_Disable_RemovesBootstrapSubscription()
+        {
+            GameObject owner = new("D105_DisabledAdapter");
+            try
+            {
+                SceneStartStoryEventAdapter adapter = owner.AddComponent<SceneStartStoryEventAdapter>();
+                Assert.That(CountBootstrapSubscriptions(adapter), Is.EqualTo(1));
+
+                adapter.enabled = false;
+
+                Assert.That(CountBootstrapSubscriptions(adapter), Is.Zero);
+            }
+            finally
+            {
+                Object.DestroyImmediate(owner);
+            }
+        }
+
+        [Test]
+        [Category("D105Lifecycle")]
+        public void SceneStartAdapter_Reenable_RegistersOneBootstrapSubscription()
+        {
+            GameObject owner = new("D105_ReenabledAdapter");
+            try
+            {
+                SceneStartStoryEventAdapter adapter = owner.AddComponent<SceneStartStoryEventAdapter>();
+                adapter.enabled = false;
+                adapter.enabled = true;
+
+                Assert.That(CountBootstrapSubscriptions(adapter), Is.EqualTo(1));
+            }
+            finally
+            {
+                Object.DestroyImmediate(owner);
+            }
+        }
+
+        [Test]
+        [Category("D105Lifecycle")]
+        public void SceneStartAdapter_BootstrapAlreadyReady_StartsIntroOnce()
+        {
+            StoryEventDefinitionSO intro = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
+                "Assets/GAME/Data/Story/CH01/DungeonOneIntroStory.asset");
+            GameObject core = new("D105_ReadyCore");
+            GameObject bootstrapOwner = new("D105_ReadyBootstrap");
+            GameObject narrative = new("D105_ReadyNarrative");
+            GameObject adapterOwner = new("D105_ReadyAdapter");
+
+            try
+            {
+                GameStateMachine stateMachine = core.AddComponent<GameStateMachine>();
+                GameFlowController flow = core.AddComponent<GameFlowController>();
+                InvokeAwake(stateMachine);
+                InvokeAwake(flow);
+
+                RuntimeBootstrapper bootstrapper = bootstrapOwner.AddComponent<RuntimeBootstrapper>();
+                InvokeAwake(bootstrapper);
+                InvokeIfPresent(bootstrapper, "ApplyInitialStateForActiveScene");
+
+                StoryEventRunner runner = narrative.AddComponent<StoryEventRunner>();
+                InvokeAwake(runner);
+                int starts = 0;
+                runner.OnEventStarted += _ => starts++;
+
+                SceneStartStoryEventAdapter adapter = adapterOwner.AddComponent<SceneStartStoryEventAdapter>();
+                SetReference(adapter, "runner", runner);
+                SetReference(adapter, "eventDefinition", intro);
+                InvokeIfPresent(adapter, "OnEnable");
+                InvokeIfPresent(adapter, "Start");
+
+                Assert.That(runner.IsRunning, Is.True);
+                Assert.That(starts, Is.EqualTo(1));
+                runner.EndEvent();
+            }
+            finally
+            {
+                Object.DestroyImmediate(adapterOwner);
+                Object.DestroyImmediate(narrative);
+                Object.DestroyImmediate(bootstrapOwner);
+                Object.DestroyImmediate(core);
+            }
+        }
+
+        [Test]
+        [Category("D105Lifecycle")]
+        public void SceneStartAdapter_SceneReplacement_CleansOldBootstrapSubscription()
+        {
+            GameObject firstOwner = new("D105_FirstAdapter");
+            SceneStartStoryEventAdapter first = firstOwner.AddComponent<SceneStartStoryEventAdapter>();
+            Assert.That(CountBootstrapSubscriptions(first), Is.EqualTo(1));
+
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            GameObject replacementOwner = new("D105_ReplacementAdapter");
+            try
+            {
+                SceneStartStoryEventAdapter replacement = replacementOwner.AddComponent<SceneStartStoryEventAdapter>();
+                Assert.That(CountBootstrapSubscriptions(first), Is.Zero);
+                Assert.That(CountBootstrapSubscriptions(replacement), Is.EqualTo(1));
+            }
+            finally
+            {
+                Object.DestroyImmediate(replacementOwner);
+            }
+        }
+
+        [Test]
+        [Category("D105Lifecycle")]
+        public void SceneStartAdapter_RepeatedOnEnable_DoesNotDuplicateBootstrapSubscription()
+        {
+            GameObject owner = new("D105_RepeatedEnableAdapter");
+            try
+            {
+                SceneStartStoryEventAdapter adapter = owner.AddComponent<SceneStartStoryEventAdapter>();
+                InvokeIfPresent(adapter, "OnEnable");
+                InvokeIfPresent(adapter, "OnEnable");
+
+                Assert.That(CountBootstrapSubscriptions(adapter), Is.EqualTo(1));
+            }
+            finally
+            {
+                Object.DestroyImmediate(owner);
+            }
         }
 
         [Test]
@@ -962,6 +1279,15 @@ namespace Game.Tests.Integration
                 methodName,
                 BindingFlags.Instance | BindingFlags.NonPublic);
             awake?.Invoke(component, arguments);
+        }
+
+        private static int CountBootstrapSubscriptions(SceneStartStoryEventAdapter adapter)
+        {
+            FieldInfo listeners = typeof(RuntimeBootstrapper).GetField(
+                "OnInitialStateApplied",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            System.Delegate callbacks = listeners?.GetValue(null) as System.Delegate;
+            return callbacks?.GetInvocationList().Count(callback => ReferenceEquals(callback.Target, adapter)) ?? 0;
         }
 
         private static GameObject CreatePlayerAt(Vector3 position)

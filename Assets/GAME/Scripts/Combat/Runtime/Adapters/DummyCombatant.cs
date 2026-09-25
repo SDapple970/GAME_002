@@ -3,15 +3,17 @@ using Game.Combat.Model;
 
 namespace Game.Combat.Adapters
 {
-    // MVP Å×½ºÆ®¿ë ´õ¹Ì ÀüÅõ¿ø(ÇÊµå ¿¬°á Àü ÀÓ½Ã)
-    public sealed class DummyCombatant : ICombatant
+    // MVP í…ŒìŠ¤íŠ¸ìš© ë”ë¯¸ ì „íˆ¬ì›(í•„ë“œ ì—°ê²° ì „ ì„ì‹œ)
+    public sealed class DummyCombatant : ICombatant, ICombatantRuntimeStateBinding
     {
         private readonly List<ISkill> _skills = new();
+        private CombatantCombatState _runtimeState;
+        private int _hp;
 
         public CombatantId Id { get; }
         public Side Side { get; }
 
-        public int HP { get; private set; }
+        public int HP => _runtimeState != null ? _runtimeState.CurrentHp : _hp;
         public int MaxHP { get; }
 
         public KeywordMask Weakness { get; }
@@ -27,7 +29,7 @@ namespace Game.Combat.Adapters
         {
             Id = new CombatantId(id);
             Side = side;
-            HP = hp;
+            _hp = hp;
             MaxHP = hp;
             Weakness = weakness;
             Resist = KeywordMask.None;
@@ -39,8 +41,19 @@ namespace Game.Combat.Adapters
         public void ApplyDamage(int amount)
         {
             if (amount <= 0) return;
-            HP -= amount;
-            if (HP < 0) HP = 0;
+            if (_runtimeState != null)
+            {
+                _runtimeState.ApplyDamage(amount);
+                return;
+            }
+
+            _hp -= amount;
+            if (_hp < 0) _hp = 0;
+        }
+
+        void ICombatantRuntimeStateBinding.BindCombatState(CombatantCombatState state)
+        {
+            _runtimeState = state;
         }
 
         public void AddStagger(int amount)
@@ -53,7 +66,7 @@ namespace Game.Combat.Adapters
 
         public void ResetStaggerIfNeededOnStunEnd()
         {
-            // Á¤Ã¥: ±âÀıÀÌ ³¡³ª¸é ±×·Î±â 0À¸·Î ¸®¼Â(´Ü¼ø)
+            // ì •ì±…: ê¸°ì ˆì´ ëë‚˜ë©´ ê·¸ë¡œê¸° 0ìœ¼ë¡œ ë¦¬ì…‹(ë‹¨ìˆœ)
             Stagger = 0;
         }
     }

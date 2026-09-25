@@ -3,9 +3,12 @@ using UnityEngine;
 
 namespace Game.Supply
 {
-    public sealed class SupplyLoadoutService : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer
+    public sealed class SupplyLoadoutService : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         [SerializeField] private SupplyLoadout currentLoadout = new();
+        private SupplyLoadout _initialLoadout;
+
+        private void Awake() => _initialLoadout = GetSnapshot();
 
         public SupplyLoadout GetSnapshot()
         {
@@ -66,5 +69,7 @@ namespace Game.Supply
                 saveData?.futureDaily?.selectedSupplyItemIds,
                 saveData?.futureDaily?.selectedSupplyItemCounts);
         }
+
+        public void ResetForNewGame() => currentLoadout = _initialLoadout != null ? _initialLoadout.Clone() : new SupplyLoadout();
     }
 }

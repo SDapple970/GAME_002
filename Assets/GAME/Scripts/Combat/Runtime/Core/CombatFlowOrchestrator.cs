@@ -8,7 +8,9 @@ namespace Game.Combat.Core
     {
         [SerializeField] private CombatEntryPoint entryPoint;
 
+        private readonly DeterministicCycleEnemyCombatPolicy _enemyPolicy = new DeterministicCycleEnemyCombatPolicy();
         private CombatSession _session;
+        private CombatStateMachine _boundStateMachine;
 
         private void Awake()
         {
@@ -18,7 +20,23 @@ namespace Game.Combat.Core
 
         public void BindSession(CombatSession session)
         {
+            UnsubscribeStandoffDecision();
             _session = session;
+
+            if (_session == null || _session.FlowMode != CombatFlowMode.StandoffClashChain ||
+                entryPoint == null || !ReferenceEquals(_session, entryPoint.ActiveSession) ||
+                entryPoint.ActiveStateMachine == null)
+            {
+                return;
+            }
+
+            _boundStateMachine = entryPoint.ActiveStateMachine;
+            _boundStateMachine.OnEnemyActionRequired += HandleEnemyActionRequired;
+        }
+
+        private void OnDisable()
+        {
+            UnsubscribeStandoffDecision();
         }
 
         public bool SubmitPlayerDraftAndAdvance(
@@ -119,9 +137,11 @@ namespace Game.Combat.Core
                 {
                     source = existing;
                 }
-                else
+                else if (!_enemyPolicy.TryCreatePlan(
+                             new EnemyCombatPlanRequest(_session, enemy),
+                             out source))
                 {
-                    source = BuildDeterministicEnemyPlan(enemy);
+                    return Fail($"Enemy policy could not create a plan for {enemy.Id.Value}.", out errorMessage);
                 }
 
                 if (!CombatPlanValidator.TryNormalizePlan(_session, enemy, source, out ActionPlan normalized, out errorMessage))
@@ -133,81 +153,24 @@ namespace Game.Combat.Core
             return true;
         }
 
-        private ActionPlan BuildDeterministicEnemyPlan(ICombatant enemy)
+        private void HandleEnemyActionRequired(CombatSession session)
         {
-            if (enemy.HP <= 0 || enemy.IsStunned || enemy.Skills == null || enemy.Skills.Count == 0)
-                return NonePlan();
-
-            int startIndex = _session.TurnIndex % enemy.Skills.Count;
-            for (int offset = 0; offset < enemy.Skills.Count; offset++)
+            if (!ReferenceEquals(session, _session) || _boundStateMachine == null ||
+                entryPoint == null || !ReferenceEquals(_boundStateMachine, entryPoint.ActiveStateMachine))
             {
-                ISkill skill = enemy.Skills[(startIndex + offset) % enemy.Skills.Count];
-                if (skill == null || !TryChooseEnemyTarget(enemy, skill, out CombatantId targetId))
-                    continue;
-
-                PlannedAction action = new PlannedAction(
-                    skill.Id,
-                    skill.Tag,
-                    skill.Targeting,
-                    targetId,
-                    skill.Speed,
-                    skill.ConsumesTurn);
-                return new ActionPlan(action, PlannedAction.None);
+                return;
             }
 
-            return NonePlan();
+            _boundStateMachine.TrySubmitEnemyDecision(_enemyPolicy);
         }
 
-        private bool TryChooseEnemyTarget(ICombatant enemy, ISkill skill, out CombatantId targetId)
+        private void UnsubscribeStandoffDecision()
         {
-            targetId = default;
+            if (_boundStateMachine == null)
+                return;
 
-            switch (skill.Targeting)
-            {
-                case TargetingRule.None:
-                case TargetingRule.Environment:
-                case TargetingRule.AllEnemies:
-                case TargetingRule.AllAllies:
-                    return true;
-
-                case TargetingRule.Self:
-                    targetId = enemy.Id;
-                    return true;
-
-                case TargetingRule.SingleAlly:
-                    return TryFindFirstLiving(_session.Allies, out targetId);
-
-                case TargetingRule.SingleEnemy:
-                    return TryFindFirstLiving(_session.Enemies, out targetId);
-
-                case TargetingRule.AnySingle:
-                    return TryFindFirstLiving(_session.Allies, out targetId) ||
-                           TryFindFirstLiving(_session.Enemies, out targetId);
-
-                default:
-                    return false;
-            }
-        }
-
-        private static bool TryFindFirstLiving(IReadOnlyList<ICombatant> actors, out CombatantId id)
-        {
-            for (int i = 0; i < actors.Count; i++)
-            {
-                ICombatant actor = actors[i];
-                if (actor != null && actor.HP > 0)
-                {
-                    id = actor.Id;
-                    return true;
-                }
-            }
-
-            id = default;
-            return false;
-        }
-
-        private static ActionPlan NonePlan()
-        {
-            return new ActionPlan(PlannedAction.None, PlannedAction.None);
+            _boundStateMachine.OnEnemyActionRequired -= HandleEnemyActionRequired;
+            _boundStateMachine = null;
         }
 
         private static bool Fail(string message, out string errorMessage)

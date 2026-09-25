@@ -62,6 +62,13 @@ namespace Game.EditorTools
             new("Encounter_03", "Enemy_03", "dungeon1.encounter.03", new Vector3(144.28948f, -6.35649f, 0f))
         };
 
+        private static readonly string[] ProductionEncounterObjectiveIds =
+        {
+            "clear_encounter_01",
+            "clear_encounter_02",
+            "clear_encounter_03"
+        };
+
         private static readonly Vector3 ProductionStartPosition = new(-39.88f, -6.33f, 0f);
         private static readonly Vector3 ProductionNpcPosition = new(187.105f, 7.698f, 0f);
 
@@ -340,6 +347,8 @@ namespace Game.EditorTools
             if (authoredGroups.Length != 0 || authoredTriggers.Length != 0)
                 ValidateProductionEncounters();
             RequireCount<CombatQuestObjectivePublisher>(0);
+            RequireCount<DungeonQuestStartAdapter>(1);
+            RequireCount<EncounterQuestObjectivePublisher>(ProductionEncounters.Length);
             RequireCount<InteractionQuestObjectivePublisher>(0);
             ValidateProductionNpc();
 
@@ -424,6 +433,7 @@ namespace Game.EditorTools
                     LoadRequiredAsset<QuestDefinitionSO>(ProductionQuestDefinitionPath),
                 "Production QuestRuntime is not bound to the Dungeon 1 QuestDefinitionSO.");
             ValidateProductionQuest();
+            ValidateProductionQuestIntegration(questRuntime);
             ValidateProductionDungeonCompletion(questRuntime);
             ValidateProductionSceneStartNarrative();
 
@@ -460,6 +470,10 @@ namespace Game.EditorTools
 
             foreach (CombatQuestObjectivePublisher publisher in FindSceneComponents<CombatQuestObjectivePublisher>())
                 UnityEngine.Object.DestroyImmediate(publisher);
+            foreach (EncounterQuestObjectivePublisher publisher in FindSceneComponents<EncounterQuestObjectivePublisher>())
+                UnityEngine.Object.DestroyImmediate(publisher);
+            foreach (DungeonQuestStartAdapter adapter in FindSceneComponents<DungeonQuestStartAdapter>())
+                UnityEngine.Object.DestroyImmediate(adapter.gameObject);
             foreach (InteractionQuestObjectivePublisher publisher in FindSceneComponents<InteractionQuestObjectivePublisher>())
                 UnityEngine.Object.DestroyImmediate(publisher);
 
@@ -621,9 +635,11 @@ namespace Game.EditorTools
                 throw new InvalidOperationException($"Expected production scene '{ProductionScenePath}', found '{productionScene.path}'.");
 
             QuestRuntime questRuntime = FindSceneComponents<QuestRuntime>().Single();
-            SetReferenceArrayElement(questRuntime, "questDefinitions", 0, EnsureProductionQuestDefinition(), 1);
+            QuestDefinitionSO definition = EnsureProductionQuestDefinition();
+            SetReferenceArrayElement(questRuntime, "questDefinitions", 0, definition, 1);
             EnsureProductionNpcDialogue();
             EnsureProductionIntroStory();
+            ConfigureProductionQuestIntegration(questRuntime, definition);
             EditorSceneManager.MarkSceneDirty(productionScene);
         }
 
@@ -792,16 +808,22 @@ namespace Game.EditorTools
             serialized.FindProperty("category").intValue = (int)QuestCategory.Unspecified;
             serialized.FindProperty("missionDayCost").intValue = 0;
             SerializedProperty objectives = serialized.FindProperty("objectives");
-            objectives.arraySize = 1;
-            SerializedProperty objective = objectives.GetArrayElementAtIndex(0);
-            objective.FindPropertyRelative("objectiveId").stringValue = ProductionQuestObjectiveId;
-            objective.FindPropertyRelative("eventType").intValue = (int)QuestEventType.Talk;
-            objective.FindPropertyRelative("targetId").stringValue = ProductionQuestObjectiveTargetId;
-            objective.FindPropertyRelative("requiredCount").intValue = 1;
-            objective.FindPropertyRelative("optional").boolValue = false;
-            objective.FindPropertyRelative("groupIndex").intValue = 0;
-            objective.FindPropertyRelative("visibility").intValue = (int)QuestObjectiveVisibility.Visible;
-            objective.FindPropertyRelative("description").stringValue = "첫 NPC와 대화한다.";
+            objectives.arraySize = 1 + ProductionEncounters.Length;
+            ConfigureRequiredObjective(
+                objectives.GetArrayElementAtIndex(0),
+                ProductionQuestObjectiveId,
+                QuestEventType.Talk,
+                ProductionQuestObjectiveTargetId,
+                "첫 NPC와 대화한다.");
+            for (int index = 0; index < ProductionEncounters.Length; index++)
+            {
+                ConfigureRequiredObjective(
+                    objectives.GetArrayElementAtIndex(index + 1),
+                    ProductionEncounterObjectiveIds[index],
+                    QuestEventType.ClearEncounter,
+                    ProductionEncounters[index].EncounterId,
+                    string.Empty);
+            }
             serialized.FindProperty("rewardGold").intValue = 0;
             serialized.FindProperty("rewardExp").intValue = 0;
             serialized.FindProperty("retryPolicy").intValue = (int)QuestRetryPolicy.NotRetryable;
@@ -818,8 +840,8 @@ namespace Game.EditorTools
             Require(definition.QuestTitle == "낯선 장소", "Dungeon 1 quest title does not match the approved title.");
             Require(definition.MissionDayCost == 0, "Dungeon 1 quest must not consume calendar days.");
             Require(definition.RewardGold == 0 && definition.RewardExp == 0, "Dungeon 1 quest must not define rewards.");
-            Require(definition.Objectives != null && definition.Objectives.Length == 1,
-                "Dungeon 1 quest must define exactly one objective.");
+            Require(definition.Objectives != null && definition.Objectives.Length == 1 + ProductionEncounters.Length,
+                "Dungeon 1 quest must define the Talk and three encounter-clear objectives.");
             QuestObjectiveDefinition objective = definition.Objectives[0];
             Require(objective != null &&
                     objective.ObjectiveId == ProductionQuestObjectiveId &&
@@ -827,6 +849,19 @@ namespace Game.EditorTools
                     objective.TargetId == ProductionQuestObjectiveTargetId &&
                     objective.RequiredCount == 1,
                 "Dungeon 1 quest objective does not match the approved Talk contract.");
+
+            for (int index = 0; index < ProductionEncounters.Length; index++)
+            {
+                QuestObjectiveDefinition encounterObjective = definition.Objectives[index + 1];
+                Require(encounterObjective != null &&
+                        encounterObjective.ObjectiveId == ProductionEncounterObjectiveIds[index] &&
+                        encounterObjective.EventType == QuestEventType.ClearEncounter &&
+                        encounterObjective.TargetId == ProductionEncounters[index].EncounterId &&
+                        encounterObjective.RequiredCount == 1 &&
+                        !encounterObjective.Optional &&
+                        encounterObjective.GroupIndex == 0,
+                    $"Dungeon 1 encounter objective '{ProductionEncounterObjectiveIds[index]}' does not match its stable clear contract.");
+            }
 
             SerializedProperty effect = new SerializedObject(EnsureProductionNpcDialogue())
                 .FindProperty("nodes").GetArrayElementAtIndex(0)
@@ -838,6 +873,81 @@ namespace Game.EditorTools
                     effect.FindPropertyRelative("questTargetId").stringValue == ProductionQuestObjectiveTargetId &&
                     effect.FindPropertyRelative("intValue").intValue == 1,
                 "Dungeon 1 FirstTalk dialogue does not publish the approved canonical Talk QuestEvent.");
+        }
+
+        private static void ConfigureRequiredObjective(
+            SerializedProperty objective,
+            string objectiveId,
+            QuestEventType eventType,
+            string targetId,
+            string description)
+        {
+            objective.FindPropertyRelative("objectiveId").stringValue = objectiveId;
+            objective.FindPropertyRelative("eventType").intValue = (int)eventType;
+            objective.FindPropertyRelative("targetId").stringValue = targetId;
+            objective.FindPropertyRelative("requiredCount").intValue = 1;
+            objective.FindPropertyRelative("optional").boolValue = false;
+            objective.FindPropertyRelative("groupIndex").intValue = 0;
+            objective.FindPropertyRelative("visibility").intValue = (int)QuestObjectiveVisibility.Visible;
+            objective.FindPropertyRelative("description").stringValue = description;
+        }
+
+        private static void ConfigureProductionQuestIntegration(
+            QuestRuntime questRuntime,
+            QuestDefinitionSO definition)
+        {
+            GameObject integrationObject = FindSceneComponents<DungeonQuestStartAdapter>()
+                .Select(item => item.gameObject)
+                .SingleOrDefault();
+            if (integrationObject == null)
+                integrationObject = new GameObject("DungeonQuestIntegration");
+
+            DungeonQuestStartAdapter startAdapter = integrationObject.GetComponent<DungeonQuestStartAdapter>();
+            if (startAdapter == null)
+                startAdapter = integrationObject.AddComponent<DungeonQuestStartAdapter>();
+            SetReference(startAdapter, "questRuntime", questRuntime);
+            SetReference(startAdapter, "questDefinition", definition);
+
+            foreach (EncounterQuestObjectivePublisher publisher in
+                     FindSceneComponents<EncounterQuestObjectivePublisher>())
+            {
+                UnityEngine.Object.DestroyImmediate(publisher);
+            }
+
+            CombatEncounterGroup[] groups = FindSceneComponents<CombatEncounterGroup>();
+            for (int index = 0; index < ProductionEncounters.Length; index++)
+            {
+                CombatEncounterGroup group = groups.Single(item => item.EncounterId == ProductionEncounters[index].EncounterId);
+                EncounterQuestObjectivePublisher publisher = integrationObject.AddComponent<EncounterQuestObjectivePublisher>();
+                SetReference(publisher, "targetEncounter", group);
+                SetString(publisher, "questId", ProductionQuestId);
+                SetString(publisher, "objectiveId", ProductionEncounterObjectiveIds[index]);
+            }
+        }
+
+        private static void ValidateProductionQuestIntegration(QuestRuntime questRuntime)
+        {
+            DungeonQuestStartAdapter startAdapter = FindSceneComponents<DungeonQuestStartAdapter>().Single();
+            Require(ReadReference<QuestRuntime>(startAdapter, "questRuntime") == questRuntime,
+                "Dungeon Quest start adapter must reference the canonical QuestRuntime.");
+            Require(ReadReference<QuestDefinitionSO>(startAdapter, "questDefinition") ==
+                    LoadRequiredAsset<QuestDefinitionSO>(ProductionQuestDefinitionPath),
+                "Dungeon Quest start adapter must reference the authored Dungeon 1 QuestDefinitionSO.");
+
+            EncounterQuestObjectivePublisher[] publishers = FindSceneComponents<EncounterQuestObjectivePublisher>();
+            Require(publishers.Length == ProductionEncounters.Length,
+                "Dungeon 1 must have exactly one Quest encounter publisher for every production encounter.");
+            for (int index = 0; index < ProductionEncounters.Length; index++)
+            {
+                EncounterQuestObjectivePublisher publisher = publishers.Single(item =>
+                    ReadString(item, "objectiveId") == ProductionEncounterObjectiveIds[index]);
+                CombatEncounterGroup group = FindSceneComponents<CombatEncounterGroup>().Single(item =>
+                    item.EncounterId == ProductionEncounters[index].EncounterId);
+                Require(ReadString(publisher, "questId") == ProductionQuestId,
+                    "Dungeon encounter Quest publisher has an unexpected quest ID.");
+                Require(ReadReference<CombatEncounterGroup>(publisher, "targetEncounter") == group,
+                    "Dungeon encounter Quest publisher must reference its matching World encounter group.");
+            }
         }
 
         private static void ValidateProductionDungeonCompletion(QuestRuntime questRuntime)

@@ -1093,10 +1093,110 @@ namespace Game.Tests.Integration
             Assert.That(calendar.CurrentDay, Is.EqualTo(3));
 
             saveLoad.RestoreGameSaveDataSnapshot(preCompletion);
+            Assert.That(runtime.TryGetDefinition("rewind", out QuestDefinitionSO restoredDefinition), Is.True);
+            Assert.That(restoredDefinition, Is.SameAs(definition));
+            Assert.That(runtime.IsQuestActive("rewind"), Is.True);
+            Assert.That(calendar.CurrentDay, Is.EqualTo(1));
+            Assert.That(preCompletion.futureDaily.appliedQuestDayCostIds, Is.Empty);
             runtime.CompleteQuest("rewind");
 
             Assert.That(calendar.CurrentDay, Is.EqualTo(3));
             Assert.That(preCompletion.futureDaily.appliedQuestDayCostIds, Is.Empty);
+        }
+
+        [Test]
+        public void QuestCompletion_ColdRestoreResolvesSerializedDefinitionAndAppliesDayCost()
+        {
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+            QuestDefinitionSO definition = CreateQuestDefinition("cold-active", QuestEventType.Kill, "kill", 1);
+            SetField(definition, "missionDayCost", 2);
+            QuestRuntime source = CreateComponent<QuestRuntime>("SourceRuntime");
+            QuestCalendarIntegration sourceIntegration = CreateCalendarIntegration(source, calendar, "SourceIntegration");
+            source.StartQuest(definition);
+            GameSaveData snapshot = new();
+            source.CaptureSaveData(snapshot);
+            calendar.CaptureSaveData(snapshot);
+            sourceIntegration.CaptureSaveData(snapshot);
+            UnityEngine.Object.DestroyImmediate(sourceIntegration.gameObject);
+            UnityEngine.Object.DestroyImmediate(source.gameObject);
+
+            QuestRuntime restored = CreateRuntimeWithDefinition("RestoredRuntime", definition);
+            QuestCalendarIntegration restoredIntegration = CreateCalendarIntegration(restored, calendar, "RestoredIntegration");
+            restored.RestoreSaveData(snapshot);
+            calendar.RestoreSaveData(snapshot);
+            restoredIntegration.RestoreSaveData(snapshot);
+
+            Assert.That(restored.TryGetDefinition("cold-active", out QuestDefinitionSO restoredDefinition), Is.True);
+            Assert.That(restoredDefinition, Is.SameAs(definition));
+            Assert.That(restored.IsQuestActive("cold-active"), Is.True);
+            restored.CompleteQuest("cold-active");
+            Assert.That(calendar.CurrentDay, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void QuestCompletion_CompletedColdRestoreDoesNotReemitCompletionOrReapplyDayCost()
+        {
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+            QuestDefinitionSO definition = CreateQuestDefinition("cold-completed", QuestEventType.Kill, "kill", 1);
+            SetField(definition, "missionDayCost", 2);
+            QuestRuntime source = CreateComponent<QuestRuntime>("SourceRuntime");
+            QuestCalendarIntegration sourceIntegration = CreateCalendarIntegration(source, calendar, "SourceIntegration");
+            source.StartQuest(definition);
+            source.CompleteQuest("cold-completed");
+            GameSaveData snapshot = new();
+            source.CaptureSaveData(snapshot);
+            calendar.CaptureSaveData(snapshot);
+            sourceIntegration.CaptureSaveData(snapshot);
+            UnityEngine.Object.DestroyImmediate(sourceIntegration.gameObject);
+            UnityEngine.Object.DestroyImmediate(source.gameObject);
+
+            QuestRuntime restored = CreateRuntimeWithDefinition("RestoredRuntime", definition);
+            QuestCalendarIntegration restoredIntegration = CreateCalendarIntegration(restored, calendar, "RestoredIntegration");
+            int completions = 0;
+            restored.OnQuestCompleted += _ => completions++;
+            restored.RestoreSaveData(snapshot);
+            calendar.RestoreSaveData(snapshot);
+            restoredIntegration.RestoreSaveData(snapshot);
+            restored.CompleteQuest("cold-completed");
+
+            Assert.That(restored.IsQuestComplete("cold-completed"), Is.True);
+            Assert.That(completions, Is.Zero);
+            Assert.That(calendar.CurrentDay, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void QuestRestore_UnknownQuestIdLogsWarningWithoutSelectingAnotherDefinition()
+        {
+            QuestDefinitionSO known = CreateQuestDefinition("known", QuestEventType.Kill, "kill", 1);
+            QuestRuntime runtime = CreateRuntimeWithDefinition("Runtime", known);
+            GameSaveData snapshot = new();
+            snapshot.quest.quests.Add(new QuestStateSaveData
+            {
+                questId = "missing",
+                status = QuestStatus.Active.ToString()
+            });
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex(
+                "Saved quest definition could not be resolved.*questId='missing'"));
+            runtime.RestoreSaveData(snapshot);
+
+            Assert.That(runtime.TryGetDefinition("missing", out _), Is.False);
+            Assert.That(runtime.IsQuestActive("missing"), Is.True);
+        }
+
+        [Test]
+        public void QuestRuntime_DuplicateSerializedQuestIdsAreRejectedAsAmbiguous()
+        {
+            QuestDefinitionSO first = CreateQuestDefinition("duplicate", QuestEventType.Kill, "first", 1);
+            QuestDefinitionSO second = CreateQuestDefinition("duplicate", QuestEventType.Kill, "second", 1);
+            QuestRuntime runtime = CreateComponent<QuestRuntime>("Runtime");
+            SetField(runtime, "questDefinitions", new[] { first, second });
+
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex(
+                "Duplicate serialized QuestDefinitionSO questId 'duplicate'"));
+            Invoke(runtime, "RegisterSerializedDefinitions");
+
+            Assert.That(runtime.TryGetDefinition("duplicate", out _), Is.False);
         }
 
         [Test]
@@ -1378,7 +1478,7 @@ namespace Game.Tests.Integration
             runtime.StartQuest(CreateQuestDefinition("quest", QuestEventType.Kill, "kill", 3));
             QuestEvent production = new(QuestEventType.Kill, "quest", "kill", identity);
             QuestEvent compatibility = new(
-                QuestEventType.Kill,
+                QuestEventType.ClearEncounter,
                 "quest",
                 "kill",
                 1,
@@ -1426,7 +1526,6 @@ namespace Game.Tests.Integration
             CreateCompletionFlow(runtime, service, 0, false);
 
             CombatEncounterGroup target = CreateComponent<CombatEncounterGroup>("ValidationEncounter");
-            SetField(target, "_activeCompletionId", "combat-validation-01");
             CombatQuestObjectivePublisher publisher = CreateCombatQuestPublisher(
                 target,
                 "validation.production.npc.quest",
@@ -1459,7 +1558,6 @@ namespace Game.Tests.Integration
             CreateObjectiveTracker(runtime);
 
             CombatEncounterGroup target = CreateComponent<CombatEncounterGroup>("ValidationEncounter");
-            SetField(target, "_activeCompletionId", "combat-target");
             CombatQuestObjectivePublisher publisher = CreateCombatQuestPublisher(target, "quest", "target");
             CombatResult unrelated = new()
             {
@@ -1468,8 +1566,6 @@ namespace Game.Tests.Integration
                 IsWin = true
             };
             unrelated.DefeatedEnemyIds.Add(100);
-
-            Invoke(publisher, "HandleCombatEnded", unrelated);
 
             Assert.That(runtime.GetObjectiveProgress("quest", "target"), Is.Zero);
             Assert.That(runtime.IsQuestActive("quest"), Is.True);
@@ -1713,7 +1809,6 @@ namespace Game.Tests.Integration
             ForceState(state, GameState.CombatPlanning);
 
             CombatEncounterGroup target = CreateComponent<CombatEncounterGroup>("ValidationEncounter");
-            SetField(target, "_activeCompletionId", "combat-validation-01");
             CombatQuestObjectivePublisher publisher = CreateCombatQuestPublisher(
                 target,
                 definition.QuestId,
