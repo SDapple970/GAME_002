@@ -51,6 +51,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Core.CombatEntryPoint
   director: {fileID: 4803411875580991714}
   flowOrchestrator: {fileID: 3458696486045702784}
+  finalExchangeRuntimeConfig: {fileID: 11400000, guid: 55e6978e3cf88ca4994f7855f907bc6c, type: 2}
   skillDefinitions: []
   inspirationMax: 10
   inspirationStart: 3

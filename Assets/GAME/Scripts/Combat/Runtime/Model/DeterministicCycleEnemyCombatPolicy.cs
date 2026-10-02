@@ -112,14 +112,14 @@ namespace Game.Combat.Model
                     return true;
 
                 case TargetingRule.SingleAlly:
-                    return TryFindFirstLiving(session, session.Allies, out target);
+                    return TryFindFirstLiving(session, session.GetSide(enemy.Side), out target);
 
                 case TargetingRule.SingleEnemy:
-                    return TryFindFirstLiving(session, session.Enemies, out target);
+                    return TryFindFirstLiving(session, session.GetSide(Opposite(enemy.Side)), out target);
 
                 case TargetingRule.AnySingle:
-                    return TryFindFirstLiving(session, session.Allies, out target) ||
-                           TryFindFirstLiving(session, session.Enemies, out target);
+                    return TryFindFirstLiving(session, session.GetSide(Opposite(enemy.Side)), out target) ||
+                           TryFindFirstLiving(session, session.GetSide(enemy.Side), out target);
 
                 default:
                     return false;
@@ -151,6 +151,11 @@ namespace Game.Combat.Model
         {
             return runtimeState.IsAlive && !enemy.IsStunned &&
                    enemy.Skills != null && enemy.Skills.Count > 0;
+        }
+
+        private static Side Opposite(Side side)
+        {
+            return side == Side.Allies ? Side.Enemies : Side.Allies;
         }
 
         private static ISkill FindSkill(IReadOnlyList<ISkill> skills, SkillId skillId)

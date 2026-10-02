@@ -34,6 +34,11 @@ namespace Game.Combat.Core
             InitializeRuntimeState();
         }
 
+        internal bool OwnsSession(CombatSession session)
+        {
+            return ReferenceEquals(_session, session);
+        }
+
         private void InitializeRuntimeState()
         {
             // The bootstrapper finalizes the roster before constructing the state machine.
@@ -77,7 +82,8 @@ namespace Game.Combat.Core
             if (_session.ExchangeState == null || _session.CombatStateCount != CountRosterCombatants())
                 return false;
 
-            _session.ExchangeState.ClearDeclaration();
+            _session.ExchangeState.ResetForStandoff();
+            _approachPresentationRequested = false;
             _session.StandoffState.Reset();
             SetPhase(Phase.Standoff);
             return true;
@@ -95,6 +101,36 @@ namespace Game.Combat.Core
 
             _session.ExchangeState.CommitDeclaration(declaration);
             _session.StandoffState.Reset();
+            SetPhase(Phase.AttackDeclaration);
+            return true;
+        }
+
+        public bool TryDeclareAttack(
+            CombatAttackDeclaration declaration,
+            int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            bool isInitialDeclaration = Phase == Phase.Standoff;
+            bool isChainDeclaration = Phase == Phase.AttackDeclaration &&
+                                      exchange?.IsChainActive == true &&
+                                      exchange.CurrentDeclaration == null;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                (!isInitialDeclaration && !isChainDeclaration) ||
+                declaration?.Attacker == null || declaration.Target == null || declaration.Skill == null ||
+                declaration.Attacker.Side != exchange.CurrentAttackSide ||
+                (isChainDeclaration && !ReferenceEquals(declaration.Attacker, exchange.CurrentAttackActor)) ||
+                !CombatDeclarationPolicy.CanDeclareAttack(_session, declaration))
+            {
+                return false;
+            }
+
+            CombatantCombatState attackerState = _session.GetCombatState(declaration.Attacker);
+            if (!attackerState.CanSpendMp(CombatMpCostResolver.Resolve(declaration.Skill)))
+                return false;
+
+            exchange.CommitDeclaration(declaration);
+            if (isInitialDeclaration)
+                _session.StandoffState.Reset();
             SetPhase(Phase.AttackDeclaration);
             return true;
         }
@@ -144,6 +180,23 @@ namespace Game.Combat.Core
             return true;
         }
 
+        public bool TryDeclareResponse(
+            CombatResponseDeclaration response,
+            int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            CombatAttackDeclaration attack = exchange?.CurrentDeclaration;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                !CanEditResponse() ||
+                !CombatDeclarationPolicy.CanDeclareResponse(_session, attack, response))
+            {
+                return false;
+            }
+
+            exchange.CommitResponse(response);
+            return true;
+        }
+
         public bool ConfirmNoResponse()
         {
             CombatAttackDeclaration declaration = _session?.ExchangeState?.CurrentDeclaration;
@@ -151,6 +204,21 @@ namespace Game.Combat.Core
                 return false;
 
             _session.ExchangeState.ConfirmNoResponse();
+            return true;
+        }
+
+        public bool ConfirmNoResponse(int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            CombatAttackDeclaration declaration = exchange?.CurrentDeclaration;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                !CanEditResponse() ||
+                !CombatDeclarationPolicy.CanDeclareAttack(_session, declaration))
+            {
+                return false;
+            }
+
+            exchange.ConfirmNoResponse();
             return true;
         }
 
@@ -241,6 +309,35 @@ namespace Game.Combat.Core
             return true;
         }
 
+        public bool TryCommitExchange(int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            CombatAttackDeclaration declaration = exchange?.CurrentDeclaration;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                Phase != Phase.AttackDeclaration || exchange.IsCommitted ||
+                exchange.ResponseState == CombatResponseState.Pending ||
+                declaration == null)
+            {
+                return false;
+            }
+
+            CombatResponseDeclaration requestedResponse =
+                exchange.ResponseState == CombatResponseState.CounterDeclared
+                    ? exchange.CurrentResponse
+                    : null;
+            if (!CombatExchangeCommitPolicy.TryCommit(
+                    _session,
+                    declaration,
+                    requestedResponse,
+                    out CombatExchangeCommitResult result))
+            {
+                return false;
+            }
+
+            exchange.StoreCommitResult(result);
+            return true;
+        }
+
         public bool TryBeginApproach()
         {
             CombatAttackDeclaration declaration = _session?.ExchangeState?.CurrentDeclaration;
@@ -252,11 +349,64 @@ namespace Game.Combat.Core
             return true;
         }
 
+        public bool TryBeginApproach(int expectedExchangeVersion)
+        {
+            CombatAttackDeclaration declaration = _session?.ExchangeState?.CurrentDeclaration;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                !CanExecuteDeclaration(declaration) ||
+                !CombatDeclarationPolicy.CanDeclareAttack(_session, declaration))
+            {
+                return false;
+            }
+
+            _approachPresentationRequested = false;
+            SetPhase(Phase.Approach);
+            return true;
+        }
+
         public bool CompleteApproach()
         {
             CombatAttackDeclaration declaration = _session?.ExchangeState?.CurrentDeclaration;
             if (_exited || Phase != Phase.Approach || !CanUseDeclarationParticipants(declaration) ||
                 CombatEndEvaluator.Evaluate(_session) != CombatEndReason.None)
+            {
+                return false;
+            }
+
+            SetPhase(Phase.Clash);
+            return true;
+        }
+
+        public bool CompleteApproach(int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            CombatAttackDeclaration declaration = exchange?.CurrentDeclaration;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                Phase != Phase.Approach || exchange == null || !exchange.IsCommitted ||
+                !CombatDeclarationPolicy.CanDeclareAttack(_session, declaration))
+            {
+                return false;
+            }
+
+            if (exchange.ResponseState == CombatResponseState.NoResponse)
+            {
+                CombatClashRequest request = new CombatClashRequest(
+                    declaration,
+                    CombatResponseState.NoResponse,
+                    null);
+                if (!CombatClashResolver.TryResolve(request, null, out CombatClashResult result))
+                    return false;
+
+                exchange.StoreClashResult(result);
+                SetPhase(Phase.ApplyOutcome);
+                return true;
+            }
+
+            if (exchange.ResponseState != CombatResponseState.CounterDeclared ||
+                !CombatDeclarationPolicy.CanDeclareResponse(
+                    _session,
+                    declaration,
+                    exchange.CurrentResponse))
             {
                 return false;
             }
@@ -296,6 +446,35 @@ namespace Game.Combat.Core
             return true;
         }
 
+        public bool TryResolveClash(
+            FinalCombatClashRule clashRule,
+            int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            CombatAttackDeclaration declaration = exchange?.CurrentDeclaration;
+            CombatResponseDeclaration response = exchange?.CurrentResponse;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                Phase != Phase.Clash || exchange == null || !exchange.IsCommitted ||
+                exchange.CurrentClashResult != null || clashRule == null ||
+                exchange.ResponseState != CombatResponseState.CounterDeclared ||
+                !CombatDeclarationPolicy.CanDeclareAttack(_session, declaration) ||
+                !CombatDeclarationPolicy.CanDeclareResponse(_session, declaration, response))
+            {
+                return false;
+            }
+
+            CombatClashRequest request = new CombatClashRequest(
+                declaration,
+                CombatResponseState.CounterDeclared,
+                response);
+            if (!CombatClashResolver.TryResolve(request, clashRule, out CombatClashResult result))
+                return false;
+
+            exchange.StoreClashResult(result);
+            SetPhase(Phase.ApplyOutcome);
+            return true;
+        }
+
         public bool TryPrepareOutcome()
         {
             CombatExchangeState exchange = _session?.ExchangeState;
@@ -313,6 +492,11 @@ namespace Game.Combat.Core
 
             exchange.StorePreparedOutcome(action);
             return true;
+        }
+
+        public bool TryPrepareOutcome(int expectedExchangeVersion)
+        {
+            return HasExpectedExchangeVersion(expectedExchangeVersion) && TryPrepareOutcome();
         }
 
         public bool TryPrepareSkillExecution()
@@ -347,6 +531,11 @@ namespace Game.Combat.Core
             return true;
         }
 
+        public bool TryPrepareSkillExecution(int expectedExchangeVersion)
+        {
+            return HasExpectedExchangeVersion(expectedExchangeVersion) && TryPrepareSkillExecution();
+        }
+
         public bool TryExecutePreparedSkill()
         {
             CombatExchangeState exchange = _session?.ExchangeState;
@@ -378,6 +567,11 @@ namespace Game.Combat.Core
 
             exchange.StoreCompletedExecution(result);
             return true;
+        }
+
+        public bool TryExecutePreparedSkill(int expectedExchangeVersion)
+        {
+            return HasExpectedExchangeVersion(expectedExchangeVersion) && TryExecutePreparedSkill();
         }
 
         public bool TryResolvePosture(ICombatPostureRule postureRule = null)
@@ -453,6 +647,14 @@ namespace Game.Combat.Core
             return true;
         }
 
+        public bool TryResolvePosture(
+            ICombatPostureRule postureRule,
+            int expectedExchangeVersion)
+        {
+            return HasExpectedExchangeVersion(expectedExchangeVersion) &&
+                   TryResolvePosture(postureRule);
+        }
+
         public bool TryResolveStun()
         {
             CombatExchangeState exchange = _session?.ExchangeState;
@@ -508,6 +710,11 @@ namespace Game.Combat.Core
             return true;
         }
 
+        public bool TryResolveStun(int expectedExchangeVersion)
+        {
+            return HasExpectedExchangeVersion(expectedExchangeVersion) && TryResolveStun();
+        }
+
         public bool TryPrepareAftermath()
         {
             CombatExchangeState exchange = _session?.ExchangeState;
@@ -523,6 +730,11 @@ namespace Game.Combat.Core
 
             exchange.StoreAftermath(new CombatAftermathSnapshot(_session, exchange));
             return exchange.IsAftermathPrepared;
+        }
+
+        public bool TryPrepareAftermath(int expectedExchangeVersion)
+        {
+            return HasExpectedExchangeVersion(expectedExchangeVersion) && TryPrepareAftermath();
         }
 
         public bool TryPrepareAftermathDecision()
@@ -541,6 +753,12 @@ namespace Game.Combat.Core
                 CombatAftermathDecisionResolver.Resolve(exchange.CurrentAftermathSnapshot);
             exchange.StoreAftermathDecision(decision);
             return exchange.IsAftermathDecisionPrepared;
+        }
+
+        public bool TryPrepareAftermathDecision(int expectedExchangeVersion)
+        {
+            return HasExpectedExchangeVersion(expectedExchangeVersion) &&
+                   TryPrepareAftermathDecision();
         }
 
         public bool TryEnterChainDecision()
@@ -618,6 +836,193 @@ namespace Game.Combat.Core
             return Phase == Phase.ExitCombat && EndReason == terminalDecision.EndReason;
         }
 
+        public bool TryFinalizeApplyOutcome(
+            FinalCombatTerminalPolicy terminalPolicy,
+            int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            CombatAftermathDecision aftermathDecision = exchange?.CurrentAftermathDecision;
+            CombatAftermathSnapshot snapshot = exchange?.CurrentAftermathSnapshot;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                Phase != Phase.ApplyOutcome || exchange.IsApplyOutcomeFinalized ||
+                !exchange.IsAftermathDecisionPrepared || aftermathDecision == null || snapshot == null ||
+                aftermathDecision.Kind == CombatAftermathDecisionKind.TiePolicyRequired ||
+                !CombatAttackAuthorityPolicy.TryResolve(
+                    exchange.CurrentClashResult,
+                    out CombatAttackAuthorityPolicy.Result authority))
+            {
+                return false;
+            }
+
+            CombatTerminalDecision terminalDecision = null;
+            bool isTerminal = aftermathDecision.Kind == CombatAftermathDecisionKind.TerminalCandidate;
+            if (isTerminal)
+            {
+                if (terminalPolicy == null)
+                    return false;
+
+                try
+                {
+                    if (!terminalPolicy.TryResolve(
+                            aftermathDecision.TerminalCandidate,
+                            snapshot,
+                            out terminalDecision))
+                    {
+                        return false;
+                    }
+                }
+                catch (Exception)
+                {
+                    return false;
+                }
+
+                if (!IsValidTerminalDecision(aftermathDecision.TerminalCandidate, terminalDecision))
+                    return false;
+            }
+            else if (aftermathDecision.Kind != CombatAftermathDecisionKind.ChainDecisionRequired &&
+                     aftermathDecision.Kind != CombatAftermathDecisionKind.AllOutCandidate)
+            {
+                return false;
+            }
+
+            bool isAllOutCandidate = aftermathDecision.Kind == CombatAftermathDecisionKind.AllOutCandidate &&
+                                     CombatAllOutPolicy.IsCandidate(_session);
+            if (aftermathDecision.Kind == CombatAftermathDecisionKind.AllOutCandidate &&
+                !isAllOutCandidate)
+            {
+                return false;
+            }
+
+            exchange.StoreAttackAuthority(authority.Winner);
+            exchange.FinalizeApplyOutcome(isAllOutCandidate);
+
+            if (isTerminal)
+            {
+                exchange.StoreTerminalDecision(terminalDecision);
+                EnterExit(terminalDecision.EndReason);
+                return Phase == Phase.ExitCombat && EndReason == terminalDecision.EndReason;
+            }
+
+            exchange.BeginChainDecision(authority.Winner);
+            SetPhase(Phase.ChainDecision);
+            return true;
+        }
+
+        public bool TryContinueChain(ISkill skill, int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            ICombatant owner = exchange?.CurrentAttackActor;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                Phase != Phase.ChainDecision || !exchange.IsApplyOutcomeFinalized ||
+                !exchange.IsChainActive || !ReferenceEquals(exchange.ChainOwner, owner) ||
+                !CombatChainPolicy.ShouldContinue(_session, owner, skill, true))
+            {
+                return false;
+            }
+
+            exchange.PrepareNextChainExchange(owner, exchange.HandoffCount);
+            SetPhase(Phase.AttackDeclaration);
+            return true;
+        }
+
+        public bool TryContinueChain(int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            ICombatant owner = exchange?.CurrentAttackActor;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                Phase != Phase.ChainDecision || !exchange.IsApplyOutcomeFinalized ||
+                !exchange.IsChainActive || !ReferenceEquals(exchange.ChainOwner, owner) ||
+                !CombatChainPolicy.CanContinueWithAnySkill(_session, owner))
+            {
+                return false;
+            }
+
+            exchange.PrepareNextChainExchange(owner, exchange.HandoffCount);
+            SetPhase(Phase.AttackDeclaration);
+            return true;
+        }
+
+        public bool TryHandoffChain(
+            ICombatant receivingActor,
+            ISkill receivingSkill,
+            bool isHandoffEligible,
+            int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            ICombatant owner = exchange?.CurrentAttackActor;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                Phase != Phase.ChainDecision || !exchange.IsApplyOutcomeFinalized ||
+                !exchange.IsChainActive || !ReferenceEquals(exchange.ChainOwner, owner) ||
+                !CombatHandoffPolicy.TryAuthorize(
+                    _session,
+                    owner,
+                    receivingActor,
+                    receivingSkill,
+                    exchange.HandoffCount,
+                    isHandoffEligible,
+                    out CombatHandoffPolicy.Result handoff))
+            {
+                return false;
+            }
+
+            exchange.PrepareNextChainExchange(handoff.ReceivingActor, handoff.HandoffCount);
+            SetPhase(Phase.AttackDeclaration);
+            return true;
+        }
+
+        public bool TryEndChain(int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                Phase != Phase.ChainDecision || !exchange.IsApplyOutcomeFinalized ||
+                !exchange.IsChainActive)
+            {
+                return false;
+            }
+
+            exchange.ResetForStandoff();
+            _approachPresentationRequested = false;
+            SetPhase(Phase.Standoff);
+            return true;
+        }
+
+        public bool TryGrantStandoffAttackAuthority(
+            Side side,
+            int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                Phase != Phase.Standoff || exchange == null ||
+                !Enum.IsDefined(typeof(Side), side) ||
+                exchange.CurrentAttackSide == side ||
+                CombatEndEvaluator.Evaluate(_session) != CombatEndReason.None)
+            {
+                return false;
+            }
+
+            exchange.SetAttackSide(side);
+            return true;
+        }
+
+        public bool TryTerminateExplicit(
+            CombatEndReason requestedReason,
+            int expectedExchangeVersion)
+        {
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                _exited || _session.FlowMode != CombatFlowMode.StandoffClashChain)
+            {
+                return false;
+            }
+
+            FinalCombatTerminalPolicy policy = new FinalCombatTerminalPolicy();
+            if (!policy.TryResolveExplicit(requestedReason, out CombatTerminalDecision decision))
+                return false;
+
+            _session.ExchangeState.StoreTerminalDecision(decision);
+            EnterExit(decision.EndReason);
+            return true;
+        }
+
         private static bool IsValidTerminalDecision(
             CombatTerminalCandidate expectedCandidate,
             CombatTerminalDecision decision)
@@ -628,6 +1033,15 @@ namespace Game.Combat.Core
                    decision.TerminalCandidate == expectedCandidate &&
                    decision.EndReason != CombatEndReason.None &&
                    Enum.IsDefined(typeof(CombatEndReason), decision.EndReason);
+        }
+
+        private bool HasExpectedExchangeVersion(int expectedExchangeVersion)
+        {
+            return !_exited && _session != null &&
+                   _session.FlowMode == CombatFlowMode.StandoffClashChain &&
+                   _session.ExchangeState != null &&
+                   expectedExchangeVersion >= 0 &&
+                   _session.ExchangeState.Version == expectedExchangeVersion;
         }
 
         private static bool TryGetPostureParticipants(
@@ -1140,6 +1554,8 @@ namespace Game.Combat.Core
 
             Phase previous = Phase;
             Phase = next;
+            if (_session?.FlowMode == CombatFlowMode.StandoffClashChain)
+                _session.ExchangeState?.AdvanceVersion();
             if (OnPhaseChanged == null)
                 return;
 

@@ -30,6 +30,70 @@ namespace Game.Combat.Effects
         private Coroutine _activeApproachRoutine;
         private CombatAttackDeclaration _activeApproachDeclaration;
         private Action _activeApproachCompletion;
+        private CombatFlowOrchestrator _finalOrchestrator;
+        private CombatSession _finalSession;
+        private CombatApproachPresentationRequest _activeFinalApproachRequest;
+        private Coroutine _activeFinalOutcomeRoutine;
+        private CombatOutcomePresentationRequest _activeFinalOutcomeRequest;
+        private int _finalBindingId;
+
+        public event Action<CombatFinalPresentationCue> FinalPresentationCueRaised;
+
+        public bool BindFinalExchange(
+            CombatFlowOrchestrator orchestrator,
+            CombatSession session)
+        {
+            if (ReferenceEquals(_finalOrchestrator, orchestrator) &&
+                ReferenceEquals(_finalSession, session))
+            {
+                return true;
+            }
+
+            UnbindFinalExchange();
+            if (orchestrator == null || session == null ||
+                session.FlowMode != CombatFlowMode.StandoffClashChain)
+            {
+                return false;
+            }
+
+            _finalOrchestrator = orchestrator;
+            _finalSession = session;
+            _finalBindingId++;
+            _finalOrchestrator.ApproachPresentationRequested += HandleFinalApproachRequested;
+            _finalOrchestrator.OutcomePresentationRequested += HandleFinalOutcomeRequested;
+            _finalOrchestrator.AttackDecisionRequested += HandleFinalAttackDecisionRequested;
+
+            if (_finalOrchestrator.PendingApproachRequest != null)
+                HandleFinalApproachRequested(_finalOrchestrator.PendingApproachRequest);
+            else if (_finalOrchestrator.PendingOutcomePresentationRequest != null)
+                HandleFinalOutcomeRequested(_finalOrchestrator.PendingOutcomePresentationRequest);
+            else if (_finalOrchestrator.PendingDecisionRequest != null)
+                HandleFinalAttackDecisionRequested(_finalOrchestrator.PendingDecisionRequest);
+
+            return true;
+        }
+
+        public void UnbindFinalExchange()
+        {
+            if (_finalOrchestrator != null)
+            {
+                _finalOrchestrator.ApproachPresentationRequested -= HandleFinalApproachRequested;
+                _finalOrchestrator.OutcomePresentationRequested -= HandleFinalOutcomeRequested;
+                _finalOrchestrator.AttackDecisionRequested -= HandleFinalAttackDecisionRequested;
+            }
+
+            _finalBindingId++;
+            if (_activeFinalOutcomeRoutine != null)
+                StopCoroutine(_activeFinalOutcomeRoutine);
+
+            _activeFinalOutcomeRoutine = null;
+            _activeFinalOutcomeRequest = null;
+            if (_activeFinalApproachRequest != null)
+                CancelActiveApproachWithoutCompletion();
+            _activeFinalApproachRequest = null;
+            _finalOrchestrator = null;
+            _finalSession = null;
+        }
 
         public void PlayApproach(CombatAttackDeclaration declaration, Action onComplete)
         {
@@ -100,6 +164,8 @@ namespace Game.Combat.Effects
 
         private void OnDisable()
         {
+            UnbindFinalExchange();
+
             if (_activeResolutionRoutine != null)
                 StopCoroutine(_activeResolutionRoutine);
 
@@ -109,6 +175,325 @@ namespace Game.Combat.Effects
                 StopCoroutine(_activeApproachRoutine);
 
             CompleteActiveApproach();
+        }
+
+        private void HandleFinalApproachRequested(CombatApproachPresentationRequest request)
+        {
+            CombatAttackDeclaration declaration = request?.Declaration;
+            if (!IsCurrentFinalRequest(request?.ExchangeVersion ?? -1) ||
+                declaration?.Attacker == null || declaration.Target == null || declaration.Skill == null ||
+                !IsFinalSessionMember(declaration.Attacker) || !IsFinalSessionMember(declaration.Target))
+            {
+                return;
+            }
+
+            _activeFinalApproachRequest = request;
+            int bindingId = _finalBindingId;
+            RaiseFinalCue(
+                CombatFinalPresentationCueKind.Approach,
+                declaration.Attacker,
+                declaration.Target,
+                declaration.Skill);
+            PlayApproach(
+                declaration,
+                () => CompleteFinalApproach(bindingId, request));
+        }
+
+        private void CompleteFinalApproach(
+            int bindingId,
+            CombatApproachPresentationRequest request)
+        {
+            if (bindingId != _finalBindingId ||
+                !ReferenceEquals(_activeFinalApproachRequest, request) ||
+                !IsCurrentFinalRequest(request?.ExchangeVersion ?? -1))
+            {
+                return;
+            }
+
+            _activeFinalApproachRequest = null;
+            request.TryComplete();
+        }
+
+        private void HandleFinalOutcomeRequested(CombatOutcomePresentationRequest request)
+        {
+            if (!IsCurrentFinalRequest(request?.ExchangeVersion ?? -1) ||
+                ReferenceEquals(_activeFinalOutcomeRequest, request))
+            {
+                return;
+            }
+
+            if (_activeFinalOutcomeRoutine != null)
+                StopCoroutine(_activeFinalOutcomeRoutine);
+
+            _activeFinalOutcomeRequest = request;
+            if (!isActiveAndEnabled)
+            {
+                CompleteFinalOutcome(_finalBindingId, request);
+                return;
+            }
+
+            int bindingId = _finalBindingId;
+            Coroutine routine = StartCoroutine(Co_PlayFinalOutcome(bindingId, request));
+            if (_activeFinalOutcomeRequest != null)
+                _activeFinalOutcomeRoutine = routine;
+        }
+
+        private IEnumerator Co_PlayFinalOutcome(
+            int bindingId,
+            CombatOutcomePresentationRequest request)
+        {
+            if (!IsActiveFinalOutcome(bindingId, request))
+                yield break;
+
+            CombatOutcomeAction action = request.WinningAction;
+            ICombatant actor = action?.Actor;
+            ISkill skill = action?.Skill;
+            ICombatant primaryTarget = GetPrimaryFinalTarget(request);
+            GameObject actorObject = GetFieldObject(actor);
+
+            if (request.HasClash)
+            {
+                CombatAttackDeclaration attack = request.AttackDeclaration;
+                CombatResponseDeclaration response = request.ResponseDeclaration;
+                PlayFinalClashAction(
+                    CombatFinalPresentationCueKind.AttackAction,
+                    attack?.Attacker,
+                    response?.Responder ?? attack?.Target,
+                    attack?.Skill);
+                PlayFinalClashAction(
+                    CombatFinalPresentationCueKind.ResponseAction,
+                    response?.Responder,
+                    attack?.Attacker,
+                    response?.Skill);
+                RaiseFinalCue(
+                    CombatFinalPresentationCueKind.Clash,
+                    attack?.Attacker,
+                    response?.Responder,
+                    skill);
+                cameraController?.FocusAction(
+                    attack?.Attacker,
+                    response?.Responder);
+            }
+
+            if (actor != null && skill != null)
+            {
+                cameraController?.FocusAction(actor, primaryTarget);
+                RaiseFinalCue(
+                    CombatFinalPresentationCueKind.WinningSkill,
+                    actor,
+                    primaryTarget,
+                    skill);
+                if (!request.HasClash && actorObject != null)
+                {
+                    PlayCastPresentation(actorObject, skill);
+                    PlayAttackTrigger(actorObject, skill);
+                }
+
+                yield return WaitAfterMove(skill);
+            }
+
+            if (!IsActiveFinalOutcome(bindingId, request))
+                yield break;
+
+            PlayFinalTargetResults(request, skill);
+            cameraController?.HoldResultFrame();
+            RaiseFinalCue(
+                CombatFinalPresentationCueKind.OutcomeHold,
+                actor,
+                primaryTarget,
+                skill);
+
+            // Presentation placeholder timing — Content Tuning Pending.
+            yield return new WaitForSeconds(Mathf.Max(0f, fallbackActionDelay));
+            CompleteFinalOutcome(bindingId, request);
+        }
+
+        private void PlayFinalClashAction(
+            CombatFinalPresentationCueKind cueKind,
+            ICombatant actor,
+            ICombatant target,
+            ISkill skill)
+        {
+            if (actor == null || skill == null)
+                return;
+
+            cameraController?.FocusAction(actor, target);
+            RaiseFinalCue(cueKind, actor, target, skill);
+            GameObject actorObject = GetFieldObject(actor);
+            if (actorObject == null)
+                return;
+
+            PlayCastPresentation(actorObject, skill);
+            PlayAttackTrigger(actorObject, skill);
+        }
+
+        private void PlayFinalTargetResults(
+            CombatOutcomePresentationRequest request,
+            ISkill skill)
+        {
+            if (request?.ExecutionResult?.TargetResults != null)
+            {
+                for (int i = 0; i < request.ExecutionResult.TargetResults.Count; i++)
+                {
+                    CombatSkillTargetResult result = request.ExecutionResult.TargetResults[i];
+                    if (result?.Target == null)
+                        continue;
+
+                    GameObject targetObject = GetFieldObject(result.Target);
+                    if (targetObject != null)
+                    {
+                        PlayImpactPresentation(targetObject, skill);
+                        PlayFinalTargetReaction(request, result, targetObject);
+                    }
+
+                    RaiseFinalResultCues(request, result, skill);
+                }
+            }
+        }
+
+        private static void PlayFinalTargetReaction(
+            CombatOutcomePresentationRequest request,
+            CombatSkillTargetResult result,
+            GameObject targetObject)
+        {
+            CombatantAnimationDriver driver =
+                targetObject != null ? targetObject.GetComponentInChildren<CombatantAnimationDriver>() : null;
+            if (driver == null || result?.Target == null)
+                return;
+
+            if (result.HpAfter <= 0)
+                driver.PlayDie();
+            else if (request?.StunResult?.Target == result.Target &&
+                     request.StunResult.StunApplied)
+                driver.PlayStagger();
+            else if (request?.PostureResult?.Target == result.Target &&
+                     request.PostureResult.PostureApplied > 0)
+                driver.PlayStagger();
+            else if (result.DamageApplied > 0)
+                driver.PlayHit();
+        }
+
+        private void RaiseFinalResultCues(
+            CombatOutcomePresentationRequest request,
+            CombatSkillTargetResult result,
+            ISkill skill)
+        {
+            if (result.HpAfter <= 0)
+            {
+                RaiseFinalCue(CombatFinalPresentationCueKind.Defeat, request.Winner, result.Target, skill);
+                return;
+            }
+
+            if (result.DamageApplied > 0)
+                RaiseFinalCue(CombatFinalPresentationCueKind.HitReaction, request.Winner, result.Target, skill);
+
+            if (request.PostureResult?.Target == result.Target &&
+                request.PostureResult.PostureApplied > 0)
+            {
+                RaiseFinalCue(CombatFinalPresentationCueKind.PostureReaction, request.Winner, result.Target, skill);
+            }
+
+            if (request.StunResult?.Target == result.Target && request.StunResult.StunApplied)
+                RaiseFinalCue(CombatFinalPresentationCueKind.StunReaction, request.Winner, result.Target, skill);
+        }
+
+        private void CompleteFinalOutcome(
+            int bindingId,
+            CombatOutcomePresentationRequest request)
+        {
+            if (!IsActiveFinalOutcome(bindingId, request))
+                return;
+
+            _activeFinalOutcomeRoutine = null;
+            _activeFinalOutcomeRequest = null;
+            request.TryComplete();
+        }
+
+        private void HandleFinalAttackDecisionRequested(CombatExchangeDecisionRequest request)
+        {
+            if (!IsCurrentFinalRequest(request?.ExchangeVersion ?? -1) ||
+                request.Phase != Phase.Standoff)
+            {
+                return;
+            }
+
+            cameraController?.FocusPlanning();
+            RaiseFinalCue(
+                CombatFinalPresentationCueKind.Standoff,
+                request.ActingActor,
+                null,
+                null);
+        }
+
+        private bool IsActiveFinalOutcome(
+            int bindingId,
+            CombatOutcomePresentationRequest request)
+        {
+            return bindingId == _finalBindingId &&
+                   ReferenceEquals(_activeFinalOutcomeRequest, request) &&
+                   IsCurrentFinalRequest(request?.ExchangeVersion ?? -1);
+        }
+
+        private bool IsCurrentFinalRequest(int exchangeVersion)
+        {
+            return _finalOrchestrator != null && _finalSession != null &&
+                   _finalSession.FlowMode == CombatFlowMode.StandoffClashChain &&
+                   _finalSession.ExchangeState != null && exchangeVersion >= 0 &&
+                   _finalSession.ExchangeState.Version == exchangeVersion;
+        }
+
+        private bool IsFinalSessionMember(ICombatant combatant)
+        {
+            if (_finalSession == null || combatant == null)
+                return false;
+
+            System.Collections.Generic.IReadOnlyList<ICombatant> roster =
+                _finalSession.GetSide(combatant.Side);
+            for (int i = 0; i < roster.Count; i++)
+            {
+                if (ReferenceEquals(roster[i], combatant))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static ICombatant GetPrimaryFinalTarget(
+            CombatOutcomePresentationRequest request)
+        {
+            if (request?.ExecutionResult?.TargetResults != null &&
+                request.ExecutionResult.TargetResults.Count > 0)
+            {
+                return request.ExecutionResult.TargetResults[0]?.Target;
+            }
+
+            return request?.Loser ?? request?.AttackDeclaration?.Target;
+        }
+
+        private void RaiseFinalCue(
+            CombatFinalPresentationCueKind kind,
+            ICombatant actor,
+            ICombatant target,
+            ISkill skill)
+        {
+            Action<CombatFinalPresentationCue> handlers = FinalPresentationCueRaised;
+            if (handlers == null)
+                return;
+
+            CombatFinalPresentationCue cue =
+                new CombatFinalPresentationCue(kind, actor, target, skill);
+            Delegate[] invocationList = handlers.GetInvocationList();
+            for (int i = 0; i < invocationList.Length; i++)
+            {
+                try
+                {
+                    ((Action<CombatFinalPresentationCue>)invocationList[i]).Invoke(cue);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception, this);
+                }
+            }
         }
 
         private IEnumerator Co_PlayApproach(CombatAttackDeclaration declaration)

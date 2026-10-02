@@ -447,8 +447,8 @@ namespace Game.Combat.Core
             };
 
             IReadOnlyList<ICombatant> targetSide = action.Plan.Targeting == TargetingRule.AllEnemies
-                ? session.Enemies
-                : session.Allies;
+                ? session.GetSide(Opposite(action.Actor.Side))
+                : session.GetSide(action.Actor.Side);
 
             if (!CanExecute(action))
             {
@@ -584,6 +584,11 @@ namespace Game.Combat.Core
             return targeting == TargetingRule.SingleEnemy ||
                    targeting == TargetingRule.SingleAlly ||
                    targeting == TargetingRule.AnySingle;
+        }
+
+        private static Side Opposite(Side side)
+        {
+            return side == Side.Allies ? Side.Enemies : Side.Allies;
         }
 
         private static ISkill FindSkill(ICombatant actor, SkillId skillId)

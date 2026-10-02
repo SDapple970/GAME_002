@@ -3,7 +3,7 @@ using Game.Combat.Model;
 
 namespace Game.Combat.Actions
 {
-    public sealed class SoSkill : ISkill, ICombatMpCostProvider
+    public sealed class SoSkill : ISkill, ICombatMpCostProvider, IFinalCombatSkillStats
     {
         private readonly SkillDefinitionSO _so;
 
@@ -15,6 +15,8 @@ namespace Game.Combat.Actions
 
         public int InspirationCost => _so.inspirationCost;
         public int MpCost => _so.MpCost;
+        public int FinalMpCost => _so.FinalMpCost;
+        public int ClashPower => _so.ClashPower;
         public KeywordMask Keywords => _so.keywords;
         public SkillTag Tag => _so.tag;
         public TargetingRule Targeting => _so.targeting;

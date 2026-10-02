@@ -15,6 +15,7 @@ MonoBehaviour:
   skillId: 1
   displayName: "\uAE30\uBCF8 \uACF5\uACA9"
   inspirationCost: 0
+  mpCost: 0
   tag: 0
   targeting: 2
   consumesTurn: 1
@@ -23,6 +24,8 @@ MonoBehaviour:
   desiredTargetDistance: 1
   moveSpeed: 6
   actionDelayAfterMove: 0.15
+  finalMpCost: 1
+  clashPower: 2
   combatAnimationTrigger: Attack
   fieldAnimationTrigger: Attack
   fieldUsable: 0

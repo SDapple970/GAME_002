@@ -168,13 +168,13 @@ namespace Game.Combat.Core
                     break;
 
                 case TargetingRule.SingleEnemy:
-                    if (!TryResolveLivingTarget(session, action.TargetCombatantId, Side.Enemies, out ICombatant enemy, out errorMessage))
+                    if (!TryResolveLivingTarget(session, action.TargetCombatantId, Opposite(actor.Side), out ICombatant enemy, out errorMessage))
                         return false;
                     targetId = enemy.Id;
                     break;
 
                 case TargetingRule.SingleAlly:
-                    if (!TryResolveLivingTarget(session, action.TargetCombatantId, Side.Allies, out ICombatant ally, out errorMessage))
+                    if (!TryResolveLivingTarget(session, action.TargetCombatantId, actor.Side, out ICombatant ally, out errorMessage))
                         return false;
                     targetId = ally.Id;
                     break;
@@ -293,6 +293,11 @@ namespace Game.Combat.Core
             }
 
             return false;
+        }
+
+        private static Side Opposite(Side side)
+        {
+            return side == Side.Allies ? Side.Enemies : Side.Allies;
         }
 
         private static bool Fail(string message, out string errorMessage)

@@ -727,7 +727,14 @@ namespace Game.Tests.Integration
                 Assert.That(stateMachine.Current, Is.EqualTo(GameState.Dialogue));
 
                 runner.Advance();
+                Assert.That(stateMachine.Current, Is.EqualTo(GameState.Choice));
+                Assert.That(runner.CurrentResolvedChoices, Has.Count.EqualTo(2));
 
+                runner.SelectChoiceByIndex(0);
+                Assert.That(stateMachine.Current, Is.EqualTo(GameState.Dialogue));
+
+                SetPrivateField(runner, "_lastAdvanceFrame", -1);
+                runner.Advance();
                 Assert.That(runner.IsRunning, Is.False);
                 Assert.That(stateMachine.Current, Is.EqualTo(GameState.Exploration));
             }
@@ -736,6 +743,49 @@ namespace Game.Tests.Integration
                 Object.DestroyImmediate(narrative);
                 Object.DestroyImmediate(core);
             }
+        }
+
+        [Test]
+        [Category("CNTD104")]
+        public void ProductionDungeonOne_FirstTalkStoryAuthorsTwoNoOpChoicesAndOneCommonQuestTerminal()
+        {
+            StoryEventDefinitionSO dialogue = AssetDatabase.LoadAssetAtPath<StoryEventDefinitionSO>(
+                "Assets/GAME/Data/Interaction/DungeonOneFirstTalkDialogue.asset");
+
+            Assert.That(dialogue, Is.Not.Null);
+            Assert.That(dialogue.EventId, Is.EqualTo("dungeon1.npc.first-talk.story"));
+            Assert.That(StoryChoiceResolver.MaxProductionChoices, Is.EqualTo(3));
+
+            StoryNode opening = dialogue.GetNode("first-talk");
+            StoryNode choice = dialogue.GetNode("first-talk-choice");
+            StoryNode terminal = dialogue.GetNode("first-talk-terminal");
+            Assert.That(opening, Is.Not.Null);
+            Assert.That(choice, Is.Not.Null);
+            Assert.That(terminal, Is.Not.Null);
+            Assert.That(opening.NextNodeId, Is.EqualTo(choice.NodeId));
+            Assert.That(opening.Effects, Is.Empty);
+            Assert.That(choice.UseTimedChoices, Is.True);
+            Assert.That(choice.ChoiceTimeLimitSeconds, Is.EqualTo(5f));
+            Assert.That(choice.Choices, Has.Count.EqualTo(2));
+            Assert.That(choice.TimeoutNodeId, Is.EqualTo(terminal.NodeId));
+
+            foreach (StoryChoice branch in choice.Choices)
+            {
+                Assert.That(branch.NextNodeId, Is.EqualTo(terminal.NodeId));
+                Assert.That(branch.Effects, Is.Empty);
+            }
+
+            SerializedProperty nodes = new SerializedObject(dialogue).FindProperty("nodes");
+            SerializedProperty terminalEffects = nodes.GetArrayElementAtIndex(2).FindPropertyRelative("effects");
+            Assert.That(terminalEffects.arraySize, Is.EqualTo(1));
+            SerializedProperty questEffect = terminalEffects.GetArrayElementAtIndex(0);
+            Assert.That(questEffect.FindPropertyRelative("type").intValue,
+                Is.EqualTo((int)StoryEffectType.PublishQuestEvent));
+            Assert.That(questEffect.FindPropertyRelative("missionId").stringValue, Is.EqualTo("ch01.find-first-npc"));
+            Assert.That(questEffect.FindPropertyRelative("objectiveId").stringValue, Is.EqualTo("talk_first_npc"));
+            Assert.That(questEffect.FindPropertyRelative("questEventType").intValue,
+                Is.EqualTo((int)QuestEventType.Talk));
+            Assert.That(terminal.EndEvent, Is.True);
         }
 
         [Test]
@@ -782,11 +832,25 @@ namespace Game.Tests.Integration
 
                 Assert.That(runner.TryStartEvent(dialogue), Is.True);
                 Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Active));
-                Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "talk_first_npc"), Is.EqualTo(1));
+                Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "talk_first_npc"), Is.Zero);
 
                 runner.Advance();
+                runner.SelectChoiceByIndex(0);
+                Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "talk_first_npc"), Is.EqualTo(1));
+
+                SetPrivateField(runner, "_lastAdvanceFrame", -1);
+                runner.Advance();
                 Assert.That(runner.TryStartEvent(dialogue), Is.True);
+                runner.Advance();
+                runner.SelectChoiceByIndex(1);
                 Assert.That(runtime.GetQuestStatus(definition.QuestId), Is.EqualTo(QuestStatus.Active));
+                Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "talk_first_npc"), Is.EqualTo(1));
+
+                SetPrivateField(runner, "_lastAdvanceFrame", -1);
+                runner.Advance();
+                Assert.That(runner.TryStartEvent(dialogue), Is.True);
+                runner.Advance();
+                InvokeTimeout(runner);
                 Assert.That(runtime.GetObjectiveProgress(definition.QuestId, "talk_first_npc"), Is.EqualTo(1));
             }
             finally
@@ -1323,6 +1387,17 @@ namespace Game.Tests.Integration
             FieldInfo field = owner.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, fieldName);
             field.SetValue(owner, value);
+        }
+
+        private static void InvokeTimeout(StoryEventRunner runner)
+        {
+            FieldInfo generation = typeof(StoryEventRunner).GetField("_generation", BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo nodeToken = typeof(StoryEventRunner).GetField("_nodeToken", BindingFlags.Instance | BindingFlags.NonPublic);
+            MethodInfo timeout = typeof(StoryEventRunner).GetMethod("TryAcceptTimeout", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(generation, Is.Not.Null);
+            Assert.That(nodeToken, Is.Not.Null);
+            Assert.That(timeout, Is.Not.Null);
+            timeout.Invoke(runner, new[] { generation.GetValue(runner), nodeToken.GetValue(runner) });
         }
 
         private static void SetReference(UnityEngine.Object owner, string propertyName, UnityEngine.Object value)

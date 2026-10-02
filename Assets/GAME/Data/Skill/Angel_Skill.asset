@@ -15,14 +15,17 @@ MonoBehaviour:
   skillId: 11
   displayName: "\uCC9C\uC0AC \uACF5\uACA9"
   inspirationCost: 0
+  mpCost: 0
   tag: 0
-  targeting: 3
+  targeting: 2
   consumesTurn: 1
   keywords: 0
   movementMode: 0
   desiredTargetDistance: 1
   moveSpeed: 6
   actionDelayAfterMove: 0.15
+  finalMpCost: 1
+  clashPower: 2
   combatAnimationTrigger: Attack
   fieldAnimationTrigger: Attack
   fieldUsable: 0

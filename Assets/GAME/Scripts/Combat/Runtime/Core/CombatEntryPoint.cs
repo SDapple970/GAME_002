@@ -17,6 +17,9 @@ namespace Game.Combat.Core
         [SerializeField] private CombatDirector director;
         [SerializeField] private CombatFlowOrchestrator flowOrchestrator;
 
+        [Header("FinalExchange")]
+        [SerializeField] private FinalCombatRuntimeConfigSO finalExchangeRuntimeConfig;
+
         [Header("Skill Book Sources (MVP)")]
         [SerializeField] private SkillDefinitionSO[] skillDefinitions;
 
@@ -33,6 +36,8 @@ namespace Game.Combat.Core
 
         public CombatSession ActiveSession { get; private set; }
         public CombatStateMachine ActiveStateMachine { get; private set; }
+        public CombatFlowOrchestrator FlowOrchestrator => flowOrchestrator;
+        public FinalCombatRuntimeConfigSO FinalExchangeRuntimeConfig => finalExchangeRuntimeConfig;
 
         private SkillBook _book;
         private bool _endedRaised;
@@ -40,6 +45,7 @@ namespace Game.Combat.Core
         private bool _missingGameStateMachineWarned;
         private bool _missingGameFlowControllerWarned;
         private bool _duplicateStartWarned;
+        private FinalCombatEnemyCommandController _finalEnemyCommandController;
         internal bool DeactivateDefeatedFieldObjects => deactivateDefeatedEnemies;
         internal bool DestroyDefeatedFieldObjects => destroyDefeatedEnemies;
 
@@ -67,7 +73,27 @@ namespace Game.Combat.Core
             if (ActiveStateMachine == null)
                 return;
 
-            ActiveStateMachine.Tick(Time.deltaTime);
+            if (!_endedRaised && ActiveStateMachine.Phase == Phase.ExitCombat)
+            {
+                FinishCombat(ActiveStateMachine.EndReason);
+                return;
+            }
+
+            if (ActiveSession != null &&
+                ActiveSession.FlowMode == CombatFlowMode.StandoffClashChain)
+            {
+                if (flowOrchestrator == null ||
+                    !flowOrchestrator.IsBoundTo(ActiveSession, ActiveStateMachine))
+                {
+                    return;
+                }
+
+                flowOrchestrator.Tick(Time.deltaTime);
+            }
+            else
+            {
+                ActiveStateMachine.Tick(Time.deltaTime);
+            }
 
             if (!_endedRaised && ActiveStateMachine.Phase == Phase.ExitCombat)
                 FinishCombat(ActiveStateMachine.EndReason);
@@ -312,6 +338,8 @@ namespace Game.Combat.Core
             bool orchestratorBound = false;
             bool phaseSubscribed = false;
             bool directorSubscribed = false;
+            bool finalDirectorBound = false;
+            bool finalEnemyBound = false;
 
             try
             {
@@ -340,10 +368,30 @@ namespace Game.Combat.Core
                     orchestratorBound = true;
                 }
 
+                if (createdSession.FlowMode == CombatFlowMode.StandoffClashChain &&
+                    (flowOrchestrator == null ||
+                     !flowOrchestrator.IsBoundTo(createdSession, createdStateMachine)))
+                {
+                    throw new InvalidOperationException(
+                        "FinalExchange combat requires a bound CombatFlowOrchestrator.");
+                }
+
                 createdStateMachine.OnPhaseChanged += HandleCombatPhaseChanged;
                 phaseSubscribed = true;
 
-                if (director != null)
+                if (createdSession.FlowMode == CombatFlowMode.StandoffClashChain)
+                {
+                    if (director == null || !director.BindFinalExchange(flowOrchestrator, createdSession))
+                        throw new InvalidOperationException("FinalExchange combat requires a bound CombatDirector.");
+
+                    finalDirectorBound = true;
+                    _finalEnemyCommandController = new FinalCombatEnemyCommandController();
+                    if (!_finalEnemyCommandController.Bind(flowOrchestrator, createdSession))
+                        throw new InvalidOperationException("FinalExchange combat requires a bound enemy command controller.");
+
+                    finalEnemyBound = true;
+                }
+                else if (director != null)
                 {
                     createdStateMachine.OnRequireResolutionPlay += director.PlayResolution;
                     createdStateMachine.OnRequireApproachPlay += director.PlayApproach;
@@ -364,7 +412,13 @@ namespace Game.Combat.Core
             }
             catch (Exception exception)
             {
-                RollbackStartup(createdStateMachine, orchestratorBound, phaseSubscribed, directorSubscribed);
+                RollbackStartup(
+                    createdStateMachine,
+                    orchestratorBound,
+                    phaseSubscribed,
+                    directorSubscribed,
+                    finalDirectorBound,
+                    finalEnemyBound);
                 Debug.LogError(
                     $"[CombatEntryPoint] Combat startup rolled back. Reason={request.Reason}, " +
                     $"requestedAllies={requestedAllyCount}, requestedEnemies={requestedEnemyCount}, " +
@@ -418,6 +472,18 @@ namespace Game.Combat.Core
             int resolvedInspirationStart = request.InspirationStart >= 0
                 ? Mathf.Clamp(request.InspirationStart, 0, resolvedInspirationMax)
                 : resolvedDefaultStart;
+            CombatRuntimeConfig resolvedRuntimeConfig = request.RuntimeConfig;
+            if (request.FlowMode == CombatFlowMode.StandoffClashChain)
+            {
+                if (finalExchangeRuntimeConfig == null ||
+                    !finalExchangeRuntimeConfig.SupportsFinalExchangeSkills())
+                {
+                    error = "FinalExchange requires a valid authored FinalCombatRuntimeConfigSO";
+                    return false;
+                }
+
+                resolvedRuntimeConfig = finalExchangeRuntimeConfig.CreateRuntimeConfig();
+            }
 
             normalized = new NormalizedCombatStart(
                 request.Reason,
@@ -426,7 +492,7 @@ namespace Game.Combat.Core
                 resolvedInspirationStart,
                 request.OpeningEffectOrNull,
                 request.FlowMode,
-                request.RuntimeConfig,
+                resolvedRuntimeConfig,
                 request.EncounterOwnerOrNull,
                 activeAllies,
                 activeEnemies);
@@ -587,7 +653,9 @@ namespace Game.Combat.Core
             CombatStateMachine stateMachine,
             bool orchestratorBound,
             bool phaseSubscribed,
-            bool directorSubscribed)
+            bool directorSubscribed,
+            bool finalDirectorBound,
+            bool finalEnemyBound)
         {
             if (stateMachine != null && phaseSubscribed)
                 stateMachine.OnPhaseChanged -= HandleCombatPhaseChanged;
@@ -597,6 +665,13 @@ namespace Game.Combat.Core
                 stateMachine.OnRequireResolutionPlay -= director.PlayResolution;
                 stateMachine.OnRequireApproachPlay -= director.PlayApproach;
             }
+
+            if (finalEnemyBound)
+                _finalEnemyCommandController?.Unbind();
+            _finalEnemyCommandController = null;
+
+            if (finalDirectorBound)
+                director?.UnbindFinalExchange();
 
             if (orchestratorBound && flowOrchestrator != null)
                 flowOrchestrator.BindSession(null);
@@ -797,6 +872,13 @@ namespace Game.Combat.Core
             {
                 endingStateMachine.OnRequireResolutionPlay -= director.PlayResolution;
                 endingStateMachine.OnRequireApproachPlay -= director.PlayApproach;
+            }
+
+            if (endingSession != null && endingSession.FlowMode == CombatFlowMode.StandoffClashChain)
+            {
+                _finalEnemyCommandController?.Unbind();
+                _finalEnemyCommandController = null;
+                director?.UnbindFinalExchange();
             }
 
             if (flowOrchestrator != null)

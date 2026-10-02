@@ -61,6 +61,10 @@ namespace Game.Combat.Core
                     break;
 
                 case TargetingRule.SingleAlly:
+                    if (!TryAddAlliedTarget(actor, opponent, session, targets))
+                        return false;
+                    break;
+
                 case TargetingRule.AnySingle:
                     return false;
 
@@ -88,10 +92,18 @@ namespace Game.Combat.Core
             ICombatant opponent,
             CombatSession session)
         {
-            if (actor == null || skill == null || opponent == null || session == null ||
-                !session.TryGetCombatState(actor, out _) ||
-                !session.TryGetCombatState(opponent, out _) ||
+            if (actor == null || skill == null || session == null ||
+                !session.TryGetCombatState(actor, out CombatantCombatState actorState) ||
+                !actorState.IsAlive ||
                 actor.Skills == null)
+            {
+                return false;
+            }
+
+            bool requiresSelectedTarget = skill.Targeting == TargetingRule.SingleEnemy ||
+                                          skill.Targeting == TargetingRule.SingleAlly;
+            if (requiresSelectedTarget &&
+                (opponent == null || !session.TryGetCombatState(opponent, out _)))
             {
                 return false;
             }
@@ -111,13 +123,33 @@ namespace Game.Combat.Core
             CombatSession session,
             List<ICombatant> targets)
         {
-            if (opponent.HP <= 0 || !session.TryGetCombatState(opponent, out _) ||
+            if (opponent == null ||
+                !session.TryGetCombatState(opponent, out CombatantCombatState opponentState) ||
+                !opponentState.IsAlive ||
                 opponent.Side == actor.Side)
             {
                 return false;
             }
 
             targets.Add(opponent);
+            return true;
+        }
+
+        private static bool TryAddAlliedTarget(
+            ICombatant actor,
+            ICombatant target,
+            CombatSession session,
+            List<ICombatant> targets)
+        {
+            if (target == null ||
+                !session.TryGetCombatState(target, out CombatantCombatState targetState) ||
+                !targetState.IsAlive ||
+                target.Side != actor.Side)
+            {
+                return false;
+            }
+
+            targets.Add(target);
             return true;
         }
 

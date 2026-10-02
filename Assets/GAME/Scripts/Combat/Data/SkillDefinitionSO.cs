@@ -33,6 +33,13 @@ namespace Game.Combat.Data
         public float ActionDelayAfterMove => actionDelayAfterMove;
         public int MpCost => mpCost;
 
+        [Header("Final Combat")]
+        [SerializeField] private int finalMpCost;
+        [SerializeField] private int clashPower;
+
+        public int FinalMpCost => finalMpCost;
+        public int ClashPower => clashPower;
+
         [Header("Animation")]
         [SerializeField] private string combatAnimationTrigger = "Attack";
         [SerializeField] private string fieldAnimationTrigger = "Attack";
@@ -72,6 +79,8 @@ namespace Game.Combat.Data
 
         private void OnValidate()
         {
+            finalMpCost = Mathf.Max(0, finalMpCost);
+            clashPower = Mathf.Max(0, clashPower);
             fieldCooldown = Mathf.Max(0f, fieldCooldown);
             fieldHitDelay = Mathf.Max(0f, fieldHitDelay);
             fieldHitBoxSize.x = Mathf.Max(0f, fieldHitBoxSize.x);

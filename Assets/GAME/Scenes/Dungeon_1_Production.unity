@@ -3708,7 +3708,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9b3a9bbb9385aef40886a08f02166bd5, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatEncounterTrigger2D
   entryPoint: {fileID: 1665839071176935754}
   enemyObject: {fileID: 1147570158}
@@ -3717,6 +3717,7 @@ MonoBehaviour:
   openingEffectOrNull: {fileID: 0}
   startReason: 0
   initiativeSide: 0
+  flowMode: 1
   playerTag: Player
   debugLog: 0
 --- !u!61 &395110558
@@ -4081,7 +4082,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 87cfe026b9d86ee42b7072aeb1ea7480, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatEncounterGroup
   autoCollectChildren: 1
   enemies: []
@@ -6333,7 +6334,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9b3a9bbb9385aef40886a08f02166bd5, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatEncounterTrigger2D
   entryPoint: {fileID: 1665839071176935754}
   enemyObject: {fileID: 656433335}
@@ -6342,6 +6343,7 @@ MonoBehaviour:
   openingEffectOrNull: {fileID: 0}
   startReason: 0
   initiativeSide: 0
+  flowMode: 1
   playerTag: Player
   debugLog: 0
 --- !u!61 &548368411
@@ -6433,7 +6435,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9b3a9bbb9385aef40886a08f02166bd5, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Integration.CombatEncounterTrigger2D
   entryPoint: {fileID: 1665839071176935754}
   enemyObject: {fileID: 1854383345}
@@ -6442,6 +6444,7 @@ MonoBehaviour:
   openingEffectOrNull: {fileID: 0}
   startReason: 0
   initiativeSide: 0
+  flowMode: 1
   playerTag: Player
   debugLog: 0
 --- !u!61 &553739116
@@ -7896,7 +7899,7 @@ SpriteRenderer:
   m_Size: {x: 1.6, y: 0.55}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_SpriteSortPoint: 0
 --- !u!1 &716596928
 GameObject:
@@ -8626,7 +8629,7 @@ SpriteRenderer:
   m_Size: {x: 1.6, y: 0.55}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_SpriteSortPoint: 0
 --- !u!1 &775613189
 GameObject:
@@ -14406,7 +14409,7 @@ SpriteRenderer:
   m_Size: {x: 1.6, y: 0.55}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_SpriteSortPoint: 0
 --- !u!1 &1293749088
 GameObject:
@@ -23897,6 +23900,100 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Interaction.InteractionRunner
   runtime: {fileID: 7100000102}
+--- !u!1 &7100000200
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7100000201}
+  - component: {fileID: 7100000202}
+  - component: {fileID: 7100000203}
+  - component: {fileID: 7100000204}
+  - component: {fileID: 7100000205}
+  m_Layer: 0
+  m_Name: DungeonQuestIntegration
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7100000201
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000200}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7100000202
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000200}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 62e1c9e5f02c438f92e484175641bdec, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.DungeonQuestStartAdapter
+  questRuntime: {fileID: 7100000001}
+  questDefinition: {fileID: 11400000, guid: 1f4c3e8a9b2d4f57a0c6e18b35d79f42, type: 2}
+--- !u!114 &7100000203
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000200}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3a2cd946f3d54ef3b4e590d2afd97017, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.EncounterQuestObjectivePublisher
+  targetEncounter: {fileID: 406163156}
+  questId: ch01.find-first-npc
+  objectiveId: clear_encounter_01
+--- !u!114 &7100000204
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000200}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3a2cd946f3d54ef3b4e590d2afd97017, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.EncounterQuestObjectivePublisher
+  targetEncounter: {fileID: 1315519544}
+  questId: ch01.find-first-npc
+  objectiveId: clear_encounter_02
+--- !u!114 &7100000205
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000200}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3a2cd946f3d54ef3b4e590d2afd97017, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.EncounterQuestObjectivePublisher
+  targetEncounter: {fileID: 798755492}
+  questId: ch01.find-first-npc
+  objectiveId: clear_encounter_03
 --- !u!1001 &1645636291499357858
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -24203,100 +24300,6 @@ MonoBehaviour:
   minOrthoSize: 4
   maxOrthoSize: 8
   combatOffset: {x: 0, y: 0.8, z: 0}
---- !u!1 &7100000200
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 7100000201}
-  - component: {fileID: 7100000202}
-  - component: {fileID: 7100000203}
-  - component: {fileID: 7100000204}
-  - component: {fileID: 7100000205}
-  m_Layer: 0
-  m_Name: DungeonQuestIntegration
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &7100000201
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7100000200}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &7100000202
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7100000200}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 62e1c9e5f02c438f92e484175641bdec, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.DungeonQuestStartAdapter
-  questRuntime: {fileID: 7100000001}
-  questDefinition: {fileID: 11400000, guid: 1f4c3e8a9b2d4f57a0c6e18b35d79f42, type: 2}
---- !u!114 &7100000203
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7100000200}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3a2cd946f3d54ef3b4e590d2afd97017, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.EncounterQuestObjectivePublisher
-  targetEncounter: {fileID: 406163156}
-  questId: ch01.find-first-npc
-  objectiveId: clear_encounter_01
---- !u!114 &7100000204
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7100000200}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3a2cd946f3d54ef3b4e590d2afd97017, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.EncounterQuestObjectivePublisher
-  targetEncounter: {fileID: 1315519544}
-  questId: ch01.find-first-npc
-  objectiveId: clear_encounter_02
---- !u!114 &7100000205
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7100000200}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3a2cd946f3d54ef3b4e590d2afd97017, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.EncounterQuestObjectivePublisher
-  targetEncounter: {fileID: 798755492}
-  questId: ch01.find-first-npc
-  objectiveId: clear_encounter_03
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -26,6 +26,7 @@ namespace Game.Combat.Integration
         [SerializeField] private OpeningEffectSO openingEffectOrNull;
         [SerializeField] private StartReason startReason = StartReason.PlayerFirstHit;
         [SerializeField] private Side initiativeSide = Side.Allies;
+        [SerializeField] private CombatFlowMode flowMode = CombatFlowMode.LegacyPlanning;
 
         [Header("Filter")]
         [SerializeField] private string playerTag = "Player";
@@ -454,7 +455,8 @@ namespace Game.Combat.Integration
                 initiativeSide,
                 0,
                 -1,
-                openingEffectOrNull
+                openingEffectOrNull,
+                flowMode
             );
 
             AddValidObjects(request.AllyFieldObjects, allies);

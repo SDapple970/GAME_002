@@ -516,7 +516,7 @@ namespace Game.Tests.Combat
                 definition.inspirationCost = 6;
                 Assert.That(CombatMpCostResolver.Resolve(new SoSkill(definition)), Is.Zero);
 
-                FieldInfo field = typeof(SkillDefinitionSO).GetField("mpCost", BindingFlags.Instance | BindingFlags.NonPublic);
+                FieldInfo field = typeof(SkillDefinitionSO).GetField("finalMpCost", BindingFlags.Instance | BindingFlags.NonPublic);
                 Assert.That(field, Is.Not.Null);
                 field.SetValue(definition, 4);
 

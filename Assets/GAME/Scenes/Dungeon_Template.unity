@@ -1536,6 +1536,7 @@ MonoBehaviour:
   openingEffectOrNull: {fileID: 11400000, guid: 8bac46495a7229b43be24e7b1ed682b1, type: 2}
   startReason: 0
   initiativeSide: 0
+  flowMode: 1
   playerTag: Player
   debugLog: 1
 --- !u!61 &1427213404
@@ -2252,6 +2253,7 @@ MonoBehaviour:
   openingEffectOrNull: {fileID: 11400000, guid: 8bac46495a7229b43be24e7b1ed682b1, type: 2}
   startReason: 0
   initiativeSide: 0
+  flowMode: 1
   playerTag: Player
   debugLog: 1
 --- !u!61 &2121896106

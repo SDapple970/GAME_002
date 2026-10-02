@@ -6,8 +6,14 @@ namespace Game.Combat.Model
     {
         public Side InitialInitiative { get; }
         public Side CurrentAttackSide { get; private set; }
+        public ICombatant CurrentAttackActor { get; private set; }
+        public int Version { get; private set; }
+        public int ChainSequenceId { get; private set; }
+        public int HandoffCount { get; private set; }
         public bool IsChainActive { get; private set; }
         public ICombatant ChainOwner { get; private set; }
+        public bool IsApplyOutcomeFinalized { get; private set; }
+        public bool IsAllOutCandidate { get; private set; }
         public CombatAttackDeclaration CurrentDeclaration { get; private set; }
         public CombatResponseState ResponseState { get; private set; }
         public CombatResponseDeclaration CurrentResponse { get; private set; }
@@ -47,35 +53,44 @@ namespace Game.Combat.Model
                 return;
 
             CurrentAttackSide = side;
+            AdvanceVersion();
         }
 
         public void SetChainState(bool isActive, ICombatant owner)
         {
             IsChainActive = isActive && owner != null;
             ChainOwner = IsChainActive ? owner : null;
+            CurrentAttackActor = ChainOwner;
+            if (CurrentAttackActor != null)
+                CurrentAttackSide = CurrentAttackActor.Side;
+            AdvanceVersion();
         }
 
         internal void CommitDeclaration(CombatAttackDeclaration declaration)
         {
             CurrentDeclaration = declaration;
             CurrentAttackSide = declaration.DeclaringSide;
+            CurrentAttackActor = declaration.Attacker;
             ResponseState = CombatResponseState.Pending;
             CurrentResponse = null;
             CurrentClashResult = null;
             ClearPreparedOutcome();
             ClearCommit();
+            AdvanceVersion();
         }
 
         internal void CommitResponse(CombatResponseDeclaration response)
         {
             CurrentResponse = response;
             ResponseState = CombatResponseState.CounterDeclared;
+            AdvanceVersion();
         }
 
         internal void ConfirmNoResponse()
         {
             CurrentResponse = null;
             ResponseState = CombatResponseState.NoResponse;
+            AdvanceVersion();
         }
 
         internal void MarkCommitted(int attackMpCost, int responseMpCost)
@@ -83,6 +98,20 @@ namespace Game.Combat.Model
             IsCommitted = true;
             CommittedAttackMpCost = Math.Max(0, attackMpCost);
             CommittedResponseMpCost = Math.Max(0, responseMpCost);
+            AdvanceVersion();
+        }
+
+        internal void StoreCommitResult(CombatExchangeCommitResult result)
+        {
+            if (result == null || !result.Succeeded)
+                return;
+
+            CurrentResponse = result.CommittedResponse;
+            ResponseState = result.ResponseState;
+            IsCommitted = true;
+            CommittedAttackMpCost = Math.Max(0, result.AttackMpSpent);
+            CommittedResponseMpCost = Math.Max(0, result.ResponseMpSpent);
+            AdvanceVersion();
         }
 
         internal void StoreClashResult(CombatClashResult result)
@@ -90,6 +119,7 @@ namespace Game.Combat.Model
             CurrentClashResult = result;
             ClearPreparedOutcome();
             ClearPostureResolution();
+            AdvanceVersion();
         }
 
         internal void StorePreparedOutcome(CombatOutcomeAction action)
@@ -97,6 +127,7 @@ namespace Game.Combat.Model
             CurrentOutcomeAction = action;
             IsOutcomePrepared = true;
             ClearPreparedExecution();
+            AdvanceVersion();
         }
 
         internal void StorePreparedExecution(CombatSkillExecutionRequest request)
@@ -104,6 +135,7 @@ namespace Game.Combat.Model
             CurrentExecutionRequest = request;
             IsExecutionPrepared = true;
             ClearCompletedExecution();
+            AdvanceVersion();
         }
 
         internal void StoreCompletedExecution(CombatSkillExecutionResult result)
@@ -111,6 +143,7 @@ namespace Game.Combat.Model
             CurrentExecutionResult = result;
             IsExecutionCompleted = true;
             ClearPostureResolution();
+            AdvanceVersion();
         }
 
         internal void StorePostureResolution(
@@ -123,6 +156,7 @@ namespace Game.Combat.Model
             PostureResolutionState = state;
             CurrentPostureResult = state == CombatPostureResolutionState.Applied ? result : null;
             ClearStunResolution();
+            AdvanceVersion();
         }
 
         internal void StoreStunResolution(
@@ -135,6 +169,7 @@ namespace Game.Combat.Model
             StunResolutionState = state;
             CurrentStunResult = state == CombatStunResolutionState.Applied ? result : null;
             ClearAftermath();
+            AdvanceVersion();
         }
 
         internal void StoreAftermath(CombatAftermathSnapshot snapshot)
@@ -145,6 +180,7 @@ namespace Game.Combat.Model
             CurrentAftermathSnapshot = snapshot;
             IsAftermathPrepared = true;
             ClearAftermathDecision();
+            AdvanceVersion();
         }
 
         internal void StoreAftermathDecision(CombatAftermathDecision decision)
@@ -155,6 +191,7 @@ namespace Game.Combat.Model
             CurrentAftermathDecision = decision;
             IsAftermathDecisionPrepared = true;
             ClearTerminalDecision();
+            AdvanceVersion();
         }
 
         internal void StoreTerminalDecision(CombatTerminalDecision decision)
@@ -164,6 +201,7 @@ namespace Game.Combat.Model
 
             CurrentTerminalDecision = decision;
             IsTerminalDecisionPrepared = true;
+            AdvanceVersion();
         }
 
         internal void ClearDeclaration()
@@ -174,12 +212,78 @@ namespace Game.Combat.Model
             CurrentClashResult = null;
             ClearPreparedOutcome();
             ClearCommit();
+            AdvanceVersion();
+        }
+
+        internal void StoreAttackAuthority(ICombatant owner)
+        {
+            if (owner == null)
+                return;
+
+            CurrentAttackActor = owner;
+            CurrentAttackSide = owner.Side;
+            AdvanceVersion();
+        }
+
+        internal void FinalizeApplyOutcome(bool isAllOutCandidate)
+        {
+            IsApplyOutcomeFinalized = true;
+            IsAllOutCandidate = isAllOutCandidate;
+            AdvanceVersion();
+        }
+
+        internal void BeginChainDecision(ICombatant owner)
+        {
+            if (owner == null)
+                return;
+
+            if (!IsChainActive)
+                ChainSequenceId++;
+
+            IsChainActive = true;
+            ChainOwner = owner;
+            CurrentAttackActor = owner;
+            CurrentAttackSide = owner.Side;
+            AdvanceVersion();
+        }
+
+        internal void PrepareNextChainExchange(ICombatant owner, int handoffCount)
+        {
+            if (!IsChainActive || owner == null || handoffCount < 0)
+                return;
+
+            ClearDeclarationCore();
+            ChainOwner = owner;
+            CurrentAttackActor = owner;
+            CurrentAttackSide = owner.Side;
+            HandoffCount = handoffCount;
+            AdvanceVersion();
+        }
+
+        internal void ResetForStandoff()
+        {
+            ClearDeclarationCore();
+            IsChainActive = false;
+            ChainOwner = null;
+            CurrentAttackActor = null;
+            HandoffCount = 0;
+            IsApplyOutcomeFinalized = false;
+            IsAllOutCandidate = false;
+            AdvanceVersion();
+        }
+
+        internal void AdvanceVersion()
+        {
+            if (Version < int.MaxValue)
+                Version++;
         }
 
         private void ClearPreparedOutcome()
         {
             IsOutcomePrepared = false;
             CurrentOutcomeAction = null;
+            IsApplyOutcomeFinalized = false;
+            IsAllOutCandidate = false;
             ClearPreparedExecution();
         }
 
@@ -236,6 +340,16 @@ namespace Game.Combat.Model
             IsCommitted = false;
             CommittedAttackMpCost = 0;
             CommittedResponseMpCost = 0;
+        }
+
+        private void ClearDeclarationCore()
+        {
+            CurrentDeclaration = null;
+            CurrentResponse = null;
+            ResponseState = CombatResponseState.Pending;
+            CurrentClashResult = null;
+            ClearPreparedOutcome();
+            ClearCommit();
         }
     }
 }

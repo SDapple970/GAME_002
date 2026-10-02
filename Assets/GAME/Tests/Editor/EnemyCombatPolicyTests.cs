@@ -17,8 +17,8 @@ namespace Game.Tests.Combat
         {
             DummyCombatant player = Combatant(1, Side.Allies);
             DummyCombatant enemy = Combatant(100, Side.Enemies);
-            TestSkill first = Skill(11, TargetingRule.SingleAlly);
-            TestSkill second = Skill(12, TargetingRule.SingleAlly);
+            TestSkill first = Skill(11, TargetingRule.SingleEnemy);
+            TestSkill second = Skill(12, TargetingRule.SingleEnemy);
             enemy.AddSkill(first);
             enemy.AddSkill(second);
             CombatSession session = CreateLegacySession(player, enemy);
@@ -41,7 +41,7 @@ namespace Game.Tests.Combat
         {
             DummyCombatant player = Combatant(1, Side.Allies);
             DummyCombatant singleSkillEnemy = Combatant(100, Side.Enemies);
-            TestSkill skill = Skill(11, TargetingRule.SingleAlly);
+            TestSkill skill = Skill(11, TargetingRule.SingleEnemy);
             singleSkillEnemy.AddSkill(skill);
             DeterministicCycleEnemyCombatPolicy policy = new DeterministicCycleEnemyCombatPolicy();
             CombatSession singleSkillSession = CreateLegacySession(player, singleSkillEnemy);
@@ -73,7 +73,7 @@ namespace Game.Tests.Combat
             DummyCombatant firstAlly = Combatant(1, Side.Allies);
             DummyCombatant secondAlly = Combatant(2, Side.Allies);
             DummyCombatant enemy = Combatant(100, Side.Enemies);
-            enemy.AddSkill(Skill(11, TargetingRule.SingleAlly));
+            enemy.AddSkill(Skill(11, TargetingRule.SingleEnemy));
             CombatSession session = CreateLegacySession(firstAlly, enemy, secondAlly);
             session.GetCombatState(firstAlly).ApplyDamage(999);
 
@@ -98,7 +98,7 @@ namespace Game.Tests.Combat
                     HpAccessor.TryCreate(fieldObject),
                     10);
                 DummyCombatant enemy = Combatant(100, Side.Enemies);
-                enemy.AddSkill(Skill(11, TargetingRule.SingleAlly));
+                enemy.AddSkill(Skill(11, TargetingRule.SingleEnemy));
                 CombatSession session = CreateLegacySession(fieldAlly, enemy);
                 fieldHp.HP = 0;
 
@@ -118,7 +118,7 @@ namespace Game.Tests.Combat
         {
             DummyCombatant player = Combatant(1, Side.Allies);
             DummyCombatant enemy = Combatant(100, Side.Enemies);
-            TestSkill skill = Skill(11, TargetingRule.SingleAlly);
+            TestSkill skill = Skill(11, TargetingRule.SingleEnemy);
             enemy.AddSkill(skill);
             CombatSession session = CreateStandoffSession(player, enemy);
             DeterministicCycleEnemyCombatPolicy policy = new DeterministicCycleEnemyCombatPolicy();

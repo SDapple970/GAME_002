@@ -15,6 +15,7 @@ MonoBehaviour:
   skillId: 2
   displayName: "\uC2A4\uD0AC 1"
   inspirationCost: 0
+  mpCost: 0
   tag: 0
   targeting: 5
   consumesTurn: 1
@@ -23,6 +24,8 @@ MonoBehaviour:
   desiredTargetDistance: 1
   moveSpeed: 6
   actionDelayAfterMove: 0.15
+  finalMpCost: 2
+  clashPower: 3
   combatAnimationTrigger: Skill
   fieldAnimationTrigger: Skill
   fieldUsable: 0

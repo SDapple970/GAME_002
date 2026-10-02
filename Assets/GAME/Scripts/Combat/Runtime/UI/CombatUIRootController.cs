@@ -18,6 +18,7 @@ namespace Game.Combat.UI
         [SerializeField] private GameObject planningPanel;
         [SerializeField] private GameObject widgetContainer;
         [SerializeField] private CombatPlanningHUD planningHUD;
+        [SerializeField] private FinalCombatUIBinder finalCombatUI;
 
         [Header("Optional UI Roots")]
         [SerializeField] private GameObject overworldCanvas;
@@ -91,6 +92,9 @@ namespace Game.Combat.UI
 
             if (planningHUD == null)
                 planningHUD = GetComponentInChildren<CombatPlanningHUD>(true);
+
+            if (finalCombatUI == null)
+                finalCombatUI = GetComponentInChildren<FinalCombatUIBinder>(true);
 
             if (combatHudRoot == null)
             {
@@ -181,7 +185,16 @@ namespace Game.Combat.UI
         {
             _activeSession = session;
             SubscribeToStateMachine(stateMachine);
-            planningHUD?.Bind(session);
+            if (session != null && session.FlowMode == CombatFlowMode.StandoffClashChain)
+            {
+                planningHUD?.ExitPlanning();
+                finalCombatUI?.Bind(session, stateMachine, entryPoint != null ? entryPoint.FlowOrchestrator : null);
+            }
+            else
+            {
+                finalCombatUI?.Unbind();
+                planningHUD?.Bind(session);
+            }
             ApplyPhase(stateMachine != null ? stateMachine.Phase : Phase.EnterCombat);
         }
 
@@ -192,14 +205,18 @@ namespace Game.Combat.UI
 
         internal void ApplyPhase(Phase phase)
         {
+            bool finalExchange = _activeSession != null &&
+                                 _activeSession.FlowMode == CombatFlowMode.StandoffClashChain;
             bool showCombatContent = phase == Phase.Planning ||
                                      phase == Phase.Resolution ||
                                      phase == Phase.EndTurn ||
                                      phase == Phase.Standoff ||
                                      phase == Phase.AttackDeclaration ||
                                      phase == Phase.Approach ||
-                                     phase == Phase.Clash;
-            bool showPlanning = phase == Phase.Planning;
+                                     phase == Phase.Clash ||
+                                     phase == Phase.ApplyOutcome ||
+                                     phase == Phase.ChainDecision;
+            bool showPlanning = !finalExchange && phase == Phase.Planning;
 
             SetInternalVisible(combatHudRoot, showCombatContent);
             SetInternalVisible(widgetContainer, showCombatContent);
@@ -218,6 +235,9 @@ namespace Game.Combat.UI
                 else
                     SetInternalVisible(planningPanel, false);
             }
+
+            if (finalExchange)
+                finalCombatUI?.ApplyPhase(phase);
 
             ApplyLegacyGlobalFallback(showCombatContent);
 
@@ -246,6 +266,7 @@ namespace Game.Combat.UI
                 planningHUD.ExitPlanning();
             else
                 SetInternalVisible(planningPanel, false);
+            finalCombatUI?.Unbind();
 
             ApplyLegacyGlobalFallback(false);
         }

@@ -224,7 +224,7 @@ namespace Game.Tests.Combat
         public void ExistingValidEnemyPlan_IsNotOverwritten()
         {
             Fixture fixture = CreateFixture();
-            TestSkill alternate = new TestSkill(22, TargetingRule.SingleAlly, speed: 99, damage: 0);
+            TestSkill alternate = new TestSkill(22, TargetingRule.SingleEnemy, speed: 99, damage: 0);
             fixture.Enemy.AddSkill(alternate);
             ActionPlan supplied = new ActionPlan(fixture.Action(fixture.Enemy, alternate, fixture.Player), PlannedAction.None);
             fixture.Session.CurrentTurn.SetPlan(fixture.Enemy.Id, supplied);
@@ -760,7 +760,7 @@ namespace Game.Tests.Combat
                 playerStagger);
             TestSkill enemySkill = new TestSkill(
                 11,
-                TargetingRule.SingleAlly,
+                TargetingRule.SingleEnemy,
                 enemySpeed,
                 enemyDamage,
                 enemyCost);
