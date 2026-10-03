@@ -4087,6 +4087,8 @@ MonoBehaviour:
   autoCollectChildren: 1
   enemies: []
   encounterId: dungeon1.encounter.01
+  useEncounterFlowMode: 1
+  encounterFlowMode: 1
 --- !u!1 &407761695
 GameObject:
   m_ObjectHideFlags: 0
@@ -9303,6 +9305,8 @@ MonoBehaviour:
   autoCollectChildren: 1
   enemies: []
   encounterId: dungeon1.encounter.03
+  useEncounterFlowMode: 1
+  encounterFlowMode: 1
 --- !u!1 &800770401
 GameObject:
   m_ObjectHideFlags: 0
@@ -14819,6 +14823,8 @@ MonoBehaviour:
   autoCollectChildren: 1
   enemies: []
   encounterId: dungeon1.encounter.02
+  useEncounterFlowMode: 1
+  encounterFlowMode: 1
 --- !u!1 &1320756169
 GameObject:
   m_ObjectHideFlags: 0

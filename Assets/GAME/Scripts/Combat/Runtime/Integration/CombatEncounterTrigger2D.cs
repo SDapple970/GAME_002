@@ -26,6 +26,7 @@ namespace Game.Combat.Integration
         [SerializeField] private OpeningEffectSO openingEffectOrNull;
         [SerializeField] private StartReason startReason = StartReason.PlayerFirstHit;
         [SerializeField] private Side initiativeSide = Side.Allies;
+        // Retained for standalone encounters and pre-group-configured serialized assets.
         [SerializeField] private CombatFlowMode flowMode = CombatFlowMode.LegacyPlanning;
 
         [Header("Filter")]
@@ -438,6 +439,8 @@ namespace Game.Combat.Integration
         EncounterRuntimeLifecycle ICombatEncounterRuntimeOwner.Lifecycle => Lifecycle;
         string ICombatEncounterRuntimeOwner.ActiveCompletionId => ActiveCompletionId;
         bool ICombatEncounterRuntimeOwner.HasPlayerPresence => HasPlayerPresence;
+        CombatFlowMode ICombatEncounterRuntimeOwner.ResolveCombatFlowMode(CombatFlowMode compatibilityFlowMode) =>
+            ResolveCombatFlowMode(compatibilityFlowMode);
         bool ICombatEncounterRuntimeOwner.TryReserve(UnityEngine.Object requester) => TryReserve(requester);
         void ICombatEncounterRuntimeOwner.CommitReservation(string completionId) => CommitReservation(completionId);
         void ICombatEncounterRuntimeOwner.ReleaseReservation(UnityEngine.Object requester) => ReleaseReservation(requester);
@@ -456,13 +459,23 @@ namespace Game.Combat.Integration
                 0,
                 -1,
                 openingEffectOrNull,
-                flowMode
+                RuntimeOwner.ResolveCombatFlowMode(flowMode)
             );
 
             AddValidObjects(request.AllyFieldObjects, allies);
             AddValidObjects(request.EnemyFieldObjects, enemies);
             request.EncounterOwnerOrNull = RuntimeOwner as UnityEngine.Object;
             return request;
+        }
+
+        private CombatFlowMode ResolveCombatFlowMode(CombatFlowMode compatibilityFlowMode)
+        {
+            CombatFlowMode selected = encounterGroup != null
+                ? encounterGroup.ResolveCombatFlowMode(compatibilityFlowMode)
+                : flowMode;
+            return selected == CombatFlowMode.StandoffClashChain
+                ? selected
+                : CombatFlowMode.LegacyPlanning;
         }
 
         private static void AddValidObjects(List<GameObject> destination, List<GameObject> source)

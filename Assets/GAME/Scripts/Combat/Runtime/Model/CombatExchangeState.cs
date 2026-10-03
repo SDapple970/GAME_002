@@ -4,6 +4,8 @@ namespace Game.Combat.Model
 {
     public sealed class CombatExchangeState
     {
+        public event Action<int> OnStateChanged;
+
         public Side InitialInitiative { get; }
         public Side CurrentAttackSide { get; private set; }
         public ICombatant CurrentAttackActor { get; private set; }
@@ -276,6 +278,8 @@ namespace Game.Combat.Model
         {
             if (Version < int.MaxValue)
                 Version++;
+
+            OnStateChanged?.Invoke(Version);
         }
 
         private void ClearPreparedOutcome()

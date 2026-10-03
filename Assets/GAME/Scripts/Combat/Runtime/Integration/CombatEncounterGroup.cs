@@ -12,6 +12,11 @@ namespace Game.Combat.Integration
         [SerializeField] private List<GameObject> enemies = new();
         [SerializeField] private string encounterId;
 
+        [Header("Combat Flow")]
+        [Tooltip("When enabled, this group is the shared flow-mode source for Contact and Field Attack starts.")]
+        [SerializeField] private bool useEncounterFlowMode;
+        [SerializeField] private CombatFlowMode encounterFlowMode = CombatFlowMode.LegacyPlanning;
+
         private readonly HashSet<int> _warnedInvalidAutoChildren = new();
         private readonly HashSet<int> _warnedInvalidManualMembers = new();
         private readonly HashSet<int> _playerColliderIds = new();
@@ -34,6 +39,11 @@ namespace Game.Combat.Integration
         internal bool HasPlayerPresence => _playerColliderIds.Count > 0;
 
         public string EncounterId => encounterId;
+
+        internal CombatFlowMode ResolveCombatFlowMode(CombatFlowMode compatibilityFlowMode)
+        {
+            return NormalizeFlowMode(useEncounterFlowMode ? encounterFlowMode : compatibilityFlowMode);
+        }
 
         public void CaptureSaveData(GameSaveData saveData)
         {
@@ -320,6 +330,8 @@ namespace Game.Combat.Integration
         EncounterRuntimeLifecycle ICombatEncounterRuntimeOwner.Lifecycle => Lifecycle;
         string ICombatEncounterRuntimeOwner.ActiveCompletionId => ActiveCompletionId;
         bool ICombatEncounterRuntimeOwner.HasPlayerPresence => HasPlayerPresence;
+        CombatFlowMode ICombatEncounterRuntimeOwner.ResolveCombatFlowMode(CombatFlowMode compatibilityFlowMode) =>
+            ResolveCombatFlowMode(compatibilityFlowMode);
         bool ICombatEncounterRuntimeOwner.TryReserve(Object requester) => TryReserve(requester);
         void ICombatEncounterRuntimeOwner.CommitReservation(string completionId) => CommitReservation(completionId);
         void ICombatEncounterRuntimeOwner.ReleaseReservation(Object requester) => ReleaseReservation(requester);
@@ -329,6 +341,13 @@ namespace Game.Combat.Integration
         void ICombatEncounterRuntimeOwner.ObserveExploration() => ObserveExploration();
         void ICombatEncounterRuntimeOwner.RegisterPlayerCollider(Collider2D collider) => RegisterPlayerCollider(collider);
         void ICombatEncounterRuntimeOwner.UnregisterPlayerCollider(Collider2D collider) => UnregisterPlayerCollider(collider);
+
+        private static CombatFlowMode NormalizeFlowMode(CombatFlowMode value)
+        {
+            return value == CombatFlowMode.StandoffClashChain
+                ? value
+                : CombatFlowMode.LegacyPlanning;
+        }
 
         private bool HasManualMembers()
         {

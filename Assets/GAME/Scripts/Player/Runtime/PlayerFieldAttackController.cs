@@ -129,13 +129,17 @@ namespace Game.Player
                 }
 
                 List<GameObject> allies = new List<GameObject>(1) { gameObject };
+                CombatFlowMode flowMode = encounterOwner != null
+                    ? encounterOwner.ResolveCombatFlowMode(CombatFlowMode.LegacyPlanning)
+                    : CombatFlowMode.LegacyPlanning;
 
                 CombatStartRequest request = new CombatStartRequest(
                     startReason,
                     initiativeSide,
                     0,
                     -1,
-                    openingEffectOrNull
+                    openingEffectOrNull,
+                    flowMode
                 );
                 request.AllyFieldObjects.AddRange(allies);
                 request.EnemyFieldObjects.AddRange(enemies);

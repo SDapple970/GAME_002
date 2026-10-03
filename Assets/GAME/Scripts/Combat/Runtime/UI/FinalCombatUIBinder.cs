@@ -37,6 +37,8 @@ namespace Game.Combat.UI
         [SerializeField] private Font displayFont;
         [SerializeField] private Text phaseText;
         [SerializeField] private TMP_Text contextText;
+        [SerializeField] private Text playerHpText;
+        [SerializeField] private Text enemyHpText;
         [SerializeField] private Text playerMpText;
         [SerializeField] private Text enemyMpText;
         [SerializeField] private Text pressureText;
@@ -71,12 +73,6 @@ namespace Game.Combat.UI
             Unbind();
         }
 
-        private void Update()
-        {
-            if (IsBound)
-                RefreshStatus();
-        }
-
         public void Bind(
             CombatSession session,
             CombatStateMachine stateMachine,
@@ -97,6 +93,7 @@ namespace Game.Combat.UI
             _controller = new FinalCombatPlayerCommandController();
             _controller.ViewStateChanged += HandleViewStateChanged;
             _stateMachine.OnPhaseChanged += HandlePhaseChanged;
+            _session.ExchangeState.OnStateChanged += HandleExchangeStateChanged;
             if (!_controller.Bind(orchestrator, session))
             {
                 Unbind();
@@ -112,6 +109,8 @@ namespace Game.Combat.UI
         {
             if (_stateMachine != null)
                 _stateMachine.OnPhaseChanged -= HandlePhaseChanged;
+            if (_session != null)
+                _session.ExchangeState.OnStateChanged -= HandleExchangeStateChanged;
             if (_controller != null)
             {
                 _controller.ViewStateChanged -= HandleViewStateChanged;
@@ -144,6 +143,11 @@ namespace Game.Combat.UI
         {
             _viewState = state ?? PlayerCombatDecisionViewState.Empty;
             Render();
+        }
+
+        private void HandleExchangeStateChanged(int version)
+        {
+            RefreshStatus();
         }
 
         private void Render()
@@ -322,6 +326,8 @@ namespace Game.Combat.UI
 
             ICombatant player = FindFirst(_session.Allies);
             ICombatant enemy = FindStatusEnemy();
+            SetText(playerHpText, FormatHp("PLAYER", player));
+            SetText(enemyHpText, FormatHp("ENEMY", enemy));
             SetText(playerMpText, FormatMp("PLAYER", player));
             SetText(enemyMpText, FormatMp("ENEMY", enemy));
             float pressure = _session.StandoffState != null ? _session.StandoffState.CurrentPressure : 0f;
@@ -344,6 +350,13 @@ namespace Game.Combat.UI
             return _session.TryGetCombatState(actor, out CombatantCombatState state)
                 ? $"{label}  MP {state.CurrentMp} / {state.MaxMp}"
                 : $"{label}  MP -";
+        }
+
+        private static string FormatHp(string label, ICombatant actor)
+        {
+            return actor != null
+                ? $"{label}  HP {actor.HP} / {actor.MaxHP}"
+                : $"{label}  HP -";
         }
 
         private string FormatPosture(string label, ICombatant actor)
@@ -472,6 +485,8 @@ namespace Game.Combat.UI
                 return;
 
             ApplyFont(phaseText);
+            ApplyFont(playerHpText);
+            ApplyFont(enemyHpText);
             ApplyFont(playerMpText);
             ApplyFont(enemyMpText);
             ApplyFont(pressureText);

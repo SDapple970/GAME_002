@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using Game.Combat.Core;
 using Game.Combat.Integration;
+using Game.Combat.Model;
 using Game.EditorTools;
 using Game.Player;
 using NUnit.Framework;
@@ -79,6 +80,10 @@ namespace Game.Tests.Integration
                 Assert.That(trigger, Is.Not.Null, enemyName);
                 Assert.That(new SerializedObject(trigger).FindProperty("entryPoint").objectReferenceValue,
                     Is.SameAs(entryPoint), enemyName);
+                SerializedObject serializedGroup = new(group);
+                Assert.That(serializedGroup.FindProperty("useEncounterFlowMode").boolValue, Is.True, enemyName);
+                Assert.That((CombatFlowMode)serializedGroup.FindProperty("encounterFlowMode").enumValueIndex,
+                    Is.EqualTo(CombatFlowMode.StandoffClashChain), enemyName);
             }
         }
 
@@ -122,6 +127,7 @@ namespace Game.Tests.Integration
                 "Assets/GAME/Scripts/Player/Runtime/PlayerFieldAttackController.cs"));
 
             Assert.That(source, Does.Contain("encounterOwner.TryReserve(this)"));
+            Assert.That(source, Does.Contain("encounterOwner.ResolveCombatFlowMode"));
             Assert.That(source, Does.Contain("entryPoint.StartCombat(request)"));
             Assert.That(source, Does.Contain("encounterOwner?.CommitReservation"));
             Assert.That(source, Does.Contain("encounterOwner?.ReleaseReservation(this)"));

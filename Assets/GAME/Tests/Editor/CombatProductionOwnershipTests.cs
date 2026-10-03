@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 
 namespace Game.Tests.Combat
@@ -35,6 +36,53 @@ namespace Game.Tests.Combat
                 .Where(file => File.ReadAllText(file).Contains("CombatBootstrapper.StartCombat("));
 
             Assert.That(offenders, Is.Empty);
+        }
+
+        [Test]
+        public void ProductionAssets_DoNotReferenceLegacyDemoOrDebugCombatComponents()
+        {
+            string[] productionAssets =
+            {
+                "Assets/GAME/Scenes/Dungeon_1_Production.unity",
+                "Assets/GAME/Scenes/Dungeon_Template.unity",
+                "Assets/GAME/Prefabs/CombatRuntime.prefab",
+                "Assets/GAME/Prefabs/UI/ProductionDungeonUI.prefab"
+            };
+            string[] forbiddenScripts =
+            {
+                "Assets/GAME/Scripts/Combat/FieldEnemy.cs",
+                "Assets/GAME/Scripts/Combat/Runtime/Integration/CombatDemoFlowController.cs",
+                "Assets/GAME/Scripts/Combat/Runtime/Integration/CombatStateSyncer.cs",
+                "Assets/GAME/Scripts/Combat/Runtime/Integration/EncounterAdvantageApplier.cs",
+                "Assets/GAME/Scripts/Legacy/Battle/BattleTrigger2D.cs",
+                "Assets/GAME/Scripts/Legacy/Battle/SeamlessBattleManager.cs",
+                "Assets/GAME/Scripts/UI/BattleTransitionController.cs",
+                "Assets/GAME/Scripts/Debugging/Combat/CombatAutoPlanner.cs",
+                "Assets/GAME/Scripts/Debugging/Combat/CombatFieldCallDebug.cs",
+                "Assets/GAME/Scripts/Debugging/Combat/CombatSkillDebugInvoker.cs",
+                "Assets/GAME/Scripts/Debugging/Combat/CombatStartSmokeTest.cs",
+                "Assets/GAME/Scripts/Debugging/Combat/CombatTestRunner.cs",
+                "Assets/GAME/Scripts/Debugging/Combat/InspirationDebugHotkey.cs"
+            };
+
+            foreach (string assetPath in productionAssets)
+            {
+                string yaml = Read(assetPath);
+                foreach (string scriptPath in forbiddenScripts)
+                {
+                    string scriptGuid = AssetDatabase.AssetPathToGUID(scriptPath);
+                    Assert.That(scriptGuid, Is.Not.Empty, scriptPath);
+                    Assert.That(yaml, Does.Not.Contain(scriptGuid),
+                        $"{assetPath} must not serialize the Legacy/Demo/Debug component {scriptPath}.");
+                }
+            }
+        }
+
+        [Test]
+        public void SerializedLegacyTransitionController_YieldsToCanonicalCombatEntryPoint()
+        {
+            Assert.That(Read("Assets/GAME/Scripts/UI/BattleTransitionController.cs"), Does.Contain(
+                "FindFirstObjectByType<CombatEntryPoint>(FindObjectsInactive.Include) != null"));
         }
 
         [Test]

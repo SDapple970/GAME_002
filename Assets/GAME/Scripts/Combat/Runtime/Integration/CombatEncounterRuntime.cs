@@ -20,6 +20,7 @@ namespace Game.Combat.Integration
         EncounterRuntimeLifecycle Lifecycle { get; }
         string ActiveCompletionId { get; }
         bool HasPlayerPresence { get; }
+        CombatFlowMode ResolveCombatFlowMode(CombatFlowMode compatibilityFlowMode);
 
         bool TryReserve(Object requester);
         void CommitReservation(string completionId);

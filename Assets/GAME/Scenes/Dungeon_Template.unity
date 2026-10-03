@@ -167,6 +167,8 @@ MonoBehaviour:
   autoCollectChildren: 1
   enemies: []
   encounterId: validation.production.npc.quest.kill
+  useEncounterFlowMode: 1
+  encounterFlowMode: 1
 --- !u!1 &90857362
 GameObject:
   m_ObjectHideFlags: 0
@@ -2201,6 +2203,8 @@ MonoBehaviour:
   autoCollectChildren: 1
   enemies: []
   encounterId: template.test.02
+  useEncounterFlowMode: 1
+  encounterFlowMode: 1
 --- !u!1 &2121896103
 GameObject:
   m_ObjectHideFlags: 0

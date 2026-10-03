@@ -126,7 +126,7 @@ namespace Game.Tests.Combat
             {
                 "panelRoot", "actorListRoot", "skillListRoot", "targetListRoot", "handoffListRoot",
                 "optionButtonPrefab", "confirmButton", "cancelButton", "noResponseButton",
-                "continueButton", "handoffButton", "endButton", "displayFont", "phaseText", "contextText", "playerMpText",
+                "continueButton", "handoffButton", "endButton", "displayFont", "phaseText", "contextText", "playerHpText", "enemyHpText", "playerMpText",
                 "enemyMpText", "pressureText", "playerPostureText", "enemyPostureText"
             };
 
@@ -140,6 +140,27 @@ namespace Game.Tests.Combat
             Assert.That(Reference(binder, "handoffButton"), Is.TypeOf<Button>());
             Assert.That(Reference(binder, "endButton"), Is.TypeOf<Button>());
             Assert.That(Reference(binder, "contextText"), Is.AssignableTo<TMP_Text>());
+            Assert.That(Reference(binder, "playerHpText"), Is.TypeOf<Text>());
+            Assert.That(Reference(binder, "enemyHpText"), Is.TypeOf<Text>());
+        }
+
+        [Test]
+        public void FinalBinder_FormatsCurrentAndMaxHpFromCombatantRuntimeState()
+        {
+            DummyCombatant player = new DummyCombatant(1, Side.Allies, 10, KeywordMask.None, 0);
+            DummyCombatant enemy = new DummyCombatant(2, Side.Enemies, 8, KeywordMask.None, 0);
+            MethodInfo formatHp = typeof(FinalCombatUIBinder).GetMethod(
+                "FormatHp",
+                BindingFlags.Static | BindingFlags.NonPublic);
+
+            Assert.That(formatHp, Is.Not.Null);
+            Assert.That((string)formatHp.Invoke(null, new object[] { "PLAYER", player }),
+                Is.EqualTo("PLAYER  HP 10 / 10"));
+
+            enemy.ApplyDamage(3);
+
+            Assert.That((string)formatHp.Invoke(null, new object[] { "ENEMY", enemy }),
+                Is.EqualTo("ENEMY  HP 5 / 8"));
         }
 
         [TestCase(Phase.Standoff, null, "대치")]
@@ -175,7 +196,10 @@ namespace Game.Tests.Combat
                 Assert.That(scene.IsValid(), Is.True);
                 Assert.That(encounters.Length, Is.GreaterThan(0));
                 for (int i = 0; i < encounters.Length; i++)
+                {
                     Assert.That(Reference(encounters[i], "flowMode"), Is.EqualTo(CombatFlowMode.StandoffClashChain));
+                    AssertSharedGroupFlowMode(encounters[i]);
+                }
             }
             finally
             {
@@ -202,7 +226,10 @@ namespace Game.Tests.Combat
                     "dungeon1.encounter.03"
                 }));
                 for (int i = 0; i < encounters.Length; i++)
+                {
                     Assert.That(Reference(encounters[i], "flowMode"), Is.EqualTo(CombatFlowMode.StandoffClashChain));
+                    AssertSharedGroupFlowMode(encounters[i]);
+                }
             }
             finally
             {
@@ -271,6 +298,15 @@ namespace Game.Tests.Combat
             FieldInfo field = target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, name);
             field.SetValue(target, value);
+        }
+
+        private static void AssertSharedGroupFlowMode(CombatEncounterTrigger2D trigger)
+        {
+            CombatEncounterGroup group = Reference(trigger, "encounterGroup") as CombatEncounterGroup;
+            Assert.That(group, Is.Not.Null, trigger.EncounterId);
+            Assert.That(Reference(group, "useEncounterFlowMode"), Is.EqualTo(true), trigger.EncounterId);
+            Assert.That(Reference(group, "encounterFlowMode"),
+                Is.EqualTo(CombatFlowMode.StandoffClashChain), trigger.EncounterId);
         }
     }
 }

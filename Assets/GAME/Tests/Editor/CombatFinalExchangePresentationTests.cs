@@ -135,6 +135,9 @@ namespace Game.Tests.Combat
         public void ExecutionSnapshot_ReportsAlreadyAppliedDamage()
         {
             Fixture fixture = CreateFixture(allyDamage: 3);
+            bool sawPostDamageStateChange = false;
+            fixture.Exchange.OnStateChanged += _ =>
+                sawPostDamageStateChange |= fixture.Enemy.HP == 7;
             CombatOutcomePresentationRequest outcome = DriveNoResponseToOutcomeGate(fixture);
             CombatSkillTargetResult target = outcome.ExecutionResult.TargetResults[0];
 
@@ -144,6 +147,7 @@ namespace Game.Tests.Combat
             Assert.That(target.HpAfter, Is.EqualTo(7));
             Assert.That(target.DamageApplied, Is.EqualTo(3));
             Assert.That(fixture.Enemy.HP, Is.EqualTo(7));
+            Assert.That(sawPostDamageStateChange, Is.True);
         }
 
         [Test]
