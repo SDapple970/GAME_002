@@ -26,6 +26,18 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void ProductionFieldEntries_DoNotReintroduceLegacyAdvantageTransport()
+        {
+            string contact = Read("Assets/GAME/Scripts/Combat/Runtime/Integration/CombatEncounterTrigger2D.cs");
+            string fieldAttack = Read("Assets/GAME/Scripts/Player/Runtime/PlayerFieldAttackController.cs");
+
+            Assert.That(contact, Does.Not.Contain("BattleTransitionRequest"));
+            Assert.That(contact, Does.Not.Contain("EncounterAdvantageApplier"));
+            Assert.That(fieldAttack, Does.Not.Contain("BattleTransitionRequest"));
+            Assert.That(fieldAttack, Does.Not.Contain("EncounterAdvantageApplier"));
+        }
+
+        [Test]
         public void ProductionRuntime_CreatesCombatSessionsOnlyThroughCanonicalEntry()
         {
             IEnumerable<string> offenders = Directory
@@ -106,6 +118,77 @@ namespace Game.Tests.Combat
             Assert.That(director, Does.Contain("PlayResolution"));
             Assert.That(director, Does.Contain("CombatantAnimationDriver"));
             Assert.That(director, Does.Not.Contain("ApplyDamage("));
+        }
+
+        [Test]
+        public void StatusMutation_RemainsInCombatRuntimeAndNotPresentation()
+        {
+            string state = Read("Assets/GAME/Scripts/Combat/Runtime/Model/CombatantCombatState.cs");
+            string runner = Read("Assets/GAME/Scripts/Combat/Runtime/Actions/SkillRunner.cs");
+            string binder = Read("Assets/GAME/Scripts/Combat/Runtime/UI/FinalCombatUIBinder.cs");
+            string director = Read("Assets/GAME/Scripts/Combat/Runtime/Effects/CombatDirector.cs");
+
+            Assert.That(state, Does.Contain("ApplyStatus"));
+            Assert.That(runner, Does.Contain("ApplyAuthoredStatuses"));
+            Assert.That(binder, Does.Not.Contain("ApplyStatus("));
+            Assert.That(director, Does.Not.Contain("ApplyStatus("));
+        }
+
+        [Test]
+        public void MentalRuntime_IsCombatLocalAndPresentationDoesNotMutateIt()
+        {
+            string state = Read("Assets/GAME/Scripts/Combat/Runtime/Model/CombatantCombatState.cs");
+            string rule = Read("Assets/GAME/Scripts/Combat/Runtime/Core/FinalCombatMentalRule.cs");
+            string binder = Read("Assets/GAME/Scripts/Combat/Runtime/UI/FinalCombatUIBinder.cs");
+            string director = Read("Assets/GAME/Scripts/Combat/Runtime/Effects/CombatDirector.cs");
+
+            Assert.That(state, Does.Contain("ApplyMentalDelta"));
+            Assert.That(rule, Does.Not.Contain("SearchRewardManager"));
+            Assert.That(rule, Does.Not.Contain("PersonaStatusManager"));
+            Assert.That(rule, Does.Not.Contain("PersistentCondition"));
+            Assert.That(binder, Does.Not.Contain("ApplyMentalDelta"));
+            Assert.That(director, Does.Not.Contain("ApplyMentalDelta"));
+        }
+
+        [Test]
+        public void OvercomePolicyAndExecution_DoNotUseSkillItemOrPersistentSystems()
+        {
+            string policy = Read("Assets/GAME/Scripts/Combat/Runtime/Core/CombatOvercomePolicy.cs");
+            string stateMachine = Read("Assets/GAME/Scripts/Combat/Runtime/Core/CombatStateMachine.cs");
+            int start = stateMachine.IndexOf("internal bool TryExecuteOvercome", System.StringComparison.Ordinal);
+            int end = stateMachine.IndexOf("private bool HasExpectedExchangeVersion", start,
+                System.StringComparison.Ordinal);
+            Assert.That(start, Is.GreaterThanOrEqualTo(0));
+            Assert.That(end, Is.GreaterThan(start));
+            string execution = stateMachine.Substring(start, end - start);
+
+            foreach (string forbidden in new[]
+                     {
+                         "SkillRunner",
+                         "InventoryService",
+                         "SearchRewardManager",
+                         "PersonaStatusManager",
+                         "PersistentConditionRuntime"
+                     })
+            {
+                Assert.That(policy, Does.Not.Contain(forbidden));
+                Assert.That(execution, Does.Not.Contain(forbidden));
+            }
+        }
+
+        [Test]
+        public void CombatItemIntegration_KeepsInventoryMutationOutsideEntryAndUi()
+        {
+            string entry = Read("Assets/GAME/Scripts/Combat/Runtime/Core/CombatEntryPoint.cs");
+            string binder = Read("Assets/GAME/Scripts/Combat/Runtime/UI/FinalCombatUIBinder.cs");
+            string adapter = Read("Assets/GAME/Scripts/Combat/Runtime/Integration/CombatItemUseAdapter.cs");
+            string executor = Read("Assets/GAME/Scripts/Combat/Runtime/Integration/CombatItemUseExecutor.cs");
+
+            Assert.That(entry, Does.Not.Contain("InventoryService"));
+            Assert.That(binder, Does.Not.Contain("TryRemoveItemDetailed"));
+            Assert.That(binder, Does.Not.Contain("ApplyStatus("));
+            Assert.That(adapter, Does.Contain("InventoryService"));
+            Assert.That(executor, Does.Contain("TryRemoveItemDetailed"));
         }
 
         [Test]

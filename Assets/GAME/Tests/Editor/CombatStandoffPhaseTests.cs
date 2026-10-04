@@ -63,6 +63,43 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void OpeningEffect_IsAppliedExactlyOnceBeforeInitialFinalExchangeStandoff()
+        {
+            OpeningEffectSO opening = ScriptableObject.CreateInstance<OpeningEffectSO>();
+            opening.inspirationDelta = 2;
+            opening.addEnemyStagger = 3;
+            try
+            {
+                CombatStartRequest request = new CombatStartRequest(
+                    StartReason.PlayerFirstHit,
+                    Side.Allies,
+                    10,
+                    3,
+                    opening,
+                    CombatFlowMode.StandoffClashChain);
+
+                (CombatSession session, CombatStateMachine stateMachine) = CombatBootstrapper.StartCombat(
+                    request,
+                    new SkillBook(),
+                    new TestCombatantFactory());
+
+                ICombatant enemy = session.Enemies[0];
+                Assert.That(session.OpeningEffectApplied, Is.True);
+                Assert.That(session.Inspiration.Current, Is.EqualTo(5));
+                Assert.That(enemy.Stagger, Is.EqualTo(3));
+                Assert.That(stateMachine.Phase, Is.EqualTo(Phase.Standoff));
+
+                OpeningEffectApplier.ApplyIfAny(session, opening);
+                Assert.That(session.Inspiration.Current, Is.EqualTo(5));
+                Assert.That(enemy.Stagger, Is.EqualTo(3));
+            }
+            finally
+            {
+                Object.DestroyImmediate(opening);
+            }
+        }
+
+        [Test]
         public void StandoffEntry_HasRuntimeStateBeforePhaseEventAndDoesNotRequireTurnStart()
         {
             CombatSession session = CreateSession(CombatFlowMode.StandoffClashChain);

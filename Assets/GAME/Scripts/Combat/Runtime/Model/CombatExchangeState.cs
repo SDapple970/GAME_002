@@ -33,6 +33,9 @@ namespace Game.Combat.Model
         public CombatPostureResult CurrentPostureResult { get; private set; }
         public CombatStunResolutionState StunResolutionState { get; private set; }
         public CombatStunResult CurrentStunResult { get; private set; }
+        public bool IsMentalResolved { get; private set; }
+        public System.Collections.Generic.IReadOnlyList<CombatMentalMutationResult> CurrentMentalResults { get; private set; } =
+            System.Array.Empty<CombatMentalMutationResult>();
         public bool IsAftermathPrepared { get; private set; }
         public CombatAftermathSnapshot CurrentAftermathSnapshot { get; private set; }
         public bool IsAftermathDecisionPrepared { get; private set; }
@@ -170,6 +173,19 @@ namespace Game.Combat.Model
 
             StunResolutionState = state;
             CurrentStunResult = state == CombatStunResolutionState.Applied ? result : null;
+            ClearMentalResolution();
+            AdvanceVersion();
+        }
+
+        internal void StoreMentalResults(
+            System.Collections.Generic.IReadOnlyList<CombatMentalMutationResult> results)
+        {
+            CombatMentalMutationResult[] snapshot = new CombatMentalMutationResult[results?.Count ?? 0];
+            for (int i = 0; i < snapshot.Length; i++)
+                snapshot[i] = results[i];
+
+            CurrentMentalResults = System.Array.AsReadOnly(snapshot);
+            IsMentalResolved = true;
             ClearAftermath();
             AdvanceVersion();
         }
@@ -316,6 +332,13 @@ namespace Game.Combat.Model
         {
             StunResolutionState = CombatStunResolutionState.Pending;
             CurrentStunResult = null;
+            ClearMentalResolution();
+        }
+
+        private void ClearMentalResolution()
+        {
+            IsMentalResolved = false;
+            CurrentMentalResults = System.Array.Empty<CombatMentalMutationResult>();
             ClearAftermath();
         }
 

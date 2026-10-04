@@ -89,6 +89,44 @@ namespace Game.Tests.Integration
 
         [Test]
         [Category("CNTD102")]
+        public void ProductionContactEncounters_UseEnemyInitiatedCanonicalStartSemantics()
+        {
+            EditorSceneManager.OpenScene(
+                DungeonOneProductionMigrationUtility.ProductionScenePath,
+                OpenSceneMode.Single);
+
+            foreach (CombatEncounterTrigger2D trigger in Object.FindObjectsByType<CombatEncounterTrigger2D>(
+                         FindObjectsInactive.Include,
+                         FindObjectsSortMode.None))
+            {
+                SerializedObject serialized = new(trigger);
+                Assert.That((StartReason)serialized.FindProperty("startReason").enumValueIndex,
+                    Is.EqualTo(StartReason.PlayerGotHit), trigger.EncounterId);
+                Assert.That((Side)serialized.FindProperty("initiativeSide").enumValueIndex,
+                    Is.EqualTo(Side.Enemies), trigger.EncounterId);
+            }
+        }
+
+        [Test]
+        [Category("CNTD102")]
+        public void ProductionFieldAttack_UsesPlayerInitiatedCanonicalStartSemantics()
+        {
+            EditorSceneManager.OpenScene(
+                DungeonOneProductionMigrationUtility.ProductionScenePath,
+                OpenSceneMode.Single);
+
+            PlayerFieldAttackController attack = Object
+                .FindObjectsByType<PlayerFieldAttackController>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .Single();
+            SerializedObject serialized = new(attack);
+            Assert.That((StartReason)serialized.FindProperty("startReason").enumValueIndex,
+                Is.EqualTo(StartReason.PlayerFirstHit));
+            Assert.That((Side)serialized.FindProperty("initiativeSide").enumValueIndex,
+                Is.EqualTo(Side.Allies));
+        }
+
+        [Test]
+        [Category("CNTD102")]
         public void ProductionEncounterReservations_BlockConcurrentFieldAttackAndContactStarts()
         {
             EditorSceneManager.OpenScene(

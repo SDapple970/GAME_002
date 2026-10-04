@@ -3715,8 +3715,8 @@ MonoBehaviour:
   encounterGroup: {fileID: 798755492}
   encounterId: dungeon1.encounter.03
   openingEffectOrNull: {fileID: 0}
-  startReason: 0
-  initiativeSide: 0
+  startReason: 1
+  initiativeSide: 1
   flowMode: 1
   playerTag: Player
   debugLog: 0
@@ -6343,8 +6343,8 @@ MonoBehaviour:
   encounterGroup: {fileID: 406163156}
   encounterId: dungeon1.encounter.01
   openingEffectOrNull: {fileID: 0}
-  startReason: 0
-  initiativeSide: 0
+  startReason: 1
+  initiativeSide: 1
   flowMode: 1
   playerTag: Player
   debugLog: 0
@@ -6444,8 +6444,8 @@ MonoBehaviour:
   encounterGroup: {fileID: 1315519544}
   encounterId: dungeon1.encounter.02
   openingEffectOrNull: {fileID: 0}
-  startReason: 0
-  initiativeSide: 0
+  startReason: 1
+  initiativeSide: 1
   flowMode: 1
   playerTag: Player
   debugLog: 0

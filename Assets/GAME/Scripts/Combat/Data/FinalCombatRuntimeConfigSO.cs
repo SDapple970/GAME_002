@@ -25,6 +25,15 @@ namespace Game.Combat.Data
         [SerializeField, Min(0f)] private float pressureMax = 1f;
         [SerializeField, Min(0f)] private float pressurePerSecond = 0.25f;
 
+        [Header("Mental V1")]
+        [SerializeField, Min(0)] private int maxMental = 100;
+        [SerializeField, Min(0)] private int initialMental = 100;
+        [SerializeField, Min(0)] private int clashMentalLoss = 10;
+        [SerializeField, Min(0)] private int damageMentalLoss = 5;
+        [SerializeField, Min(0)] private int stunMentalLoss = 20;
+        [SerializeField, Min(0)] private int panicThreshold;
+        [SerializeField, Min(0)] private int overcomeRecoveryMental = 35;
+
         public int MaxMp => maxMp;
         public int InitialMp => initialMp;
         public float MpRecoveryPerSecond => mpRecoveryPerSecond;
@@ -32,6 +41,13 @@ namespace Game.Combat.Data
         public int InitialPosture => initialPosture;
         public float PressureMax => pressureMax;
         public float PressurePerSecond => pressurePerSecond;
+        public int MaxMental => maxMental;
+        public int InitialMental => initialMental;
+        public int ClashMentalLoss => clashMentalLoss;
+        public int DamageMentalLoss => damageMentalLoss;
+        public int StunMentalLoss => stunMentalLoss;
+        public int PanicThreshold => panicThreshold;
+        public int OvercomeRecoveryMental => overcomeRecoveryMental;
 
         public CombatRuntimeConfig CreateRuntimeConfig()
         {
@@ -42,7 +58,14 @@ namespace Game.Combat.Data
                 initialPosture,
                 mpRecoveryPerSecond,
                 pressureMax,
-                pressurePerSecond);
+                pressurePerSecond,
+                maxMental,
+                initialMental,
+                clashMentalLoss,
+                damageMentalLoss,
+                stunMentalLoss,
+                panicThreshold,
+                overcomeRecoveryMental);
         }
 
         public bool SupportsFinalExchangeSkills()

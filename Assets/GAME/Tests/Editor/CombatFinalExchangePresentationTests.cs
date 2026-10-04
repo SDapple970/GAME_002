@@ -1,6 +1,8 @@
 #if UNITY_INCLUDE_TESTS
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using Game.Combat.Core;
 using Game.Combat.Data;
 using Game.Combat.Effects;
@@ -9,6 +11,7 @@ using Game.Combat.Model;
 using Game.Combat.UI;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Game.Tests.Combat
 {
@@ -308,6 +311,59 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void AcceptedOvercome_RaisesOnePresentationCueAndRejectedDuplicateRaisesNone()
+        {
+            Fixture fixture = CreateFixture();
+            Assert.That(fixture.Bind(), Is.True);
+            CombatDirector director = CreateDisabledDirector();
+            int overcomeCues = 0;
+            director.FinalPresentationCueRaised += cue =>
+            {
+                if (cue.Kind == CombatFinalPresentationCueKind.Overcome)
+                    overcomeCues++;
+            };
+            Assert.That(director.BindFinalExchange(fixture.Orchestrator, fixture.Session), Is.True);
+            CombatantCombatState state = fixture.Session.GetCombatState(fixture.Ally);
+            state.ApplyMentalDelta(-state.MaxMental);
+
+            int version = fixture.Exchange.Version;
+            Assert.That(fixture.Orchestrator.TryOvercome(fixture.Ally, version, out _), Is.True);
+            Assert.That(overcomeCues, Is.EqualTo(1));
+            Assert.That(fixture.Orchestrator.TryOvercome(fixture.Ally, version, out _), Is.False);
+            Assert.That(overcomeCues, Is.EqualTo(1));
+        }
+
+        [UnityTest]
+        public IEnumerator PanicTransitionOutcome_RaisesOnePresentationCueWithoutRebindReplay()
+        {
+            Fixture fixture = CreateFixture();
+            CombatantCombatState enemyState = fixture.Session.GetCombatState(fixture.Enemy);
+            enemyState.ApplyMentalDelta(-95);
+            CombatOutcomePresentationRequest outcome = DriveNoResponseToOutcomeGate(fixture);
+            Assert.That(outcome.MentalMutationResults[0].PanicApplied, Is.True);
+
+            CombatDirector director = CreateActiveDirector();
+            typeof(CombatDirector).GetField("fallbackActionDelay", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(director, 0f);
+            int panicCues = 0;
+            director.FinalPresentationCueRaised += cue =>
+            {
+                if (cue.Kind == CombatFinalPresentationCueKind.PanicReaction)
+                    panicCues++;
+            };
+
+            Assert.That(director.BindFinalExchange(fixture.Orchestrator, fixture.Session), Is.True);
+            yield return null;
+            yield return null;
+
+            Assert.That(panicCues, Is.EqualTo(1));
+            Assert.That(outcome.TryComplete(), Is.True);
+            director.UnbindFinalExchange();
+            Assert.That(director.BindFinalExchange(fixture.Orchestrator, fixture.Session), Is.True);
+            Assert.That(panicCues, Is.EqualTo(1));
+        }
+
+        [Test]
         public void DirectorRebind_ConsumesPendingApproachAfterUnbind()
         {
             Fixture fixture = CreateFixture();
@@ -407,6 +463,141 @@ namespace Game.Tests.Combat
             Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.Standoff));
         }
 
+        [Test]
+        public void PlayerChainDecision_StartsSlowMotionOnlyAfterOutcomeCompletion_AndContinueRestoresPreviousScale()
+        {
+            Fixture fixture = CreateFixture();
+            EnterPlayerChainSlowMotion(fixture, out CombatDirector director, out FinalCombatPlayerCommandController player);
+
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.ChainDecision));
+            Assert.That(player.ViewState.DecisionKind, Is.EqualTo(CombatExchangeDecisionKind.Chain));
+            Assert.That(Time.timeScale, Is.EqualTo(0.25f));
+            Assert.That(player.ConfirmContinue(), Is.True);
+            Assert.That(Time.timeScale, Is.EqualTo(0.75f));
+        }
+
+        [Test]
+        public void EnemyChainDecision_DoesNotStartPlayerSlowMotion()
+        {
+            Fixture fixture = CreateFixture(allyPower: 1, enemyPower: 3);
+            CombatOutcomePresentationRequest outcome = DriveResponseToOutcomeGate(fixture);
+            Time.timeScale = 0.75f;
+            CombatDirector director = CreateActiveDirector();
+            Assert.That(director.BindFinalExchange(fixture.Orchestrator, fixture.Session), Is.True);
+
+            Assert.That(outcome.TryComplete(), Is.True);
+
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.ChainDecision));
+            Assert.That(fixture.Orchestrator.PendingDecisionRequest.ActingSide, Is.EqualTo(Side.Enemies));
+            Assert.That(Time.timeScale, Is.EqualTo(0.75f));
+        }
+
+        [Test]
+        public void TerminalOutcome_DoesNotStartSlowMotion()
+        {
+            Fixture fixture = CreateFixture(allyDamage: 10);
+            CombatOutcomePresentationRequest outcome = DriveNoResponseToOutcomeGate(fixture);
+            Time.timeScale = 0.75f;
+            CombatDirector director = CreateActiveDirector();
+            Assert.That(director.BindFinalExchange(fixture.Orchestrator, fixture.Session), Is.True);
+
+            Assert.That(outcome.TryComplete(), Is.True);
+
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.ExitCombat));
+            Assert.That(Time.timeScale, Is.EqualTo(0.75f));
+        }
+
+        [Test]
+        public void HandoffAndEndChain_RestorePreviousSlowMotionScale()
+        {
+            Fixture handoffFixture = CreateFixture();
+            EnterPlayerChainSlowMotion(
+                handoffFixture,
+                out CombatDirector handoffDirector,
+                out FinalCombatPlayerCommandController handoffPlayer);
+            Assert.That(handoffFixture.Orchestrator.Handoff(
+                handoffFixture.AllyTwo,
+                handoffFixture.AllyTwoSkill,
+                true,
+                handoffFixture.Exchange.Version), Is.True);
+            Assert.That(Time.timeScale, Is.EqualTo(0.75f));
+
+            Fixture endFixture = CreateFixture();
+            EnterPlayerChainSlowMotion(
+                endFixture,
+                out CombatDirector endDirector,
+                out FinalCombatPlayerCommandController endPlayer);
+            Assert.That(endPlayer.EndChain(), Is.True);
+            Assert.That(endFixture.StateMachine.Phase, Is.EqualTo(Phase.Standoff));
+            Assert.That(Time.timeScale, Is.EqualTo(0.75f));
+        }
+
+        [Test]
+        public void AllOut_RestoresSlowMotionBeforeExistingExecution()
+        {
+            Fixture fixture = CreateFixture(allyPower: 3, enemyPower: 1, maxPosture: 1);
+            AddSkill(fixture.Ally, 99, 10, TargetingRule.AllEnemies);
+            EnterPlayerChainSlowMotion(fixture, out CombatDirector director, out FinalCombatPlayerCommandController player);
+
+            Assert.That(player.ViewState.CanAllOut, Is.True);
+            Assert.That(player.ConfirmAllOut(), Is.True);
+            Assert.That(Time.timeScale, Is.EqualTo(0.75f));
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.ExitCombat));
+            Assert.That(fixture.StateMachine.EndReason, Is.EqualTo(CombatEndReason.Victory));
+        }
+
+        [Test]
+        public void UnbindAndSessionSwitch_RestorePreviousScaleWithoutOverwritingOtherWriter()
+        {
+            Fixture unbindFixture = CreateFixture();
+            EnterPlayerChainSlowMotion(unbindFixture, out CombatDirector unbindDirector, out FinalCombatPlayerCommandController unbindPlayer);
+            unbindDirector.UnbindFinalExchange();
+            Assert.That(Time.timeScale, Is.EqualTo(0.75f));
+
+            Fixture switchFixture = CreateFixture();
+            EnterPlayerChainSlowMotion(switchFixture, out CombatDirector switchDirector, out FinalCombatPlayerCommandController switchPlayer);
+            Fixture replacement = CreateFixture(orchestrator: switchFixture.Orchestrator);
+            Assert.That(replacement.Bind(), Is.True);
+            Assert.That(Time.timeScale, Is.EqualTo(0.75f));
+
+            Fixture otherWriterFixture = CreateFixture();
+            EnterPlayerChainSlowMotion(otherWriterFixture, out CombatDirector otherWriterDirector, out FinalCombatPlayerCommandController otherWriterPlayer);
+            Time.timeScale = 0f;
+            otherWriterDirector.UnbindFinalExchange();
+            Assert.That(Time.timeScale, Is.Zero);
+        }
+
+        [Test]
+        public void RepeatedPump_DoesNotOverwriteOriginalSlowMotionScale()
+        {
+            Fixture fixture = CreateFixture();
+            EnterPlayerChainSlowMotion(fixture, out CombatDirector director, out FinalCombatPlayerCommandController player);
+
+            fixture.Orchestrator.AdvanceUntilBlocked();
+            fixture.Orchestrator.AdvanceUntilBlocked();
+
+            Assert.That(Time.timeScale, Is.EqualTo(0.25f));
+            Assert.That(player.EndChain(), Is.True);
+            Assert.That(Time.timeScale, Is.EqualTo(0.75f));
+        }
+
+        private void EnterPlayerChainSlowMotion(
+            Fixture fixture,
+            out CombatDirector director,
+            out FinalCombatPlayerCommandController player)
+        {
+            CombatOutcomePresentationRequest outcome = DriveResponseToOutcomeGate(fixture);
+            Time.timeScale = 0.75f;
+            player = new FinalCombatPlayerCommandController();
+            Assert.That(player.Bind(fixture.Orchestrator, fixture.Session), Is.True);
+            director = CreateActiveDirector();
+            Assert.That(director.BindFinalExchange(fixture.Orchestrator, fixture.Session), Is.True);
+            Assert.That(Time.timeScale, Is.EqualTo(0.75f));
+            Assert.That(outcome.TryComplete(), Is.True);
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.ChainDecision));
+            Assert.That(Time.timeScale, Is.EqualTo(0.25f));
+        }
+
         private CombatOutcomePresentationRequest DriveResponseToOutcomeGate(Fixture fixture)
         {
             CombatApproachPresentationRequest approach = null;
@@ -495,6 +686,12 @@ namespace Game.Tests.Combat
             return director;
         }
 
+        private CombatDirector CreateActiveDirector()
+        {
+            return NewObject("CombatFinalExchangePresentationTests.ActiveDirector")
+                .AddComponent<CombatDirector>();
+        }
+
         private GameObject NewObject(string name)
         {
             GameObject value = new GameObject(name);
@@ -502,9 +699,13 @@ namespace Game.Tests.Combat
             return value;
         }
 
-        private static TestSkill AddSkill(TestCombatant actor, int id, int damage)
+        private static TestSkill AddSkill(
+            TestCombatant actor,
+            int id,
+            int damage,
+            TargetingRule targeting = TargetingRule.SingleEnemy)
         {
-            TestSkill skill = new TestSkill(id, damage);
+            TestSkill skill = new TestSkill(id, damage, targeting);
             actor.AddSkill(skill);
             return skill;
         }
@@ -610,7 +811,7 @@ namespace Game.Tests.Combat
             public int InspirationCost => 0;
             public KeywordMask Keywords => KeywordMask.None;
             public SkillTag Tag => SkillTag.Attack;
-            public TargetingRule Targeting => TargetingRule.SingleEnemy;
+            public TargetingRule Targeting { get; }
             public SkillMovementMode MovementMode => SkillMovementMode.None;
             public float DesiredTargetDistance => 0f;
             public float MoveSpeed => 0f;
@@ -622,10 +823,11 @@ namespace Game.Tests.Combat
             public bool ConsumesTurn => true;
             public int MpCost => 1;
 
-            public TestSkill(int id, int damage)
+            public TestSkill(int id, int damage, TargetingRule targeting = TargetingRule.SingleEnemy)
             {
                 Id = new SkillId(id);
                 BaseDamage = damage;
+                Targeting = targeting;
             }
         }
 

@@ -21,6 +21,9 @@ namespace Game.Combat.Effects
         [SerializeField] private float fallbackApproachDuration = 0.2f;
         [SerializeField] private float fallbackActionDelay = 0.15f;
 
+        [Header("FinalExchange Presentation")]
+        [SerializeField, Range(0.05f, 1f)] private float fallbackChainDecisionSlowScale = 0.25f;
+
         private Coroutine _activeResolutionRoutine;
         private CombatSession _activeResolutionSession;
         private CombatTurn _activeResolutionTurn;
@@ -36,6 +39,10 @@ namespace Game.Combat.Effects
         private Coroutine _activeFinalOutcomeRoutine;
         private CombatOutcomePresentationRequest _activeFinalOutcomeRequest;
         private int _finalBindingId;
+        private int _lastOvercomePresentationVersion = -1;
+        private bool _ownsChainDecisionSlowMotion;
+        private float _previousChainDecisionTimeScale = 1f;
+        private float _appliedChainDecisionTimeScale = 1f;
 
         public event Action<CombatFinalPresentationCue> FinalPresentationCueRaised;
 
@@ -61,25 +68,44 @@ namespace Game.Combat.Effects
             _finalBindingId++;
             _finalOrchestrator.ApproachPresentationRequested += HandleFinalApproachRequested;
             _finalOrchestrator.OutcomePresentationRequested += HandleFinalOutcomeRequested;
+            _finalOrchestrator.AllOutPresentationRequested += HandleAllOutPresentationRequested;
+            _finalOrchestrator.OvercomePresentationRequested += HandleOvercomePresentationRequested;
             _finalOrchestrator.AttackDecisionRequested += HandleFinalAttackDecisionRequested;
+            _finalOrchestrator.ChainDecisionRequested += HandleFinalChainDecisionRequested;
+            _finalOrchestrator.ChainDecisionAccepted += RestoreChainDecisionSlowMotion;
+            _finalOrchestrator.FinalExchangeUnbound += HandleFinalExchangeUnbound;
+            _finalOrchestrator.TerminalCompleted += HandleFinalTerminalCompleted;
 
             if (_finalOrchestrator.PendingApproachRequest != null)
                 HandleFinalApproachRequested(_finalOrchestrator.PendingApproachRequest);
             else if (_finalOrchestrator.PendingOutcomePresentationRequest != null)
                 HandleFinalOutcomeRequested(_finalOrchestrator.PendingOutcomePresentationRequest);
             else if (_finalOrchestrator.PendingDecisionRequest != null)
-                HandleFinalAttackDecisionRequested(_finalOrchestrator.PendingDecisionRequest);
+            {
+                CombatExchangeDecisionRequest pendingRequest = _finalOrchestrator.PendingDecisionRequest;
+                if (pendingRequest.Kind == CombatExchangeDecisionKind.Chain)
+                    HandleFinalChainDecisionRequested(pendingRequest);
+                else
+                    HandleFinalAttackDecisionRequested(pendingRequest);
+            }
 
             return true;
         }
 
         public void UnbindFinalExchange()
         {
+            RestoreChainDecisionSlowMotion();
             if (_finalOrchestrator != null)
             {
                 _finalOrchestrator.ApproachPresentationRequested -= HandleFinalApproachRequested;
                 _finalOrchestrator.OutcomePresentationRequested -= HandleFinalOutcomeRequested;
+                _finalOrchestrator.AllOutPresentationRequested -= HandleAllOutPresentationRequested;
+                _finalOrchestrator.OvercomePresentationRequested -= HandleOvercomePresentationRequested;
                 _finalOrchestrator.AttackDecisionRequested -= HandleFinalAttackDecisionRequested;
+                _finalOrchestrator.ChainDecisionRequested -= HandleFinalChainDecisionRequested;
+                _finalOrchestrator.ChainDecisionAccepted -= RestoreChainDecisionSlowMotion;
+                _finalOrchestrator.FinalExchangeUnbound -= HandleFinalExchangeUnbound;
+                _finalOrchestrator.TerminalCompleted -= HandleFinalTerminalCompleted;
             }
 
             _finalBindingId++;
@@ -93,6 +119,7 @@ namespace Game.Combat.Effects
             _activeFinalApproachRequest = null;
             _finalOrchestrator = null;
             _finalSession = null;
+            _lastOvercomePresentationVersion = -1;
         }
 
         public void PlayApproach(CombatAttackDeclaration declaration, Action onComplete)
@@ -177,8 +204,14 @@ namespace Game.Combat.Effects
             CompleteActiveApproach();
         }
 
+        private void OnDestroy()
+        {
+            UnbindFinalExchange();
+        }
+
         private void HandleFinalApproachRequested(CombatApproachPresentationRequest request)
         {
+            RestoreChainDecisionSlowMotion();
             CombatAttackDeclaration declaration = request?.Declaration;
             if (!IsCurrentFinalRequest(request?.ExchangeVersion ?? -1) ||
                 declaration?.Attacker == null || declaration.Target == null || declaration.Skill == null ||
@@ -212,6 +245,78 @@ namespace Game.Combat.Effects
 
             _activeFinalApproachRequest = null;
             request.TryComplete();
+        }
+
+        private void HandleAllOutPresentationRequested(CombatSkillExecutionResult result)
+        {
+            RestoreChainDecisionSlowMotion();
+            if (_finalSession == null || result?.Actor == null || result.Skill == null)
+                return;
+
+            ICombatant primaryTarget = result.TargetResults != null && result.TargetResults.Count > 0
+                ? result.TargetResults[0]?.Target
+                : null;
+            cameraController?.FocusAction(result.Actor, primaryTarget);
+            RaiseFinalCue(CombatFinalPresentationCueKind.AllOut, result.Actor, primaryTarget, result.Skill);
+
+            GameObject actorObject = GetFieldObject(result.Actor);
+            if (actorObject != null)
+            {
+                PlayCastPresentation(actorObject, result.Skill);
+                PlayAttackTrigger(actorObject, result.Skill);
+            }
+
+            if (result.TargetResults == null)
+                return;
+
+            for (int i = 0; i < result.TargetResults.Count; i++)
+            {
+                CombatSkillTargetResult targetResult = result.TargetResults[i];
+                if (targetResult?.Target == null)
+                    continue;
+
+                GameObject targetObject = GetFieldObject(targetResult.Target);
+                if (targetObject != null)
+                {
+                    PlayImpactPresentation(targetObject, result.Skill);
+                    PlayAllOutTargetReaction(targetResult, targetObject);
+                }
+
+                if (targetResult.HpAfter <= 0)
+                    RaiseFinalCue(CombatFinalPresentationCueKind.Defeat, result.Actor, targetResult.Target, result.Skill);
+                else if (targetResult.DamageApplied > 0)
+                    RaiseFinalCue(CombatFinalPresentationCueKind.HitReaction, result.Actor, targetResult.Target, result.Skill);
+            }
+        }
+
+        private void HandleOvercomePresentationRequested(CombatOvercomeResult result)
+        {
+            if (result == null || !result.WasAccepted || result.Actor == null ||
+                result.ExchangeVersion < 0 || result.ExchangeVersion == _lastOvercomePresentationVersion ||
+                !IsCurrentFinalRequest(result.ExchangeVersion) || !IsFinalSessionMember(result.Actor))
+            {
+                return;
+            }
+
+            RestoreChainDecisionSlowMotion();
+            _lastOvercomePresentationVersion = result.ExchangeVersion;
+            cameraController?.FocusPlanning();
+            RaiseFinalCue(CombatFinalPresentationCueKind.Overcome, result.Actor, null, null);
+        }
+
+        private static void PlayAllOutTargetReaction(
+            CombatSkillTargetResult result,
+            GameObject targetObject)
+        {
+            CombatantAnimationDriver driver =
+                targetObject != null ? targetObject.GetComponentInChildren<CombatantAnimationDriver>() : null;
+            if (driver == null || result == null)
+                return;
+
+            if (result.HpAfter <= 0)
+                driver.PlayDie();
+            else if (result.DamageApplied > 0)
+                driver.PlayHit();
         }
 
         private void HandleFinalOutcomeRequested(CombatOutcomePresentationRequest request)
@@ -349,6 +454,22 @@ namespace Game.Combat.Effects
                     RaiseFinalResultCues(request, result, skill);
                 }
             }
+
+            if (request?.MentalMutationResults == null)
+                return;
+
+            for (int i = 0; i < request.MentalMutationResults.Count; i++)
+            {
+                CombatMentalMutationResult mentalResult = request.MentalMutationResults[i];
+                if (mentalResult?.PanicApplied == true)
+                {
+                    RaiseFinalCue(
+                        CombatFinalPresentationCueKind.PanicReaction,
+                        request.Winner,
+                        mentalResult.Target,
+                        skill);
+                }
+            }
         }
 
         private static void PlayFinalTargetReaction(
@@ -411,6 +532,7 @@ namespace Game.Combat.Effects
 
         private void HandleFinalAttackDecisionRequested(CombatExchangeDecisionRequest request)
         {
+            RestoreChainDecisionSlowMotion();
             if (!IsCurrentFinalRequest(request?.ExchangeVersion ?? -1) ||
                 request.Phase != Phase.Standoff)
             {
@@ -423,6 +545,58 @@ namespace Game.Combat.Effects
                 request.ActingActor,
                 null,
                 null);
+        }
+
+        private void HandleFinalChainDecisionRequested(CombatExchangeDecisionRequest request)
+        {
+            if (!IsCurrentFinalRequest(request?.ExchangeVersion ?? -1) ||
+                request.Kind != CombatExchangeDecisionKind.Chain ||
+                request.Phase != Phase.ChainDecision || request.ActingSide != Side.Allies ||
+                !ReferenceEquals(_finalOrchestrator.PendingDecisionRequest, request) ||
+                !isActiveAndEnabled || _ownsChainDecisionSlowMotion || Time.timeScale <= 0f)
+            {
+                return;
+            }
+
+            _previousChainDecisionTimeScale = Time.timeScale;
+            _appliedChainDecisionTimeScale = Mathf.Min(
+                _previousChainDecisionTimeScale,
+                Mathf.Clamp(fallbackChainDecisionSlowScale, 0.05f, 1f));
+            Time.timeScale = _appliedChainDecisionTimeScale;
+            _ownsChainDecisionSlowMotion = true;
+            RaiseFinalCue(
+                CombatFinalPresentationCueKind.ChainDecision,
+                request.ActingActor,
+                null,
+                null);
+        }
+
+        private void HandleFinalExchangeUnbound(CombatSession session)
+        {
+            if (ReferenceEquals(session, _finalSession))
+                UnbindFinalExchange();
+        }
+
+        private void HandleFinalTerminalCompleted(
+            CombatSession session,
+            CombatEndReason reason,
+            int exchangeVersion)
+        {
+            if (ReferenceEquals(session, _finalSession))
+                RestoreChainDecisionSlowMotion();
+        }
+
+        private void RestoreChainDecisionSlowMotion()
+        {
+            if (!_ownsChainDecisionSlowMotion)
+                return;
+
+            if (Mathf.Approximately(Time.timeScale, _appliedChainDecisionTimeScale))
+                Time.timeScale = _previousChainDecisionTimeScale;
+
+            _ownsChainDecisionSlowMotion = false;
+            _previousChainDecisionTimeScale = 1f;
+            _appliedChainDecisionTimeScale = 1f;
         }
 
         private bool IsActiveFinalOutcome(

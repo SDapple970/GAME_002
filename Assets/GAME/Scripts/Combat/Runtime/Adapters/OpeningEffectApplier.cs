@@ -7,7 +7,7 @@ namespace Game.Combat.Adapters
     {
         public static void ApplyIfAny(CombatSession session, OpeningEffectSO opening)
         {
-            if (opening == null)
+            if (session == null || opening == null || !session.TryMarkOpeningEffectApplied())
                 return;
 
             if (opening.inspirationDelta > 0)

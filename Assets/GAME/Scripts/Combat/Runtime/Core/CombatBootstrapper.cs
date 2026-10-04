@@ -32,11 +32,16 @@ namespace Game.Combat.Core
             var timeline = new CombatTimeline();
             var sm = new CombatStateMachine(session, timeline, skillBook);
 
+            // FinalExchange must enter Standoff after the opening state is already canonical.
+            if (session.FlowMode == CombatFlowMode.StandoffClashChain)
+                OpeningEffectApplier.ApplyIfAny(session, req.OpeningEffectOrNull);
+
             // EnterCombat 1틱 해서 Turn 생성(Events 기록 가능하게)
             sm.Tick();
 
-            // OpeningEffect 적용(특수 선제 등)
-            OpeningEffectApplier.ApplyIfAny(session, req.OpeningEffectOrNull);
+            // Preserve the existing LegacyPlanning event-recording order.
+            if (session.FlowMode != CombatFlowMode.StandoffClashChain)
+                OpeningEffectApplier.ApplyIfAny(session, req.OpeningEffectOrNull);
 
             return (session, sm);
         }

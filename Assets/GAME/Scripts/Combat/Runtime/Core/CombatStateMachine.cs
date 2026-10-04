@@ -728,8 +728,76 @@ namespace Game.Combat.Core
                 return false;
             }
 
+            if (!exchange.IsMentalResolved && !TryResolveMental())
+                return false;
+
             exchange.StoreAftermath(new CombatAftermathSnapshot(_session, exchange));
             return exchange.IsAftermathPrepared;
+        }
+
+        internal bool TryResolveMental()
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            if (_exited || _session == null || _session.FlowMode != CombatFlowMode.StandoffClashChain ||
+                Phase != Phase.ApplyOutcome || exchange == null || exchange.CurrentClashResult == null ||
+                !exchange.IsExecutionCompleted ||
+                exchange.PostureResolutionState == CombatPostureResolutionState.Pending ||
+                exchange.StunResolutionState == CombatStunResolutionState.Pending ||
+                exchange.IsMentalResolved)
+            {
+                return false;
+            }
+
+            if (!TryApplyMentalConsequences(
+                    exchange.CurrentClashResult,
+                    exchange.CurrentExecutionResult,
+                    exchange.CurrentStunResult,
+                    out System.Collections.Generic.IReadOnlyList<CombatMentalMutationResult> results))
+            {
+                return false;
+            }
+
+            exchange.StoreMentalResults(results);
+            return true;
+        }
+
+        internal bool TryResolveMental(int expectedExchangeVersion)
+        {
+            return HasExpectedExchangeVersion(expectedExchangeVersion) && TryResolveMental();
+        }
+
+        private bool TryApplyMentalConsequences(
+            CombatClashResult clash,
+            CombatSkillExecutionResult execution,
+            CombatStunResult stun,
+            out System.Collections.Generic.IReadOnlyList<CombatMentalMutationResult> results)
+        {
+            results = System.Array.Empty<CombatMentalMutationResult>();
+            if (_session == null)
+                return false;
+
+            System.Collections.Generic.IReadOnlyList<FinalCombatMentalRule.CombatMentalDelta> deltas =
+                new FinalCombatMentalRule(_session.RuntimeConfig).Calculate(clash, execution, stun);
+            System.Collections.Generic.List<CombatantCombatState> states =
+                new System.Collections.Generic.List<CombatantCombatState>(deltas.Count);
+            for (int i = 0; i < deltas.Count; i++)
+            {
+                if (deltas[i].Target == null ||
+                    !_session.TryGetCombatState(deltas[i].Target, out CombatantCombatState state))
+                {
+                    return false;
+                }
+
+                states.Add(state);
+            }
+
+            System.Collections.Generic.List<CombatMentalMutationResult> applied =
+                new System.Collections.Generic.List<CombatMentalMutationResult>(deltas.Count);
+            for (int i = 0; i < deltas.Count; i++)
+                applied.Add(states[i].ApplyMentalDelta(deltas[i].RequestedDelta));
+
+            results = applied.AsReadOnly();
+            return true;
         }
 
         public bool TryPrepareAftermath(int expectedExchangeVersion)
@@ -845,7 +913,7 @@ namespace Game.Combat.Core
             CombatAftermathSnapshot snapshot = exchange?.CurrentAftermathSnapshot;
             if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
                 Phase != Phase.ApplyOutcome || exchange.IsApplyOutcomeFinalized ||
-                !exchange.IsAftermathDecisionPrepared || aftermathDecision == null || snapshot == null ||
+                !exchange.IsMentalResolved || !exchange.IsAftermathDecisionPrepared || aftermathDecision == null || snapshot == null ||
                 aftermathDecision.Kind == CombatAftermathDecisionKind.TiePolicyRequired ||
                 !CombatAttackAuthorityPolicy.TryResolve(
                     exchange.CurrentClashResult,
@@ -905,6 +973,71 @@ namespace Game.Combat.Core
 
             exchange.BeginChainDecision(authority.Winner);
             SetPhase(Phase.ChainDecision);
+            return true;
+        }
+
+        /// <summary>
+        /// Executes a validated All-Out through SkillRunner, then returns to the canonical
+        /// terminal policy or the next FinalExchange standoff. It is intentionally only valid
+        /// for the current finalized All-Out candidate version.
+        /// </summary>
+        public bool TryExecuteAllOut(
+            int expectedExchangeVersion,
+            out CombatSkillExecutionResult executionResult)
+        {
+            executionResult = null;
+            CombatExchangeState exchange = _session?.ExchangeState;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) || _exited ||
+                EndReason != CombatEndReason.None || _session == null ||
+                _session.FlowMode != CombatFlowMode.StandoffClashChain ||
+                Phase != Phase.ChainDecision || exchange == null ||
+                !exchange.IsApplyOutcomeFinalized || !exchange.IsAllOutCandidate ||
+                !exchange.IsChainActive || !CombatAllOutExecutionPolicy.TryCreateExecutionRequest(
+                    _session,
+                    out CombatSkillExecutionRequest request))
+            {
+                return false;
+            }
+
+            if (!Game.Combat.Actions.SkillRunner.TryExecute(_session, request, out executionResult))
+            {
+                executionResult = null;
+                return false;
+            }
+
+            if (!TryApplyMentalConsequences(
+                    null,
+                    executionResult,
+                    null,
+                    out _))
+            {
+                executionResult = null;
+                return false;
+            }
+
+            CombatAftermathSnapshot snapshot = new CombatAftermathSnapshot(_session, exchange);
+            CombatAftermathDecision aftermath = CombatAftermathDecisionResolver.Resolve(snapshot);
+            if (aftermath.Kind == CombatAftermathDecisionKind.TerminalCandidate)
+            {
+                FinalCombatTerminalPolicy terminalPolicy = new FinalCombatTerminalPolicy();
+                if (!terminalPolicy.TryResolve(
+                        aftermath.TerminalCandidate,
+                        snapshot,
+                        out CombatTerminalDecision terminalDecision) ||
+                    !IsValidTerminalDecision(aftermath.TerminalCandidate, terminalDecision))
+                {
+                    executionResult = null;
+                    return false;
+                }
+
+                exchange.StoreTerminalDecision(terminalDecision);
+                EnterExit(terminalDecision.EndReason);
+                return Phase == Phase.ExitCombat && EndReason == terminalDecision.EndReason;
+            }
+
+            exchange.ResetForStandoff();
+            _approachPresentationRequested = false;
+            SetPhase(Phase.Standoff);
             return true;
         }
 
@@ -1004,6 +1137,47 @@ namespace Game.Combat.Core
             return true;
         }
 
+        internal bool TryExecuteOvercome(
+            ICombatant actor,
+            int expectedExchangeVersion,
+            out CombatOvercomeResult result)
+        {
+            result = CreateRejectedOvercomeResult(actor, CombatOvercomeFailureReason.InvalidSession);
+            CombatOvercomeFailureReason failureReason = CombatOvercomeFailureReason.InvalidSession;
+            if (_exited || _session == null ||
+                !CombatOvercomePolicy.TryAuthorize(
+                    _session,
+                    Phase,
+                    actor,
+                    expectedExchangeVersion,
+                    out failureReason))
+            {
+                result = CreateRejectedOvercomeResult(actor, failureReason);
+                return false;
+            }
+
+            CombatantCombatState state = _session.GetCombatState(actor);
+            CombatMentalMutationResult mutation = state.SetMental(
+                _session.RuntimeConfig.OvercomeRecoveryMental);
+            Side nextAuthority = actor.Side == Side.Allies ? Side.Enemies : Side.Allies;
+            if (!TryGrantStandoffAttackAuthority(nextAuthority, expectedExchangeVersion))
+            {
+                result = CreateRejectedOvercomeResult(actor, CombatOvercomeFailureReason.NotActionAuthority);
+                return false;
+            }
+
+            result = new CombatOvercomeResult(
+                actor,
+                true,
+                mutation.MentalBefore,
+                mutation.MentalAfter,
+                mutation.PanicBefore,
+                mutation.PanicAfter,
+                _session.ExchangeState.Version,
+                CombatOvercomeFailureReason.None);
+            return true;
+        }
+
         public bool TryTerminateExplicit(
             CombatEndReason requestedReason,
             int expectedExchangeVersion)
@@ -1042,6 +1216,35 @@ namespace Game.Combat.Core
                    _session.ExchangeState != null &&
                    expectedExchangeVersion >= 0 &&
                    _session.ExchangeState.Version == expectedExchangeVersion;
+        }
+
+        private CombatOvercomeResult CreateRejectedOvercomeResult(
+            ICombatant actor,
+            CombatOvercomeFailureReason failureReason)
+        {
+            if (_session != null && actor != null &&
+                _session.TryGetCombatState(actor, out CombatantCombatState state))
+            {
+                return new CombatOvercomeResult(
+                    actor,
+                    false,
+                    state.CurrentMental,
+                    state.CurrentMental,
+                    state.IsPanicked,
+                    state.IsPanicked,
+                    _session?.ExchangeState?.Version ?? -1,
+                    failureReason);
+            }
+
+            return new CombatOvercomeResult(
+                actor,
+                false,
+                0,
+                0,
+                false,
+                false,
+                _session?.ExchangeState?.Version ?? -1,
+                failureReason);
         }
 
         private static bool TryGetPostureParticipants(
@@ -1140,7 +1343,8 @@ namespace Game.Combat.Core
             if (!ReferenceEquals(responder, declaration.Target) ||
                 ReferenceEquals(responder, declaration.Attacker) ||
                 responder.Side == declaration.Attacker.Side || responder.HP <= 0 ||
-                !_session.TryGetCombatState(responder, out _) || responder.Skills == null)
+                !_session.TryGetCombatState(responder, out CombatantCombatState responderState) ||
+                responderState.IsPanicked || responder.Skills == null)
             {
                 return false;
             }
@@ -1183,7 +1387,8 @@ namespace Game.Combat.Core
                    !ReferenceEquals(response.Responder, declaration.Attacker) &&
                    response.Responder.Side != declaration.Attacker.Side &&
                    response.Responder.HP > 0 &&
-                   _session.TryGetCombatState(response.Responder, out _) &&
+                   _session.TryGetCombatState(response.Responder, out CombatantCombatState responderState) &&
+                   !responderState.IsPanicked &&
                    OwnsSkill(response.Responder, response.Skill);
         }
 
@@ -1232,6 +1437,9 @@ namespace Game.Combat.Core
             {
                 return false;
             }
+
+            if (CombatDeclarationPolicy.IsPanicked(_session, attacker))
+                return false;
 
             if (attacker.Skills == null)
                 return false;

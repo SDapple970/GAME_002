@@ -16,6 +16,8 @@ namespace Game.Combat.Actions
 
             System.Collections.Generic.List<CombatSkillTargetResult> targetResults =
                 new System.Collections.Generic.List<CombatSkillTargetResult>(request.Targets.Count);
+            System.Collections.Generic.List<CombatStatusApplicationResult> appliedStatuses =
+                new System.Collections.Generic.List<CombatStatusApplicationResult>();
             bool revealsWeakness = request.Skill.Tag == SkillTag.Inspect;
             bool appliesCombatantDamage = request.Skill.Tag != SkillTag.Inspect &&
                                           request.Skill.Tag != SkillTag.ScanEnv &&
@@ -34,12 +36,42 @@ namespace Game.Combat.Actions
                 targetResults.Add(new CombatSkillTargetResult(target, hpBefore, target.HP));
             }
 
+            ApplyAuthoredStatuses(session, request, appliedStatuses);
+
             result = new CombatSkillExecutionResult(
                 request.Actor,
                 request.Skill,
                 request.SourceOutcome,
-                targetResults);
+                targetResults,
+                appliedStatuses);
             return true;
+        }
+
+        private static void ApplyAuthoredStatuses(
+            CombatSession session,
+            CombatSkillExecutionRequest request,
+            System.Collections.Generic.List<CombatStatusApplicationResult> destination)
+        {
+            if (!(request.Skill is ICombatStatusEffectProvider provider) ||
+                provider.AppliedStatusEffects == null)
+            {
+                return;
+            }
+
+            for (int targetIndex = 0; targetIndex < request.Targets.Count; targetIndex++)
+            {
+                ICombatant target = request.Targets[targetIndex];
+                if (!session.TryGetCombatState(target, out CombatantCombatState state))
+                    continue;
+
+                for (int statusIndex = 0; statusIndex < provider.AppliedStatusEffects.Count; statusIndex++)
+                {
+                    CombatStatusApplicationResult statusResult = state.ApplyStatus(
+                        provider.AppliedStatusEffects[statusIndex]);
+                    if (statusResult != null && statusResult.Changed)
+                        destination.Add(statusResult);
+                }
+            }
         }
 
         private static bool CanExecuteRequest(

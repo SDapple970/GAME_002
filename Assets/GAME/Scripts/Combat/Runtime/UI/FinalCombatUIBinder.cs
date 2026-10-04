@@ -161,18 +161,29 @@ namespace Game.Combat.UI
 
             ClearDynamicButtons();
             SetVisible(actorListRoot, hasRequest && attack && _viewState.SelectableActors.Count > 0);
-            SetVisible(skillListRoot, hasRequest && (attack || response || chain) && _viewState.SelectableSkills.Count > 0);
+            SetVisible(skillListRoot, hasRequest && (attack || response || chain) &&
+                (_viewState.SelectableSkills.Count > 0 || _viewState.SelectableItems.Count > 0 ||
+                 _viewState.CanOvercome));
             SetVisible(targetListRoot, hasRequest && (attack || response) && _viewState.SelectableTargets.Count > 0);
-            SetVisible(handoffListRoot, hasRequest && chain && _viewState.HandoffCandidates.Count > 0);
+            bool canAllOut = hasRequest && chain && _viewState.CanAllOut;
+            SetVisible(handoffListRoot, hasRequest && chain &&
+                (_viewState.HandoffCandidates.Count > 0 || canAllOut));
 
             if (hasRequest && attack)
                 BuildCombatantOptions(actorListRoot, _viewState.SelectableActors, _viewState.SelectedActor, HandleActorSelected);
             if (hasRequest && (attack || response || chain))
                 BuildSkillOptions(skillListRoot, _viewState.SelectableSkills, _viewState.SelectedSkill, HandleSkillSelected);
+            if (hasRequest && attack)
+                BuildCombatItemOptions(skillListRoot, _viewState.SelectableItems, _viewState.SelectedItem);
+            if (hasRequest && attack && _viewState.CanOvercome)
+                BuildOvercomeOption(skillListRoot);
             if (hasRequest && (attack || response))
                 BuildCombatantOptions(targetListRoot, _viewState.SelectableTargets, _viewState.SelectedTarget, HandleTargetSelected);
             if (hasRequest && chain)
                 BuildCombatantOptions(handoffListRoot, _viewState.HandoffCandidates, _viewState.SelectedHandoffTarget, HandleHandoffTargetSelected);
+
+            if (canAllOut)
+                BuildAllOutOption(handoffListRoot);
 
             SetCommandButton(confirmButton, hasRequest && (attack || response) && _viewState.CanConfirm);
             SetCommandButton(cancelButton, hasRequest && (attack || response || chain));
@@ -232,6 +243,29 @@ namespace Game.Combat.UI
             }
         }
 
+        private void BuildCombatItemOptions(
+            GameObject host,
+            IReadOnlyList<CombatItemOption> items,
+            CombatItemOption selected)
+        {
+            if (host == null || items == null)
+                return;
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                CombatItemOption item = items[i];
+                if (item == null)
+                    continue;
+
+                Button button = CreateOption(host.transform, $"ITEM {item.DisplayName} x{item.Count}");
+                if (button == null)
+                    continue;
+
+                button.interactable = !string.Equals(item.ItemId, selected?.ItemId, StringComparison.Ordinal);
+                button.onClick.AddListener(() => HandleCombatItemSelected(item));
+            }
+        }
+
         private Button CreateOption(Transform parent, string label)
         {
             if (optionButtonPrefab == null || parent == null)
@@ -243,6 +277,24 @@ namespace Game.Combat.UI
             if (text != null)
                 text.text = label;
             return button;
+        }
+
+        private void BuildAllOutOption(GameObject host)
+        {
+            if (host == null)
+                return;
+
+            Button button = CreateOption(host.transform, "ALL-OUT");
+            button?.onClick.AddListener(HandleAllOut);
+        }
+
+        private void BuildOvercomeOption(GameObject host)
+        {
+            if (host == null)
+                return;
+
+            Button button = CreateOption(host.transform, "극복");
+            button?.onClick.AddListener(HandleOvercome);
         }
 
         private void ClearDynamicButtons()
@@ -268,6 +320,11 @@ namespace Game.Combat.UI
                 _controller?.SelectHandoffSkill(skill);
             else
                 _controller?.SelectSkill(skill);
+        }
+
+        private void HandleCombatItemSelected(CombatItemOption item)
+        {
+            _controller?.SelectCombatItem(item);
         }
 
         private void HandleTargetSelected(ICombatant target)
@@ -314,6 +371,8 @@ namespace Game.Combat.UI
         private void HandleContinue() => _controller?.ConfirmContinue();
         private void HandleHandoff() => _controller?.ConfirmHandoff();
         private void HandleEnd() => _controller?.EndChain();
+        private void HandleAllOut() => _controller?.ConfirmAllOut();
+        private void HandleOvercome() => _controller?.ConfirmOvercome();
 
         private void RefreshStatus()
         {
@@ -362,7 +421,8 @@ namespace Game.Combat.UI
         private string FormatPosture(string label, ICombatant actor)
         {
             return _session.TryGetCombatState(actor, out CombatantCombatState state)
-                ? $"{label}  자세 {state.CurrentPosture} / {state.MaxPosture}{(actor.IsStunned ? "  기절" : string.Empty)}"
+                ? $"{label}  자세 {state.CurrentPosture} / {state.MaxPosture}{(actor.IsStunned ? "  기절" : string.Empty)}\n" +
+                  $"Mental {state.CurrentMental} / {state.MaxMental}{(state.IsPanicked ? "  패닉" : string.Empty)}"
                 : $"{label}  자세 -";
         }
 
@@ -424,6 +484,8 @@ namespace Game.Combat.UI
 
             if (viewState?.DecisionKind == CombatExchangeDecisionKind.Attack)
             {
+                if (viewState.CanOvercome)
+                    return "패닉 상태입니다. 극복을 선택하세요.";
                 if (viewState.SelectedActor == null)
                     return "행동 캐릭터를 선택하세요.";
                 if (viewState.SelectedSkill == null)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Game.Combat.Model
 {
@@ -21,6 +22,7 @@ namespace Game.Combat.Model
         public CombatSkillExecutionResult ExecutionResult { get; }
         public CombatPostureResult PostureResult { get; }
         public CombatStunResult StunResult { get; }
+        public IReadOnlyList<CombatMentalMutationResult> MentalMutationResults { get; }
         public CombatAftermathSnapshot Aftermath { get; }
         public CombatAftermathDecision AftermathDecision { get; }
         public bool HasResponse => ResponseState == CombatResponseState.CounterDeclared;
@@ -44,6 +46,7 @@ namespace Game.Combat.Model
             CombatSkillExecutionResult executionResult,
             CombatPostureResult postureResult,
             CombatStunResult stunResult,
+            IReadOnlyList<CombatMentalMutationResult> mentalMutationResults,
             CombatAftermathSnapshot aftermath,
             CombatAftermathDecision aftermathDecision,
             Func<bool> completion)
@@ -58,6 +61,11 @@ namespace Game.Combat.Model
             ExecutionResult = executionResult;
             PostureResult = postureResult;
             StunResult = stunResult;
+            CombatMentalMutationResult[] mentalSnapshot =
+                new CombatMentalMutationResult[mentalMutationResults?.Count ?? 0];
+            for (int i = 0; i < mentalSnapshot.Length; i++)
+                mentalSnapshot[i] = mentalMutationResults[i];
+            MentalMutationResults = Array.AsReadOnly(mentalSnapshot);
             Aftermath = aftermath;
             AftermathDecision = aftermathDecision;
             Loser = ResolveLoser(attackDeclaration, responseDeclaration, Winner);

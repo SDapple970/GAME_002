@@ -257,6 +257,36 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void RejectedDuplicateDoesNotReapplyAcceptedSessionOpeningEffect()
+        {
+            OpeningEffectSO opening = ScriptableObject.CreateInstance<OpeningEffectSO>();
+            opening.inspirationDelta = 2;
+            try
+            {
+                CombatStartRequest first = CreateRequest(
+                    new[] { CreateCombatant("AllyFirst") },
+                    new[] { CreateCombatant("EnemyFirst") },
+                    openingEffectOrNull: opening);
+                Assert.That(_entryPoint.StartCombat(first), Is.True);
+                CombatSession acceptedSession = _entryPoint.ActiveSession;
+                int inspirationAfterAcceptedStart = acceptedSession.Inspiration.Current;
+
+                CombatStartRequest duplicate = CreateRequest(
+                    new[] { CreateCombatant("AllyDuplicate") },
+                    new[] { CreateCombatant("EnemyDuplicate") },
+                    openingEffectOrNull: opening);
+                Assert.That(_entryPoint.StartCombat(duplicate), Is.False);
+                Assert.That(_entryPoint.ActiveSession, Is.SameAs(acceptedSession));
+                Assert.That(acceptedSession.OpeningEffectApplied, Is.True);
+                Assert.That(acceptedSession.Inspiration.Current, Is.EqualTo(inspirationAfterAcceptedStart));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(opening);
+            }
+        }
+
+        [Test]
         public void SuccessfulCombatRaisesStartedExactlyOnce()
         {
             int startedCount = 0;
@@ -463,9 +493,15 @@ namespace Game.Tests.Combat
             StartReason reason = StartReason.PlayerFirstHit,
             Side initiative = Side.Allies,
             int inspirationMax = 10,
-            int inspirationStart = 3)
+            int inspirationStart = 3,
+            OpeningEffectSO openingEffectOrNull = null)
         {
-            CombatStartRequest request = new CombatStartRequest(reason, initiative, inspirationMax, inspirationStart, null);
+            CombatStartRequest request = new CombatStartRequest(
+                reason,
+                initiative,
+                inspirationMax,
+                inspirationStart,
+                openingEffectOrNull);
             request.AllyFieldObjects.AddRange(allies);
             request.EnemyFieldObjects.AddRange(enemies);
             return request;

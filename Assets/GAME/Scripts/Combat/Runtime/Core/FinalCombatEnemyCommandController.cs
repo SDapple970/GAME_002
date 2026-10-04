@@ -86,14 +86,55 @@ namespace Game.Combat.Core
             if (!IsCurrent(request))
                 return;
 
-            if (_policy.TryCreateAttack(_session, request.ActingActor, out CombatAttackDeclaration declaration) &&
-                _orchestrator.SubmitAttackDeclaration(declaration, request.ExchangeVersion))
+            if (_policy.TryCreateAttack(_session, request.ActingActor, out CombatAttackDeclaration declaration))
+            {
+                if (CombatOvercomePolicy.TryAuthorize(
+                        _session,
+                        request.Phase,
+                        declaration?.Attacker,
+                        request.ExchangeVersion,
+                        out _) &&
+                    _orchestrator.TryOvercome(declaration.Attacker, request.ExchangeVersion, out _))
+                {
+                    return;
+                }
+
+                if (_orchestrator.SubmitAttackDeclaration(declaration, request.ExchangeVersion))
+                    return;
+            }
+
+            ICombatant panickedActor = FindEligiblePanickedActor(request);
+            if (panickedActor != null &&
+                _orchestrator.TryOvercome(panickedActor, request.ExchangeVersion, out _))
             {
                 return;
             }
 
             if (IsCurrent(request))
                 _orchestrator.YieldStandoffAttackAuthority(Side.Enemies, request.ExchangeVersion);
+        }
+
+        private ICombatant FindEligiblePanickedActor(CombatExchangeDecisionRequest request)
+        {
+            if (request == null || _session == null)
+                return null;
+
+            System.Collections.Generic.IReadOnlyList<ICombatant> enemies = _session.Enemies;
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                ICombatant actor = enemies[i];
+                if (CombatOvercomePolicy.TryAuthorize(
+                        _session,
+                        request.Phase,
+                        actor,
+                        request.ExchangeVersion,
+                        out _))
+                {
+                    return actor;
+                }
+            }
+
+            return null;
         }
 
         private void SubmitResponseOrDecline(CombatExchangeDecisionRequest request)

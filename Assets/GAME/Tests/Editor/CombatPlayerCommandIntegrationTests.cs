@@ -265,6 +265,151 @@ namespace Game.Tests.Editor
             Assert.That(Contains(controller.ViewState.SelectableActors, fixture.AllyTwo), Is.False);
         }
 
+        [Test]
+        public void AllOutCandidate_ExposesCanonicalCommandAndExecutesOnce()
+        {
+            Fixture fixture = CreateFixture(allyPower: 3, enemyPower: 1, maxPosture: 1);
+            ((TestCombatant)fixture.Ally).AddSkill(new TestSkill(99, TargetingRule.AllEnemies, 10));
+            FinalCombatPlayerCommandController controller = new FinalCombatPlayerCommandController();
+            fixture.Bind();
+            controller.Bind(fixture.Orchestrator, fixture.Session);
+
+            CombatApproachPresentationRequest approach = null;
+            fixture.Orchestrator.ApproachPresentationRequested += request => approach = request;
+
+            Assert.That(controller.SelectActor(fixture.Ally), Is.True);
+            Assert.That(controller.SelectSkill(fixture.AllySkill), Is.True);
+            Assert.That(controller.SelectTarget(fixture.Enemy), Is.True);
+            Assert.That(controller.Confirm(), Is.True);
+
+            CombatExchangeDecisionRequest responseRequest = fixture.Orchestrator.PendingDecisionRequest;
+            Assert.That(fixture.Orchestrator.SubmitResponse(
+                new CombatResponseDeclaration(fixture.Enemy, fixture.EnemySkill),
+                responseRequest.ExchangeVersion), Is.True);
+
+            Assert.That(approach, Is.Not.Null);
+            Assert.That(approach.TryComplete(), Is.True);
+
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.ChainDecision));
+            Assert.That(fixture.Exchange.IsAllOutCandidate, Is.True);
+            Assert.That(controller.ViewState.CanAllOut, Is.True);
+            Assert.That(controller.ConfirmAllOut(), Is.True);
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.ExitCombat));
+            Assert.That(fixture.StateMachine.EndReason, Is.EqualTo(CombatEndReason.Victory));
+            Assert.That(controller.ConfirmAllOut(), Is.False);
+        }
+
+        [Test]
+        public void PanickedStandoffActor_ExposesOnlyOvercomeAndRejectsDirectAttack()
+        {
+            Fixture fixture = CreateFixture();
+            FinalCombatPlayerCommandController controller = new FinalCombatPlayerCommandController();
+            fixture.Bind();
+            controller.Bind(fixture.Orchestrator, fixture.Session);
+            CombatantCombatState state = fixture.Session.GetCombatState(fixture.Ally);
+            state.ApplyMentalDelta(-state.MaxMental);
+
+            Assert.That(controller.SelectActor(fixture.Ally), Is.True);
+            Assert.That(controller.ViewState.CanAttack, Is.False);
+            Assert.That(controller.ViewState.CanUseItem, Is.False);
+            Assert.That(controller.ViewState.CanOvercome, Is.True);
+            Assert.That(controller.ViewState.IsPanicked, Is.True);
+            Assert.That(controller.ViewState.CurrentMental, Is.Zero);
+            Assert.That(controller.ViewState.MaxMental, Is.EqualTo(100));
+
+            int version = fixture.Exchange.Version;
+            int mp = state.CurrentMp;
+            Assert.That(fixture.StateMachine.TryDeclareAttack(
+                new CombatAttackDeclaration(fixture.Ally, fixture.Enemy, fixture.AllySkill)), Is.False);
+            Assert.That(fixture.Orchestrator.SubmitAttackDeclaration(
+                new CombatAttackDeclaration(fixture.Ally, fixture.Enemy, fixture.AllySkill), version), Is.False);
+            Assert.That(fixture.Exchange.Version, Is.EqualTo(version));
+            Assert.That(state.CurrentMp, Is.EqualTo(mp));
+            Assert.That(fixture.Enemy.HP, Is.EqualTo(fixture.Enemy.MaxHP));
+        }
+
+        [Test]
+        public void PanickedChainOwner_CannotContinueButCanEndWithoutDeadlock()
+        {
+            Fixture fixture = CreateFixture(allyPower: 3, enemyPower: 1);
+            FinalCombatPlayerCommandController controller = new FinalCombatPlayerCommandController();
+            DrivePlayerNoResponseToChain(fixture, controller);
+            CombatantCombatState state = fixture.Session.GetCombatState(fixture.Ally);
+            state.ApplyMentalDelta(-state.MaxMental);
+
+            Assert.That(controller.CancelSelection(), Is.True);
+            Assert.That(controller.ViewState.CanContinue, Is.False);
+            Assert.That(controller.ViewState.CanEnd, Is.True);
+            Assert.That(controller.ConfirmContinue(), Is.False);
+            Assert.That(controller.EndChain(), Is.True);
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.Standoff));
+        }
+
+        [Test]
+        public void Handoff_RejectsPanickedReceiverButAllowsPanickedOwnerToHandoffHealthyAlly()
+        {
+            Fixture rejected = CreateFixture(allyPower: 3, enemyPower: 1);
+            FinalCombatPlayerCommandController rejectedController = new FinalCombatPlayerCommandController(
+                new AllowOnlyActorProvider(rejected.AllyTwo));
+            DrivePlayerNoResponseToChain(rejected, rejectedController);
+            CombatantCombatState receiverState = rejected.Session.GetCombatState(rejected.AllyTwo);
+            receiverState.ApplyMentalDelta(-receiverState.MaxMental);
+
+            Assert.That(rejectedController.CancelSelection(), Is.True);
+            Assert.That(Contains(rejectedController.ViewState.HandoffCandidates, rejected.AllyTwo), Is.False);
+            int rejectedVersion = rejected.Exchange.Version;
+            Assert.That(rejected.Orchestrator.Handoff(
+                rejected.AllyTwo, rejected.AllyTwoSkill, true, rejectedVersion), Is.False);
+            Assert.That(rejected.Exchange.Version, Is.EqualTo(rejectedVersion));
+
+            Fixture accepted = CreateFixture(allyPower: 3, enemyPower: 1);
+            FinalCombatPlayerCommandController acceptedController = new FinalCombatPlayerCommandController(
+                new AllowOnlyActorProvider(accepted.AllyTwo));
+            DrivePlayerNoResponseToChain(accepted, acceptedController);
+            CombatantCombatState ownerState = accepted.Session.GetCombatState(accepted.Ally);
+            ownerState.ApplyMentalDelta(-ownerState.MaxMental);
+
+            Assert.That(acceptedController.CancelSelection(), Is.True);
+            Assert.That(acceptedController.ViewState.HandoffCandidates, Does.Contain(accepted.AllyTwo));
+            Assert.That(acceptedController.SelectHandoffTarget(accepted.AllyTwo), Is.True);
+            Assert.That(acceptedController.SelectHandoffSkill(accepted.AllyTwoSkill), Is.True);
+            Assert.That(acceptedController.ConfirmHandoff(), Is.True);
+            Assert.That(accepted.Orchestrator.PendingDecisionRequest.ActingActor, Is.SameAs(accepted.AllyTwo));
+        }
+
+        [Test]
+        public void AllOut_ExcludesPanickedExecutorAndRejectsWhenNoHealthyExecutorExists()
+        {
+            Fixture healthyFallback = CreateFixture(allyPower: 3, enemyPower: 1, maxPosture: 1);
+            ((TestCombatant)healthyFallback.Ally).AddSkill(new TestSkill(98, TargetingRule.AllEnemies, 10));
+            ((TestCombatant)healthyFallback.AllyTwo).AddSkill(new TestSkill(99, TargetingRule.AllEnemies, 10));
+            FinalCombatPlayerCommandController controller = new FinalCombatPlayerCommandController();
+            DrivePlayerResponseToAllOutChain(healthyFallback, controller);
+            CombatantCombatState firstState = healthyFallback.Session.GetCombatState(healthyFallback.Ally);
+            firstState.ApplyMentalDelta(-firstState.MaxMental);
+            CombatSkillExecutionResult execution = null;
+            healthyFallback.Orchestrator.AllOutPresentationRequested += result => execution = result;
+
+            Assert.That(controller.CancelSelection(), Is.True);
+            Assert.That(controller.ViewState.CanAllOut, Is.True);
+            Assert.That(controller.ConfirmAllOut(), Is.True);
+            Assert.That(execution?.Actor, Is.SameAs(healthyFallback.AllyTwo));
+
+            Fixture noneHealthy = CreateFixture(allyPower: 3, enemyPower: 1, maxPosture: 1);
+            ((TestCombatant)noneHealthy.Ally).AddSkill(new TestSkill(100, TargetingRule.AllEnemies, 10));
+            ((TestCombatant)noneHealthy.AllyTwo).AddSkill(new TestSkill(101, TargetingRule.AllEnemies, 10));
+            FinalCombatPlayerCommandController noneController = new FinalCombatPlayerCommandController();
+            DrivePlayerResponseToAllOutChain(noneHealthy, noneController);
+            CombatantCombatState first = noneHealthy.Session.GetCombatState(noneHealthy.Ally);
+            CombatantCombatState second = noneHealthy.Session.GetCombatState(noneHealthy.AllyTwo);
+            first.ApplyMentalDelta(-first.MaxMental);
+            second.ApplyMentalDelta(-second.MaxMental);
+
+            Assert.That(noneController.CancelSelection(), Is.True);
+            Assert.That(noneController.ViewState.CanAllOut, Is.False);
+            Assert.That(noneController.ConfirmAllOut(), Is.False);
+        }
+
         private void DrivePlayerNoResponseToChain(Fixture fixture, FinalCombatPlayerCommandController controller)
         {
             fixture.Bind();
@@ -289,10 +434,33 @@ namespace Game.Tests.Editor
             Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.ChainDecision));
         }
 
+        private static void DrivePlayerResponseToAllOutChain(
+            Fixture fixture,
+            FinalCombatPlayerCommandController controller)
+        {
+            fixture.Bind();
+            controller.Bind(fixture.Orchestrator, fixture.Session);
+            CombatApproachPresentationRequest approach = null;
+            fixture.Orchestrator.ApproachPresentationRequested += request => approach = request;
+            Assert.That(controller.SelectActor(fixture.Ally), Is.True);
+            Assert.That(controller.SelectSkill(fixture.AllySkill), Is.True);
+            Assert.That(controller.SelectTarget(fixture.Enemy), Is.True);
+            Assert.That(controller.Confirm(), Is.True);
+
+            CombatExchangeDecisionRequest response = fixture.Orchestrator.PendingDecisionRequest;
+            Assert.That(fixture.Orchestrator.SubmitResponse(
+                new CombatResponseDeclaration(fixture.Enemy, fixture.EnemySkill), response.ExchangeVersion), Is.True);
+            Assert.That(approach, Is.Not.Null);
+            Assert.That(approach.TryComplete(), Is.True);
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.ChainDecision));
+            Assert.That(fixture.Exchange.IsAllOutCandidate, Is.True);
+        }
+
         private Fixture CreateFixture(
             Side initiative = Side.Allies,
             int allyPower = 2,
             int enemyPower = 1,
+            int maxPosture = 3,
             CombatFlowOrchestrator orchestrator = null)
         {
             TestCombatant ally = new TestCombatant(1, Side.Allies);
@@ -301,7 +469,7 @@ namespace Game.Tests.Editor
             TestSkill allySkill = AddSkill(ally, 1);
             TestSkill allyTwoSkill = AddSkill(allyTwo, 2);
             TestSkill enemySkill = AddSkill(enemy, 11);
-            CombatRuntimeConfig config = new CombatRuntimeConfig(10, 5, 3, 0, 0f, 10f, 1f);
+            CombatRuntimeConfig config = new CombatRuntimeConfig(10, 5, maxPosture, 0, 0f, 10f, 1f);
             CombatSession session = new CombatSession(
                 initiative == Side.Allies ? StartReason.PlayerFirstHit : StartReason.PlayerGotHit,
                 initiative,
@@ -456,12 +624,12 @@ namespace Game.Tests.Editor
             public int InspirationCost => 0;
             public KeywordMask Keywords => KeywordMask.None;
             public SkillTag Tag => SkillTag.Attack;
-            public TargetingRule Targeting => TargetingRule.SingleEnemy;
+            public TargetingRule Targeting { get; }
             public SkillMovementMode MovementMode => SkillMovementMode.None;
             public float DesiredTargetDistance => 0f;
             public float MoveSpeed => 0f;
             public float ActionDelayAfterMove => 0f;
-            public int BaseDamage => 1;
+            public int BaseDamage { get; }
             public int BaseStagger => 0;
             public int WeaknessStaggerBonus => 0;
             public int Speed => 1;
@@ -469,8 +637,15 @@ namespace Game.Tests.Editor
             public int MpCost => 1;
 
             public TestSkill(int id)
+                : this(id, TargetingRule.SingleEnemy, 1)
+            {
+            }
+
+            public TestSkill(int id, TargetingRule targeting, int baseDamage)
             {
                 Id = new SkillId(id);
+                Targeting = targeting;
+                BaseDamage = baseDamage;
             }
         }
 

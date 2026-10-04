@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.Serialization;
 using Game.Combat.Model;
+using System.Collections.Generic;
 
 namespace Game.Combat.Data
 {
@@ -39,6 +40,10 @@ namespace Game.Combat.Data
 
         public int FinalMpCost => finalMpCost;
         public int ClashPower => clashPower;
+
+        [Header("Combat Status Effects")]
+        [SerializeField] private CombatStatusDefinitionSO[] appliedStatusEffects = System.Array.Empty<CombatStatusDefinitionSO>();
+        public IReadOnlyList<CombatStatusDefinitionSO> AppliedStatusEffects => appliedStatusEffects ?? System.Array.Empty<CombatStatusDefinitionSO>();
 
         [Header("Animation")]
         [SerializeField] private string combatAnimationTrigger = "Attack";

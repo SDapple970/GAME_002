@@ -18,6 +18,7 @@ namespace Game.Combat.UI
         private CombatExchangeDecisionRequest _request;
         private ICombatant _selectedActor;
         private ISkill _selectedSkill;
+        private CombatItemOption _selectedItem;
         private ICombatant _selectedTarget;
         private ICombatant _selectedHandoffTarget;
 
@@ -74,6 +75,7 @@ namespace Game.Combat.UI
 
             _selectedActor = actor;
             _selectedSkill = null;
+            _selectedItem = null;
             _selectedTarget = null;
             PublishViewState();
             return true;
@@ -100,6 +102,22 @@ namespace Game.Combat.UI
                     return false;
             }
             _selectedSkill = skill;
+            _selectedItem = null;
+            _selectedTarget = null;
+            PublishViewState();
+            return true;
+        }
+
+        public bool SelectCombatItem(CombatItemOption item)
+        {
+            if (!HasCurrentPlayerRequest(CombatExchangeDecisionKind.Attack) || item == null ||
+                !ContainsCombatItem(BuildSelectableItems(GetRequiredAttackActor()), item))
+            {
+                return false;
+            }
+
+            _selectedItem = item;
+            _selectedSkill = null;
             _selectedTarget = null;
             PublishViewState();
             return true;
@@ -108,7 +126,7 @@ namespace Game.Combat.UI
         public bool SelectTarget(ICombatant target)
         {
             if (_request == null || !HasCurrentPlayerRequest(_request.Kind) ||
-                target == null || _selectedSkill == null)
+                target == null || (_selectedSkill == null && _selectedItem == null))
                 return false;
 
             IReadOnlyList<ICombatant> targets = BuildSelectableTargets();
@@ -216,6 +234,37 @@ namespace Game.Combat.UI
             return _orchestrator.EndChain(version);
         }
 
+        public bool ConfirmAllOut()
+        {
+            if (!HasCurrentPlayerRequest(CombatExchangeDecisionKind.Chain) ||
+                !CanExecuteAllOut())
+            {
+                return false;
+            }
+
+            int version = _request.ExchangeVersion;
+            ClearSelectionOnly(true);
+            return _orchestrator.ExecuteAllOut(version);
+        }
+
+        public bool ConfirmOvercome()
+        {
+            return TryOvercome(GetRequiredAttackActor());
+        }
+
+        public bool TryOvercome(ICombatant actor)
+        {
+            if (!HasCurrentPlayerRequest(CombatExchangeDecisionKind.Attack) || actor == null ||
+                !CanOvercome(actor))
+            {
+                return false;
+            }
+
+            int version = _request.ExchangeVersion;
+            ClearSelectionOnly(true);
+            return _orchestrator.TryOvercome(actor, version, out _);
+        }
+
         public bool CancelSelection()
         {
             if (_request == null)
@@ -228,6 +277,9 @@ namespace Game.Combat.UI
         private bool ConfirmAttack()
         {
             ICombatant actor = GetRequiredAttackActor();
+            if (_selectedItem != null)
+                return ConfirmCombatItem(actor);
+
             if (actor == null || _selectedSkill == null || _selectedTarget == null ||
                 !CanSubmitAttack(actor, _selectedSkill, _selectedTarget))
             {
@@ -238,6 +290,24 @@ namespace Game.Combat.UI
             CombatAttackDeclaration declaration = new CombatAttackDeclaration(actor, _selectedTarget, _selectedSkill);
             ClearSelectionOnly(true);
             return _orchestrator.SubmitAttackDeclaration(declaration, version);
+        }
+
+        private bool ConfirmCombatItem(ICombatant user)
+        {
+            if (user == null || _selectedItem == null || _selectedTarget == null ||
+                !ContainsCombatItem(BuildSelectableItems(user), _selectedItem) ||
+                !Contains(BuildCombatItemTargets(user, _selectedItem), _selectedTarget))
+            {
+                return false;
+            }
+
+            CombatItemUseRequest request = new CombatItemUseRequest(
+                _selectedItem.ItemId,
+                user,
+                _selectedTarget,
+                _request.ExchangeVersion);
+            ClearSelectionOnly(true);
+            return _orchestrator.TryUseCombatItem(request, out _);
         }
 
         private bool ConfirmResponse()
@@ -318,11 +388,12 @@ namespace Game.Combat.UI
                 return Array.Empty<ICombatant>();
 
             if (_request.ActingActor != null)
-                return HasSelectableSkill(_request.ActingActor)
+                return HasSelectableAction(_request.ActingActor) || CanOvercome(_request.ActingActor)
                     ? new[] { _request.ActingActor }
                     : Array.Empty<ICombatant>();
 
-            return Filter(_session.GetSide(Side.Allies), HasSelectableSkill);
+            return Filter(_session.GetSide(Side.Allies), actor =>
+                HasSelectableAction(actor) || CanOvercome(actor));
         }
 
         private IReadOnlyList<ISkill> BuildSelectableSkills(ICombatant actor)
@@ -343,13 +414,18 @@ namespace Game.Combat.UI
 
         private IReadOnlyList<ICombatant> BuildSelectableTargets()
         {
-            if (_request == null || _selectedSkill == null)
+            if (_request == null || (_selectedSkill == null && _selectedItem == null))
                 return Array.Empty<ICombatant>();
 
             if (_request.Kind == CombatExchangeDecisionKind.Attack)
             {
                 ICombatant actor = GetRequiredAttackActor();
-                return actor == null ? Array.Empty<ICombatant>() : BuildAttackTargets(actor, _selectedSkill);
+                if (actor == null)
+                    return Array.Empty<ICombatant>();
+
+                return _selectedItem != null
+                    ? BuildCombatItemTargets(actor, _selectedItem)
+                    : BuildAttackTargets(actor, _selectedSkill);
             }
 
             if (_request.Kind == CombatExchangeDecisionKind.Response)
@@ -399,6 +475,25 @@ namespace Game.Combat.UI
             }
 
             return skills;
+        }
+
+        private IReadOnlyList<CombatItemOption> BuildSelectableItems(ICombatant user)
+        {
+            if (!HasRawRequest(CombatExchangeDecisionKind.Attack) || user == null)
+                return Array.Empty<CombatItemOption>();
+
+            return _orchestrator?.GetUsableCombatItems(user) ?? Array.Empty<CombatItemOption>();
+        }
+
+        private IReadOnlyList<ICombatant> BuildCombatItemTargets(
+            ICombatant user,
+            CombatItemOption item)
+        {
+            if (user == null || item == null)
+                return Array.Empty<ICombatant>();
+
+            return _orchestrator?.GetUsableCombatItemTargets(user, item) ??
+                   Array.Empty<ICombatant>();
         }
 
         private IReadOnlyList<ICombatant> BuildHandoffCandidates()
@@ -455,9 +550,9 @@ namespace Game.Combat.UI
             return Filter(_session.GetSide(Opposite(actor.Side)), target => CanSubmitAttack(actor, skill, target));
         }
 
-        private bool HasSelectableSkill(ICombatant actor)
+        private bool HasSelectableAction(ICombatant actor)
         {
-            return BuildSelectableSkills(actor).Count > 0;
+            return BuildSelectableSkills(actor).Count > 0 || BuildSelectableItems(actor).Count > 0;
         }
 
         private bool HasSelectableTarget(ICombatant actor, ISkill skill)
@@ -502,6 +597,7 @@ namespace Game.Combat.UI
             _request = null;
             _selectedActor = null;
             _selectedSkill = null;
+            _selectedItem = null;
             _selectedTarget = null;
             _selectedHandoffTarget = null;
             if (publish)
@@ -511,6 +607,7 @@ namespace Game.Combat.UI
         private void ClearSelectionOnly(bool publish)
         {
             _selectedSkill = null;
+            _selectedItem = null;
             _selectedTarget = null;
             _selectedHandoffTarget = null;
             if (_request?.Kind == CombatExchangeDecisionKind.Attack && _request.ActingActor == null)
@@ -540,17 +637,26 @@ namespace Game.Combat.UI
                         : _request.Kind == CombatExchangeDecisionKind.Response
                             ? BuildResponseSkills()
                             : BuildSelectableSkills(activeActor);
+                IReadOnlyList<CombatItemOption> items = _request.Kind == CombatExchangeDecisionKind.Attack
+                    ? BuildSelectableItems(activeActor)
+                    : Array.Empty<CombatItemOption>();
                 IReadOnlyList<ICombatant> targets = BuildSelectableTargets();
                 IReadOnlyList<ICombatant> handoffCandidates = _request.Kind == CombatExchangeDecisionKind.Chain
                     ? BuildHandoffCandidates()
                     : Array.Empty<ICombatant>();
                 bool canConfirm = _request.Kind == CombatExchangeDecisionKind.Attack
-                    ? activeActor != null && _selectedSkill != null && _selectedTarget != null &&
-                      CanSubmitAttack(activeActor, _selectedSkill, _selectedTarget)
+                    ? activeActor != null && _selectedTarget != null &&
+                      ((_selectedSkill != null && CanSubmitAttack(activeActor, _selectedSkill, _selectedTarget)) ||
+                       (_selectedItem != null && ContainsCombatItem(items, _selectedItem) &&
+                        Contains(BuildCombatItemTargets(activeActor, _selectedItem), _selectedTarget)))
                     : _request.Kind == CombatExchangeDecisionKind.Response
                         ? _selectedSkill != null && _selectedTarget != null &&
                           CanSubmitResponse(_session.ExchangeState.CurrentDeclaration, _request.ActingActor, _selectedSkill)
                         : false;
+
+                CombatantCombatState activeState = null;
+                if (activeActor != null)
+                    _session.TryGetCombatState(activeActor, out activeState);
 
                 ViewState = new PlayerCombatDecisionViewState(
                     _request.Kind,
@@ -558,10 +664,12 @@ namespace Game.Combat.UI
                     _request.ActingActor,
                     actors,
                     skills,
+                    items,
                     targets,
                     handoffCandidates,
                     _selectedActor,
                     _selectedSkill,
+                    _selectedItem,
                     _selectedTarget,
                     _selectedHandoffTarget,
                     canConfirm,
@@ -572,7 +680,14 @@ namespace Game.Combat.UI
                     _request.Kind == CombatExchangeDecisionKind.Chain &&
                     _selectedHandoffTarget != null && _selectedSkill != null &&
                     Contains(BuildHandoffSkills(_selectedHandoffTarget), _selectedSkill),
-                    _request.Kind == CombatExchangeDecisionKind.Chain);
+                    _request.Kind == CombatExchangeDecisionKind.Chain,
+                    _request.Kind == CombatExchangeDecisionKind.Chain && CanExecuteAllOut(),
+                    _request.Kind == CombatExchangeDecisionKind.Attack && skills.Count > 0,
+                    _request.Kind == CombatExchangeDecisionKind.Attack && items.Count > 0,
+                    activeState?.CurrentMental ?? 0,
+                    activeState?.MaxMental ?? 0,
+                    activeState?.IsPanicked == true,
+                    CanOvercome(activeActor));
             }
 
             ViewStateChanged?.Invoke(ViewState);
@@ -582,6 +697,23 @@ namespace Game.Combat.UI
         {
             return _request != null && _request.Kind == kind && _request.ActingSide == Side.Allies &&
                    _session != null;
+        }
+
+        private bool CanExecuteAllOut()
+        {
+            return _session?.ExchangeState?.IsAllOutCandidate == true &&
+                   CombatAllOutExecutionPolicy.TryCreateExecutionRequest(_session, out _);
+        }
+
+        private bool CanOvercome(ICombatant actor)
+        {
+            return _request != null && _session != null && actor != null &&
+                   CombatOvercomePolicy.TryAuthorize(
+                       _session,
+                       _request.Phase,
+                       actor,
+                       _request.ExchangeVersion,
+                       out _);
         }
 
         private static IReadOnlyList<T> Filter<T>(IReadOnlyList<T> values, Func<T, bool> predicate) where T : class
@@ -608,6 +740,22 @@ namespace Game.Combat.UI
             for (int i = 0; i < values.Count; i++)
             {
                 if (ReferenceEquals(values[i], expected))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool ContainsCombatItem(
+            IReadOnlyList<CombatItemOption> values,
+            CombatItemOption expected)
+        {
+            if (values == null || expected == null || string.IsNullOrEmpty(expected.ItemId))
+                return false;
+
+            for (int i = 0; i < values.Count; i++)
+            {
+                if (string.Equals(values[i]?.ItemId, expected.ItemId, StringComparison.Ordinal))
                     return true;
             }
 

@@ -1,10 +1,15 @@
 using System;
+using System.Collections.Generic;
+using Game.Combat.Data;
 
 namespace Game.Combat.Model
 {
     public sealed class CombatantCombatState
     {
         private double _mpRecoveryRemainder;
+        private readonly int _panicThreshold;
+        private readonly Dictionary<string, CombatStatusRuntime> _statuses =
+            new Dictionary<string, CombatStatusRuntime>(StringComparer.Ordinal);
 
         public ICombatant Combatant { get; }
         public int CurrentHp { get; private set; }
@@ -15,6 +20,11 @@ namespace Game.Combat.Model
         public int CurrentPosture { get; private set; }
         public int MaxPosture { get; private set; }
         public bool IsPostureMax => MaxPosture > 0 && CurrentPosture >= MaxPosture;
+        public int CurrentMental { get; private set; }
+        public int MaxMental { get; }
+        public CombatMentalState MentalState { get; private set; }
+        public bool IsPanicked => MentalState == CombatMentalState.Panicked;
+        public IReadOnlyList<CombatStatusRuntime> ActiveStatuses => GetActiveStatuses();
 
         public CombatantCombatState(ICombatant combatant, CombatRuntimeConfig config)
         {
@@ -25,6 +35,12 @@ namespace Game.Combat.Model
             CurrentMp = config.InitialMp;
             MaxPosture = config.MaxPosture;
             CurrentPosture = config.InitialPosture;
+            MaxMental = config.MaxMental;
+            CurrentMental = Clamp(config.InitialMental, MaxMental);
+            _panicThreshold = config.PanicThreshold;
+            MentalState = CurrentMental <= _panicThreshold
+                ? CombatMentalState.Panicked
+                : CombatMentalState.Stable;
         }
 
         public void ApplyDamage(int amount)
@@ -41,6 +57,11 @@ namespace Game.Combat.Model
                 return;
 
             CurrentHp = AddClamped(CurrentHp, amount, MaxHp);
+        }
+
+        public bool CanRestoreHp(int amount)
+        {
+            return amount > 0 && IsAlive && CurrentHp < MaxHp;
         }
 
         public void SetMaxMp(int value)
@@ -129,6 +150,99 @@ namespace Game.Combat.Model
                 return;
 
             CurrentPosture = Math.Max(0, CurrentPosture - amount);
+        }
+
+        public CombatMentalMutationResult ApplyMentalDelta(int requestedDelta)
+        {
+            long requested = (long)CurrentMental + requestedDelta;
+            int targetMental = requested <= 0L
+                ? 0
+                : requested >= MaxMental ? MaxMental : (int)requested;
+            return SetMental(targetMental, requestedDelta);
+        }
+
+        internal CombatMentalMutationResult SetMental(int mental)
+        {
+            return SetMental(mental, mental - CurrentMental);
+        }
+
+        private CombatMentalMutationResult SetMental(int mental, int requestedDelta)
+        {
+            int mentalBefore = CurrentMental;
+            bool panicBefore = IsPanicked;
+            CurrentMental = Clamp(mental, MaxMental);
+            MentalState = CurrentMental <= _panicThreshold
+                ? CombatMentalState.Panicked
+                : CombatMentalState.Stable;
+            return new CombatMentalMutationResult(
+                Combatant,
+                mentalBefore,
+                CurrentMental,
+                requestedDelta,
+                CurrentMental - mentalBefore,
+                panicBefore,
+                IsPanicked);
+        }
+
+        public CombatStatusApplicationResult ApplyStatus(CombatStatusDefinitionSO definition)
+        {
+            if (definition == null || string.IsNullOrEmpty(definition.StatusId))
+                return null;
+
+            if (!_statuses.TryGetValue(definition.StatusId, out CombatStatusRuntime status))
+            {
+                status = new CombatStatusRuntime(definition);
+                _statuses.Add(status.StatusId, status);
+                return new CombatStatusApplicationResult(Combatant, status, 0, true, true);
+            }
+
+            int previousStacks = status.StackCount;
+            bool changed = status.Apply(definition);
+            return new CombatStatusApplicationResult(Combatant, status, previousStacks, false, changed);
+        }
+
+        public bool CanApplyStatus(CombatStatusDefinitionSO definition)
+        {
+            if (definition == null || string.IsNullOrEmpty(definition.StatusId))
+                return false;
+
+            if (!_statuses.TryGetValue(definition.StatusId, out CombatStatusRuntime status))
+                return true;
+
+            if (definition.StackPolicy == CombatStatusStackPolicy.Stack)
+                return status.StackCount < definition.MaximumStacks;
+
+            return definition.StackPolicy == CombatStatusStackPolicy.Refresh
+                ? status.RemainingDuration != definition.ExplicitDuration
+                : status.StackCount != 1 || status.RemainingDuration != definition.ExplicitDuration;
+        }
+
+        public bool RemoveStatus(string statusId)
+        {
+            return !string.IsNullOrWhiteSpace(statusId) && _statuses.Remove(statusId.Trim());
+        }
+
+        public bool HasStatus(string statusId)
+        {
+            return !string.IsNullOrWhiteSpace(statusId) && _statuses.ContainsKey(statusId.Trim());
+        }
+
+        public bool TryGetStatus(string statusId, out CombatStatusRuntime status)
+        {
+            if (string.IsNullOrWhiteSpace(statusId))
+            {
+                status = null;
+                return false;
+            }
+
+            return _statuses.TryGetValue(statusId.Trim(), out status);
+        }
+
+        private IReadOnlyList<CombatStatusRuntime> GetActiveStatuses()
+        {
+            List<CombatStatusRuntime> values = new List<CombatStatusRuntime>(_statuses.Values);
+            values.Sort((left, right) => string.CompareOrdinal(left.StatusId, right.StatusId));
+            return values.AsReadOnly();
         }
 
         private static int AddClamped(int current, int amount, int max)

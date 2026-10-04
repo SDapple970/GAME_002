@@ -24,8 +24,8 @@ namespace Game.Combat.Integration
 
         [Header("Opening / Initiative")]
         [SerializeField] private OpeningEffectSO openingEffectOrNull;
-        [SerializeField] private StartReason startReason = StartReason.PlayerFirstHit;
-        [SerializeField] private Side initiativeSide = Side.Allies;
+        [SerializeField] private StartReason startReason = StartReason.PlayerGotHit;
+        [SerializeField] private Side initiativeSide = Side.Enemies;
         // Retained for standalone encounters and pre-group-configured serialized assets.
         [SerializeField] private CombatFlowMode flowMode = CombatFlowMode.LegacyPlanning;
 

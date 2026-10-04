@@ -21,6 +21,7 @@ namespace Game.Combat.Core
         private CombatStateMachine _boundStateMachine;
         private ICombatRuleRandomSource _randomSource;
         private ICombatClashSideInputProvider _clashInputProvider;
+        private ICombatItemUseExecutor _combatItemUseExecutor;
         private CombatExchangeDecisionRequest _pendingDecisionRequest;
         private CombatApproachPresentationRequest _pendingApproachRequest;
         private CombatOutcomePresentationRequest _pendingOutcomePresentationRequest;
@@ -36,6 +37,10 @@ namespace Game.Combat.Core
         public event Action<CombatExchangeDecisionRequest> ChainDecisionRequested;
         public event Action<CombatApproachPresentationRequest> ApproachPresentationRequested;
         public event Action<CombatOutcomePresentationRequest> OutcomePresentationRequested;
+        public event Action<CombatSkillExecutionResult> AllOutPresentationRequested;
+        public event Action<CombatOvercomeResult> OvercomePresentationRequested;
+        public event Action ChainDecisionAccepted;
+        public event Action<CombatSession> FinalExchangeUnbound;
         public event Action<CombatSession, CombatEndReason, int> TerminalCompleted;
 
         public CombatExchangeDecisionRequest PendingDecisionRequest => _pendingDecisionRequest;
@@ -94,6 +99,92 @@ namespace Game.Combat.Core
             return ReferenceEquals(_session, session) &&
                    ReferenceEquals(_boundStateMachine, stateMachine) &&
                    IsFinalExchangeBound();
+        }
+
+        public void RegisterCombatItemUseExecutor(ICombatItemUseExecutor executor)
+        {
+            _combatItemUseExecutor = executor;
+        }
+
+        public void UnregisterCombatItemUseExecutor(ICombatItemUseExecutor executor)
+        {
+            if (ReferenceEquals(_combatItemUseExecutor, executor))
+                _combatItemUseExecutor = null;
+        }
+
+        public IReadOnlyList<CombatItemOption> GetUsableCombatItems(ICombatant user)
+        {
+            if (!CanAcceptCombatItemCommand(_session?.ExchangeState?.Version ?? -1) ||
+                _combatItemUseExecutor == null)
+            {
+                return Array.Empty<CombatItemOption>();
+            }
+
+            return _combatItemUseExecutor.GetUsableItems(_session, user) ??
+                   Array.Empty<CombatItemOption>();
+        }
+
+        public IReadOnlyList<ICombatant> GetUsableCombatItemTargets(
+            ICombatant user,
+            CombatItemOption item)
+        {
+            if (!CanAcceptCombatItemCommand(_session?.ExchangeState?.Version ?? -1) ||
+                _combatItemUseExecutor == null)
+            {
+                return Array.Empty<ICombatant>();
+            }
+
+            return _combatItemUseExecutor.GetUsableTargets(_session, user, item) ??
+                   Array.Empty<ICombatant>();
+        }
+
+        public bool TryUseCombatItem(
+            CombatItemUseRequest request,
+            out CombatItemUseResult result)
+        {
+            result = CombatItemUseResult.Failure(CombatItemUseStatus.InvalidRequest, request?.ItemId);
+            if (request == null)
+                return false;
+
+            if (!CanAcceptCombatItemCommand(request.ExchangeVersion))
+            {
+                result = CombatItemUseResult.Failure(CombatItemUseStatus.StaleRequest, request.ItemId);
+                return false;
+            }
+
+            if (_combatItemUseExecutor == null)
+            {
+                result = CombatItemUseResult.Failure(CombatItemUseStatus.MissingExecutor, request.ItemId);
+                return false;
+            }
+
+            if (!CanUseCombatItemUser(request.User))
+            {
+                result = CombatItemUseResult.Failure(CombatItemUseStatus.InvalidRequest, request.ItemId);
+                return false;
+            }
+
+            result = _combatItemUseExecutor.TryUse(_session, request);
+            if (result == null || !result.Succeeded)
+                return false;
+
+            if (!_boundStateMachine.TryGrantStandoffAttackAuthority(
+                    Side.Enemies,
+                    request.ExchangeVersion))
+            {
+                result = new CombatItemUseResult(
+                    CombatItemUseStatus.FlowTransitionFailed,
+                    request.ItemId,
+                    result.ItemConsumed,
+                    result.EffectApplied,
+                    result.HpRecovered,
+                    result.StatusApplication);
+                return false;
+            }
+
+            _pendingDecisionRequest = null;
+            RequestPump();
+            return true;
         }
 
         public void Tick(float deltaSeconds)
@@ -215,6 +306,7 @@ namespace Game.Combat.Core
             }
 
             _pendingDecisionRequest = null;
+            RaiseChainDecisionAccepted();
             RequestPump();
             return true;
         }
@@ -228,6 +320,22 @@ namespace Game.Combat.Core
             }
 
             _pendingDecisionRequest = null;
+            RaiseChainDecisionAccepted();
+            RequestPump();
+            return true;
+        }
+
+        public bool ExecuteAllOut(int expectedExchangeVersion)
+        {
+            if (!IsFinalExchangeBound() ||
+                !_boundStateMachine.TryExecuteAllOut(expectedExchangeVersion, out CombatSkillExecutionResult result))
+            {
+                return false;
+            }
+
+            _pendingDecisionRequest = null;
+            RaiseChainDecisionAccepted();
+            RaiseAllOutPresentation(result);
             RequestPump();
             return true;
         }
@@ -249,6 +357,7 @@ namespace Game.Combat.Core
             }
 
             _pendingDecisionRequest = null;
+            RaiseChainDecisionAccepted();
             RequestPump();
             return true;
         }
@@ -263,6 +372,7 @@ namespace Game.Combat.Core
 
             _session.StandoffState.Reset();
             _pendingDecisionRequest = null;
+            RaiseChainDecisionAccepted();
             RequestPump();
             return true;
         }
@@ -277,6 +387,24 @@ namespace Game.Combat.Core
             }
 
             _pendingDecisionRequest = null;
+            RequestPump();
+            return true;
+        }
+
+        public bool TryOvercome(
+            ICombatant actor,
+            int expectedExchangeVersion,
+            out CombatOvercomeResult result)
+        {
+            result = null;
+            if (!IsFinalExchangeBound() ||
+                !_boundStateMachine.TryExecuteOvercome(actor, expectedExchangeVersion, out result))
+            {
+                return false;
+            }
+
+            _pendingDecisionRequest = null;
+            RaiseOvercomePresentation(result);
             RequestPump();
             return true;
         }
@@ -522,6 +650,7 @@ namespace Game.Combat.Core
                 exchange.CurrentExecutionResult,
                 exchange.CurrentPostureResult,
                 exchange.CurrentStunResult,
+                exchange.CurrentMentalResults,
                 exchange.CurrentAftermathSnapshot,
                 exchange.CurrentAftermathDecision,
                 () => CompleteOutcomePresentation(bindingId, version));
@@ -697,6 +826,66 @@ namespace Game.Combat.Core
             }
         }
 
+        private void RaiseAllOutPresentation(CombatSkillExecutionResult result)
+        {
+            Action<CombatSkillExecutionResult> handlers = AllOutPresentationRequested;
+            if (handlers == null)
+                return;
+
+            Delegate[] invocationList = handlers.GetInvocationList();
+            for (int i = 0; i < invocationList.Length; i++)
+            {
+                try
+                {
+                    ((Action<CombatSkillExecutionResult>)invocationList[i]).Invoke(result);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception, this);
+                }
+            }
+        }
+
+        private void RaiseOvercomePresentation(CombatOvercomeResult result)
+        {
+            Action<CombatOvercomeResult> handlers = OvercomePresentationRequested;
+            if (result == null || !result.WasAccepted || handlers == null)
+                return;
+
+            Delegate[] invocationList = handlers.GetInvocationList();
+            for (int i = 0; i < invocationList.Length; i++)
+            {
+                try
+                {
+                    ((Action<CombatOvercomeResult>)invocationList[i]).Invoke(result);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception, this);
+                }
+            }
+        }
+
+        private void RaiseChainDecisionAccepted()
+        {
+            Action handlers = ChainDecisionAccepted;
+            if (handlers == null)
+                return;
+
+            Delegate[] invocationList = handlers.GetInvocationList();
+            for (int i = 0; i < invocationList.Length; i++)
+            {
+                try
+                {
+                    ((Action)invocationList[i]).Invoke();
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception, this);
+                }
+            }
+        }
+
         private void RequestPump()
         {
             if (_isPumping || _isTicking)
@@ -710,8 +899,29 @@ namespace Game.Combat.Core
 
         private void ResetFinalExchangeBinding()
         {
+            CombatSession previousSession = _session;
             if (_boundStateMachine != null)
                 _boundStateMachine.OnEnemyActionRequired -= HandleEnemyActionRequired;
+
+            if (previousSession != null)
+            {
+                Action<CombatSession> handlers = FinalExchangeUnbound;
+                if (handlers != null)
+                {
+                    Delegate[] invocationList = handlers.GetInvocationList();
+                    for (int i = 0; i < invocationList.Length; i++)
+                    {
+                        try
+                        {
+                            ((Action<CombatSession>)invocationList[i]).Invoke(previousSession);
+                        }
+                        catch (Exception exception)
+                        {
+                            Debug.LogException(exception, this);
+                        }
+                    }
+                }
+            }
 
             _bindingId++;
             _boundStateMachine = null;
@@ -734,6 +944,25 @@ namespace Game.Combat.Core
                    _boundStateMachine != null &&
                    _randomSource != null &&
                    _clashInputProvider != null;
+        }
+
+        private bool CanAcceptCombatItemCommand(int expectedExchangeVersion)
+        {
+            return IsFinalExchangeBound() &&
+                   _pendingDecisionRequest != null &&
+                   _pendingDecisionRequest.Kind == CombatExchangeDecisionKind.Attack &&
+                   _pendingDecisionRequest.ActingSide == Side.Allies &&
+                   _pendingDecisionRequest.ExchangeVersion == expectedExchangeVersion &&
+                   _boundStateMachine.Phase == Phase.Standoff &&
+                   _session.ExchangeState.CurrentAttackSide == Side.Allies &&
+                   _session.ExchangeState.Version == expectedExchangeVersion;
+        }
+
+        private bool CanUseCombatItemUser(ICombatant user)
+        {
+            return user != null && _session != null &&
+                   _session.TryGetCombatState(user, out CombatantCombatState state) &&
+                   state.IsAlive && !user.IsStunned && !state.IsPanicked;
         }
 
         private static Side Opposite(Side side)

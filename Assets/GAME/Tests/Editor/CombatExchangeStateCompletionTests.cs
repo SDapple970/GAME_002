@@ -75,6 +75,40 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void Mental_ActualClashAndDamageAreAggregatedAndResolvedExactlyOnce()
+        {
+            Fixture fixture = CreateStartedFixture(attackDamage: 1);
+            PrepareCounterToApplyOutcome(fixture, attackerWins: true);
+            PrepareOutcomeExecution(fixture);
+            Assert.That(fixture.StateMachine.TryResolvePosture(new FinalCombatPostureRule()), Is.True);
+            Assert.That(fixture.StateMachine.TryResolveStun(), Is.True);
+
+            int version = fixture.Exchange.Version;
+            Assert.That(fixture.StateMachine.TryResolveMental(version), Is.True);
+
+            Assert.That(fixture.Session.GetCombatState(fixture.Enemy).CurrentMental, Is.EqualTo(85));
+            Assert.That(fixture.Exchange.CurrentMentalResults, Has.Count.EqualTo(1));
+            Assert.That(fixture.Exchange.CurrentMentalResults[0].RequestedDelta, Is.EqualTo(-15));
+            Assert.That(fixture.StateMachine.TryResolveMental(fixture.Exchange.Version), Is.False);
+            Assert.That(fixture.Session.GetCombatState(fixture.Enemy).CurrentMental, Is.EqualTo(85));
+        }
+
+        [Test]
+        public void Mental_UnopposedDamageDoesNotApplyClashLoss()
+        {
+            Fixture fixture = CreateStartedFixture(attackDamage: 1);
+            PrepareNoResponseToApplyOutcome(fixture, fixture.Ally, fixture.Enemy, fixture.AllySkill);
+            PrepareOutcomeExecution(fixture);
+            Assert.That(fixture.StateMachine.TryResolvePosture(null), Is.True);
+            Assert.That(fixture.StateMachine.TryResolveStun(), Is.True);
+
+            Assert.That(fixture.StateMachine.TryResolveMental(fixture.Exchange.Version), Is.True);
+            Assert.That(fixture.Session.GetCombatState(fixture.Enemy).CurrentMental, Is.EqualTo(95));
+            Assert.That(fixture.Exchange.CurrentMentalResults, Has.Count.EqualTo(1));
+            Assert.That(fixture.Exchange.CurrentMentalResults[0].RequestedDelta, Is.EqualTo(-5));
+        }
+
+        [Test]
         public void Commit_InsufficientResponseMpDowngradesToNoResponse()
         {
             Fixture fixture = CreateStartedFixture(initialMp: 3, attackMpCost: 2, responseMpCost: 4);
@@ -456,6 +490,110 @@ namespace Game.Tests.Combat
             Assert.That(fixture.Exchange.IsAllOutCandidate, Is.True);
             Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.ChainDecision));
             Assert.That(fixture.StateMachine.EndReason, Is.EqualTo(CombatEndReason.None));
+        }
+
+        [Test]
+        public void AllOut_UsesAuthoredAreaSkillThenRoutesVictoryThroughTerminalPolicy()
+        {
+            Fixture fixture = CreateStartedFixture(maxPosture: 1);
+            TestSkill allOutSkill = AddSkill(
+                fixture.Ally,
+                99,
+                TargetingRule.AllEnemies,
+                0,
+                10);
+            PrepareCounterToApplyOutcome(fixture, attackerWins: true);
+            PrepareAftermathDecision(fixture);
+            Assert.That(fixture.StateMachine.TryFinalizeApplyOutcome(
+                new FinalCombatTerminalPolicy(), fixture.Exchange.Version), Is.True);
+
+            int version = fixture.Exchange.Version;
+            int mentalBeforeAllOut = fixture.Session.GetCombatState(fixture.Enemy).CurrentMental;
+            Assert.That(fixture.StateMachine.TryExecuteAllOut(version, out CombatSkillExecutionResult result), Is.True);
+
+            Assert.That(result.Actor, Is.SameAs(fixture.Ally));
+            Assert.That(result.Skill, Is.SameAs(allOutSkill));
+            Assert.That(result.TargetResults, Has.Count.EqualTo(1));
+            Assert.That(result.TargetResults[0].Target, Is.SameAs(fixture.Enemy));
+            Assert.That(result.TargetResults[0].DamageApplied, Is.EqualTo(10));
+            Assert.That(fixture.Enemy.HP, Is.Zero);
+            Assert.That(fixture.Session.GetCombatState(fixture.Enemy).CurrentMental,
+                Is.EqualTo(mentalBeforeAllOut - 5));
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.ExitCombat));
+            Assert.That(fixture.StateMachine.EndReason, Is.EqualTo(CombatEndReason.Victory));
+            Assert.That(fixture.StateMachine.TryExecuteAllOut(version, out _), Is.False);
+        }
+
+        [Test]
+        public void AllOut_StaleOrUnavailableRequestDoesNotMutateCombatState()
+        {
+            Fixture fixture = CreateStartedFixture(maxPosture: 1);
+            PrepareCounterToApplyOutcome(fixture, attackerWins: true);
+            PrepareAftermathDecision(fixture);
+            Assert.That(fixture.StateMachine.TryFinalizeApplyOutcome(
+                new FinalCombatTerminalPolicy(), fixture.Exchange.Version), Is.True);
+
+            int version = fixture.Exchange.Version;
+            int enemyHp = fixture.Enemy.HP;
+            Assert.That(fixture.StateMachine.TryExecuteAllOut(version - 1, out _), Is.False);
+            Assert.That(fixture.StateMachine.TryExecuteAllOut(version, out _), Is.False);
+            Assert.That(fixture.Enemy.HP, Is.EqualTo(enemyHp));
+            Assert.That(fixture.Exchange.Version, Is.EqualTo(version));
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.ChainDecision));
+        }
+
+        [Test]
+        public void AllOut_WhenEnemiesSurvive_ReturnsToNormalStandoff()
+        {
+            Fixture fixture = CreateStartedFixture(maxPosture: 1);
+            AddSkill(fixture.Ally, 99, TargetingRule.AllEnemies, 0, 1);
+            PrepareCounterToApplyOutcome(fixture, attackerWins: true);
+            PrepareAftermathDecision(fixture);
+            Assert.That(fixture.StateMachine.TryFinalizeApplyOutcome(
+                new FinalCombatTerminalPolicy(), fixture.Exchange.Version), Is.True);
+
+            Assert.That(fixture.StateMachine.TryExecuteAllOut(
+                fixture.Exchange.Version,
+                out CombatSkillExecutionResult result), Is.True);
+
+            Assert.That(result.TargetResults[0].DamageApplied, Is.EqualTo(1));
+            Assert.That(fixture.Enemy.HP, Is.EqualTo(9));
+            Assert.That(fixture.StateMachine.EndReason, Is.EqualTo(CombatEndReason.None));
+            Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.Standoff));
+            Assert.That(fixture.Exchange.IsAllOutCandidate, Is.False);
+        }
+
+        [Test]
+        public void AllOut_TargetsEveryLivingStunnedEnemy()
+        {
+            Fixture fixture = CreateStartedFixture(maxPosture: 1, includeSecondEnemy: true);
+            AddSkill(fixture.Ally, 99, TargetingRule.AllEnemies, 0, 10);
+            fixture.EnemyTwo.SetStunned(true);
+            PrepareCounterToApplyOutcome(fixture, attackerWins: true);
+            PrepareAftermathDecision(fixture);
+            Assert.That(fixture.StateMachine.TryFinalizeApplyOutcome(
+                new FinalCombatTerminalPolicy(), fixture.Exchange.Version), Is.True);
+
+            Assert.That(fixture.StateMachine.TryExecuteAllOut(
+                fixture.Exchange.Version,
+                out CombatSkillExecutionResult result), Is.True);
+
+            Assert.That(result.TargetResults, Has.Count.EqualTo(2));
+            Assert.That(fixture.Enemy.HP, Is.Zero);
+            Assert.That(fixture.EnemyTwo.HP, Is.Zero);
+            Assert.That(fixture.StateMachine.EndReason, Is.EqualTo(CombatEndReason.Victory));
+        }
+
+        [Test]
+        public void AllOutEligibility_IgnoresDefeatedEnemies()
+        {
+            Fixture fixture = CreateStartedFixture(includeSecondEnemy: true);
+            fixture.Enemy.ApplyDamage(int.MaxValue);
+            fixture.EnemyTwo.SetStunned(true);
+
+            Assert.That(CombatAllOutPolicy.IsCandidate(fixture.Session), Is.True);
+            Assert.That(FinalCombatTerminalPolicy.Evaluate(fixture.Session),
+                Is.EqualTo(CombatEndReason.None));
         }
 
         [Test]

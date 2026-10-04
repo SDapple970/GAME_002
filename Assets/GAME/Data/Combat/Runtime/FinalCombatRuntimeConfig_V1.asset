@@ -19,3 +19,10 @@ MonoBehaviour:
   initialPosture: 0
   pressureMax: 1
   pressurePerSecond: 0.25
+  maxMental: 100
+  initialMental: 100
+  clashMentalLoss: 10
+  damageMentalLoss: 5
+  stunMentalLoss: 20
+  panicThreshold: 0
+  overcomeRecoveryMental: 35

@@ -14,6 +14,7 @@ namespace Game.Combat.Core
                 declaration.Attacker.Side == declaration.Target.Side ||
                 FinalCombatTerminalPolicy.Evaluate(session) != CombatEndReason.None ||
                 !IsActiveMember(session, declaration.Attacker) ||
+                IsPanicked(session, declaration.Attacker) ||
                 !IsLivingMember(session, declaration.Target) ||
                 declaration.Attacker.IsStunned ||
                 !OwnsSkill(declaration.Attacker, declaration.Skill))
@@ -38,6 +39,7 @@ namespace Game.Combat.Core
                 !ReferenceEquals(response.Responder, attack.Target) ||
                 response.Responder.Side == attack.Attacker.Side ||
                 !IsActiveMember(session, response.Responder) ||
+                IsPanicked(session, response.Responder) ||
                 response.Responder.IsStunned ||
                 !OwnsSkill(response.Responder, response.Skill))
             {
@@ -75,6 +77,13 @@ namespace Game.Combat.Core
             return session != null && combatant != null &&
                    session.TryGetCombatState(combatant, out CombatantCombatState state) &&
                    state.IsAlive;
+        }
+
+        internal static bool IsPanicked(CombatSession session, ICombatant combatant)
+        {
+            return session != null && combatant != null &&
+                   session.TryGetCombatState(combatant, out CombatantCombatState state) &&
+                   state.IsPanicked;
         }
     }
 }

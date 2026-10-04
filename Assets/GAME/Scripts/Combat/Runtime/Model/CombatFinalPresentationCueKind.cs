@@ -7,11 +7,15 @@ namespace Game.Combat.Model
         ResponseAction,
         Clash,
         WinningSkill,
+        AllOut,
         HitReaction,
         PostureReaction,
         StunReaction,
+        PanicReaction,
+        Overcome,
         Defeat,
         OutcomeHold,
+        ChainDecision,
         Standoff
     }
 }

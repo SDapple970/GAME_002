@@ -27,6 +27,7 @@ namespace Game.Combat.Model
         public CombatFlowMode FlowMode { get; }
         public CombatRuntimeConfig RuntimeConfig { get; }
         public StandoffRuntimeState StandoffState { get; }
+        public bool OpeningEffectApplied { get; private set; }
 
         public CombatSession(
             StartReason reason,
@@ -116,6 +117,15 @@ namespace Game.Combat.Model
             TurnIndex++;
             CurrentTurn = new CombatTurn();
             Inspiration.GainPerTurn(1);
+            return true;
+        }
+
+        internal bool TryMarkOpeningEffectApplied()
+        {
+            if (OpeningEffectApplied)
+                return false;
+
+            OpeningEffectApplied = true;
             return true;
         }
 

@@ -18,7 +18,8 @@ namespace Game.Combat.Core
             }
 
             CombatantCombatState state = session.GetCombatState(currentAttackOwner);
-            return state.CanSpendMp(CombatMpCostResolver.Resolve(skill)) &&
+            return !state.IsPanicked &&
+                   state.CanSpendMp(CombatMpCostResolver.Resolve(skill)) &&
                    HasValidTarget(session, currentAttackOwner, skill);
         }
 

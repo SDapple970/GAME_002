@@ -9,13 +9,15 @@ namespace Game.Combat.Model
         public ISkill Skill { get; }
         public CombatClashOutcome SourceOutcome { get; }
         public IReadOnlyList<CombatSkillTargetResult> TargetResults { get; }
+        public IReadOnlyList<CombatStatusApplicationResult> AppliedStatusResults { get; }
         public bool WasExecuted { get; }
 
         internal CombatSkillExecutionResult(
             ICombatant actor,
             ISkill skill,
             CombatClashOutcome sourceOutcome,
-            IReadOnlyList<CombatSkillTargetResult> targetResults)
+            IReadOnlyList<CombatSkillTargetResult> targetResults,
+            IReadOnlyList<CombatStatusApplicationResult> appliedStatusResults)
         {
             Actor = actor;
             Skill = skill;
@@ -28,6 +30,13 @@ namespace Game.Combat.Model
                 snapshot[i] = targetResults[i];
 
             TargetResults = Array.AsReadOnly(snapshot);
+
+            CombatStatusApplicationResult[] statusSnapshot =
+                new CombatStatusApplicationResult[appliedStatusResults?.Count ?? 0];
+            for (int i = 0; i < statusSnapshot.Length; i++)
+                statusSnapshot[i] = appliedStatusResults[i];
+
+            AppliedStatusResults = Array.AsReadOnly(statusSnapshot);
         }
     }
 }

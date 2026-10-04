@@ -35,6 +35,7 @@ namespace Game.Combat.Core
                 ReferenceEquals(currentAttackOwner, receivingActor) ||
                 currentAttackOwner.Side != receivingActor.Side ||
                 !CombatDeclarationPolicy.IsActiveMember(session, currentAttackOwner) ||
+                CombatDeclarationPolicy.IsPanicked(session, receivingActor) ||
                 !CombatChainPolicy.CanContinue(session, receivingActor, receivingSkill))
             {
                 return false;
