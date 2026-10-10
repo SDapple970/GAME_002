@@ -10,6 +10,11 @@ namespace Game.NonCombat.Progress
         [Min(1)] [SerializeField] private int maximumLevel = 99;
         [Tooltip("Entry 0 is EXP required from level 1 to 2. Missing entries use the last authored value.")]
         [SerializeField] private int[] experienceRequiredByLevel = { 100 };
+        [Tooltip("Up to six authored Unique skills in display order. Unconfigured conditions remain locked.")]
+        [SerializeField] private CharacterUniqueSkillUnlockDefinition[] uniqueSkillUnlocks = System.Array.Empty<CharacterUniqueSkillUnlockDefinition>();
+
+        public System.Collections.Generic.IReadOnlyList<CharacterUniqueSkillUnlockDefinition> UniqueSkillUnlocks =>
+            System.Array.AsReadOnly(uniqueSkillUnlocks ?? System.Array.Empty<CharacterUniqueSkillUnlockDefinition>());
 
         public string CharacterId => characterId;
         public int StartingLevel => Mathf.Clamp(startingLevel, 1, MaximumLevel);

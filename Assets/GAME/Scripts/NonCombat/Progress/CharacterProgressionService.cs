@@ -13,8 +13,10 @@ namespace Game.NonCombat.Progress
         [SerializeField] private string defaultRewardTargetId;
         [SerializeField] private List<CharacterProgressionDefinitionSO> definitions = new();
         private readonly Dictionary<string, State> _states = new(StringComparer.Ordinal);
+        private CharacterStartDefinitionSO _startDefinition;
 
         public string DefaultRewardTargetId => NormalizeId(defaultRewardTargetId);
+        public CharacterStartDefinitionSO StartDefinition => _startDefinition;
         public event Action<ExperienceApplyResult> ProgressionChanged;
         public event Action Refreshed;
 
@@ -29,6 +31,43 @@ namespace Game.NonCombat.Progress
             if (Application.isPlaying) DontDestroyOnLoad(gameObject);
         }
         private void OnDestroy() { if (Instance == this) Instance = null; }
+
+        internal bool CanConfigureStartDefinition(CharacterStartDefinitionSO start, out string message)
+        {
+            if (start == null) { message = "Character start definition is missing."; return false; }
+            if (!start.TryValidate(out message)) return false;
+            if (_startDefinition != null && _startDefinition != start)
+            { message = "A different Character start definition already owns startup configuration."; return false; }
+            foreach (CharacterProgressionDefinitionSO definition in start.Definitions)
+            {
+                CharacterProgressionDefinitionSO existing = FindDefinition(NormalizeId(definition.CharacterId));
+                if (existing != null && existing != definition)
+                { message = $"Conflicting definitions for Character '{definition.CharacterId}'."; return false; }
+            }
+            message = null;
+            return true;
+        }
+
+        public bool TryConfigureStartDefinition(CharacterStartDefinitionSO start, out string message)
+        {
+            if (!CanConfigureStartDefinition(start, out message)) return false;
+            _startDefinition = start;
+            defaultRewardTargetId = start.DefaultRewardTargetId;
+            foreach (CharacterProgressionDefinitionSO definition in start.Definitions)
+            {
+                string id = NormalizeId(definition.CharacterId);
+                if (!definitions.Contains(definition)) definitions.Add(definition);
+                if (!_states.TryGetValue(id, out State state))
+                    _states.Add(id, new State { Definition = definition, Level = definition.StartingLevel, Experience = 0 });
+                else if (state.Definition == null)
+                {
+                    NormalizeRestoredState(definition, state.Level, state.Experience, out int level, out int experience);
+                    state.Definition = definition; state.Level = level; state.Experience = experience;
+                }
+            }
+            Refreshed?.Invoke();
+            return true;
+        }
 
         public bool TryGetState(string characterId, out int level, out int experience)
         {

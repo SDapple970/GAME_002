@@ -597,15 +597,51 @@ namespace Game.EditorTools
             serialized.FindProperty("startNodeId").stringValue = "first-talk";
 
             SerializedProperty nodes = serialized.FindProperty("nodes");
-            nodes.arraySize = 1;
+            nodes.arraySize = 3;
             SerializedProperty firstTalk = nodes.GetArrayElementAtIndex(0);
             firstTalk.FindPropertyRelative("nodeId").stringValue = "first-talk";
             firstTalk.FindPropertyRelative("speakerName").stringValue = "NPC";
             firstTalk.FindPropertyRelative("body").stringValue = "여기 ㅈㄴ 위험한 곳임. 들어갈거임?";
             firstTalk.FindPropertyRelative("choices").arraySize = 0;
             firstTalk.FindPropertyRelative("useTimedChoices").boolValue = false;
-            firstTalk.FindPropertyRelative("nextNodeId").stringValue = string.Empty;
-            SerializedProperty effects = firstTalk.FindPropertyRelative("effects");
+            firstTalk.FindPropertyRelative("nextNodeId").stringValue = "first-talk-choice";
+            firstTalk.FindPropertyRelative("effects").arraySize = 0;
+            firstTalk.FindPropertyRelative("endEvent").boolValue = false;
+
+            SerializedProperty choice = nodes.GetArrayElementAtIndex(1);
+            choice.FindPropertyRelative("nodeId").stringValue = "first-talk-choice";
+            choice.FindPropertyRelative("speakerName").stringValue = "NPC";
+            choice.FindPropertyRelative("body").stringValue = "들어갈거임?";
+            choice.FindPropertyRelative("useTimedChoices").boolValue = true;
+            choice.FindPropertyRelative("choiceTimeLimitSeconds").floatValue = 5f;
+            choice.FindPropertyRelative("timeoutChoiceIndex").intValue = 0;
+            choice.FindPropertyRelative("timeoutNodeId").stringValue = "first-talk-terminal";
+            choice.FindPropertyRelative("nextNodeId").stringValue = string.Empty;
+            choice.FindPropertyRelative("effects").arraySize = 0;
+            choice.FindPropertyRelative("endEvent").boolValue = false;
+            SerializedProperty choices = choice.FindPropertyRelative("choices");
+            choices.arraySize = 2;
+            for (int index = 0; index < choices.arraySize; index++)
+            {
+                SerializedProperty branch = choices.GetArrayElementAtIndex(index);
+                branch.FindPropertyRelative("choiceId").stringValue = index == 0 ? "enter" : "wait";
+                branch.FindPropertyRelative("text").stringValue = index == 0 ? "들어간다." : "생각해 본다.";
+                branch.FindPropertyRelative("nextNodeId").stringValue = "first-talk-terminal";
+                branch.FindPropertyRelative("conditions").arraySize = 0;
+                branch.FindPropertyRelative("effects").arraySize = 0;
+                branch.FindPropertyRelative("hideIfConditionNotMet").boolValue = true;
+                branch.FindPropertyRelative("disabledReason").stringValue = string.Empty;
+            }
+
+            SerializedProperty terminal = nodes.GetArrayElementAtIndex(2);
+            terminal.FindPropertyRelative("nodeId").stringValue = "first-talk-terminal";
+            terminal.FindPropertyRelative("speakerName").stringValue = "NPC";
+            terminal.FindPropertyRelative("body").stringValue = "조심해.";
+            terminal.FindPropertyRelative("choices").arraySize = 0;
+            terminal.FindPropertyRelative("useTimedChoices").boolValue = false;
+            terminal.FindPropertyRelative("timeoutNodeId").stringValue = string.Empty;
+            terminal.FindPropertyRelative("nextNodeId").stringValue = string.Empty;
+            SerializedProperty effects = terminal.FindPropertyRelative("effects");
             effects.arraySize = 1;
             SerializedProperty objectiveEffect = effects.GetArrayElementAtIndex(0);
             objectiveEffect.FindPropertyRelative("type").intValue = (int)StoryEffectType.PublishQuestEvent;
@@ -622,10 +658,10 @@ namespace Game.EditorTools
             objectiveEffect.FindPropertyRelative("rewardExp").intValue = 0;
             objectiveEffect.FindPropertyRelative("rewardItemId").stringValue = string.Empty;
             objectiveEffect.FindPropertyRelative("rewardItemCount").intValue = 0;
-            firstTalk.FindPropertyRelative("endEvent").boolValue = true;
+            terminal.FindPropertyRelative("endEvent").boolValue = true;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(dialogue);
-            AssetDatabase.SaveAssets();
+            AssetDatabase.SaveAssetIfDirty(dialogue);
             return dialogue;
         }
 
@@ -863,8 +899,24 @@ namespace Game.EditorTools
                     $"Dungeon 1 encounter objective '{ProductionEncounterObjectiveIds[index]}' does not match its stable clear contract.");
             }
 
-            SerializedProperty effect = new SerializedObject(EnsureProductionNpcDialogue())
-                .FindProperty("nodes").GetArrayElementAtIndex(0)
+            // Validation must never re-author persistent narrative assets.
+            StoryEventDefinitionSO dialogue = LoadRequiredAsset<StoryEventDefinitionSO>(ProductionNpcDialoguePath);
+            StoryNode opening = dialogue.GetNode("first-talk");
+            StoryNode choice = dialogue.GetNode("first-talk-choice");
+            StoryNode terminal = dialogue.GetNode("first-talk-terminal");
+            Require(dialogue.EventId == "dungeon1.npc.first-talk.story" && dialogue.Nodes.Count == 3 &&
+                    opening != null && choice != null && terminal != null,
+                "Dungeon 1 FirstTalk must author opening, choice and common terminal nodes.");
+            Require(dialogue.StartNodeId == opening.NodeId && dialogue.Nodes[2] == terminal &&
+                    opening.NextNodeId == choice.NodeId && opening.Effects.Count == 0 && !opening.EndEvent &&
+                    choice.UseTimedChoices && choice.ChoiceTimeLimitSeconds == 5f && choice.Choices.Count == 2 &&
+                    choice.TimeoutNodeId == terminal.NodeId && choice.Effects.Count == 0 && !choice.EndEvent &&
+                    choice.Choices.All(branch => branch != null && branch.NextNodeId == terminal.NodeId &&
+                        branch.Conditions.Count == 0 && branch.Effects.Count == 0) &&
+                    terminal.EndEvent && terminal.Choices.Count == 0 && terminal.Effects.Count == 1,
+                "Dungeon 1 FirstTalk choices and timeout must converge on one canonical Quest terminal.");
+            SerializedProperty effect = new SerializedObject(dialogue)
+                .FindProperty("nodes").GetArrayElementAtIndex(2)
                 .FindPropertyRelative("effects").GetArrayElementAtIndex(0);
             Require(effect.FindPropertyRelative("type").intValue == (int)StoryEffectType.PublishQuestEvent &&
                     effect.FindPropertyRelative("missionId").stringValue == ProductionQuestId &&
@@ -1104,12 +1156,12 @@ namespace Game.EditorTools
                 "Production NPC does not have the expected stable interaction ID.");
             Require(npc.Events.Count == 1 && npc.Events[0] is StoryInteractionEventSO,
                 "Production NPC must use the authored Production Story interaction event.");
-            Require(npc.Events[0] == EnsureProductionNpcInteractionEvent(),
+            Require(npc.Events[0] == LoadRequiredAsset<StoryInteractionEventSO>(ProductionNpcEventPath),
                 "Production NPC does not reference the Dungeon 1 authored interaction event.");
             StoryInteractionEventSO storyEvent = (StoryInteractionEventSO)npc.Events[0];
             Require(storyEvent.EventDefinition != null,
                 "Production NPC Story interaction event is missing its dialogue definition.");
-            Require(storyEvent.EventDefinition == EnsureProductionNpcDialogue(),
+            Require(storyEvent.EventDefinition == LoadRequiredAsset<StoryEventDefinitionSO>(ProductionNpcDialoguePath),
                 "Production NPC Story interaction event does not reference the Dungeon 1 dialogue definition.");
             Require(npc.GetComponent<Collider2D>() is { isTrigger: true },
                 "Production NPC must use a trigger Collider2D for interaction detection.");

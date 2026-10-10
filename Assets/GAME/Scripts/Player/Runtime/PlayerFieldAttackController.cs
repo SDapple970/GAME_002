@@ -7,6 +7,8 @@ using Game.Combat.Data;
 using Game.Combat.Integration;
 using Game.Combat.Model;
 using Game.Core;
+using Game.NonCombat.Party;
+using Game.NonCombat.Progress;
 using UnityEngine;
 
 namespace Game.Player
@@ -143,6 +145,13 @@ namespace Game.Player
                 );
                 request.AllyFieldObjects.AddRange(allies);
                 request.EnemyFieldObjects.AddRange(enemies);
+                if (!new CharacterPartyCombatAdapter().TryBindSinglePlayerRequest(request, gameObject,
+                    PartyRuntime.Instance, CharacterProgressionService.Instance, out string partyMessage))
+                {
+                    encounterOwner?.ReleaseReservation(this);
+                    Debug.LogWarning($"[PlayerFieldAttackController] Party binding rejected: {partyMessage}", this);
+                    return;
+                }
                 request.EncounterOwnerOrNull = encounterOwner as UnityEngine.Object;
 
                 bool started = false;

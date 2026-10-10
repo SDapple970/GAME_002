@@ -5,6 +5,8 @@ using System.Linq;
 using Game.NonCombat.Save;
 using Game.Story;
 using Game.Interaction;
+using Game.Story.Core;
+using Game.NonCombat.Progress;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -227,6 +229,12 @@ namespace Game.Core
             List<T> result = new();
             foreach (MonoBehaviour item in ordered)
             {
+                // The facade retains its public participant API for legacy callers;
+                // canonical save/reset discovery must process the state owner only once.
+                if (item is StoryFlagDatabase ||
+                    item is StoryFlagManager flags && flags != StoryFlagManager.Instance)
+                    continue;
+
                 if (item is InteractionRuntime interactionRuntime && interactionRuntime != InteractionRuntime.Instance)
                 {
                     Debug.LogWarning($"[SaveLoadService] Non-owner InteractionRuntime ignored on '{item.name}'.");

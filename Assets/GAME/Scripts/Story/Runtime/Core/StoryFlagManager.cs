@@ -1,27 +1,98 @@
 // Assets/GAME/Scripts/Story/Runtime/Core/StoryFlagManager.cs
 using System.Collections.Generic;
+using System;
+using Game.NonCombat.Save;
 using UnityEngine;
 
 namespace Game.Story.Core
 {
-    public sealed class StoryFlagManager : MonoBehaviour
+    public sealed class StoryFlagManager : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         public static StoryFlagManager Instance { get; private set; }
 
-        private readonly Dictionary<string, bool> _boolFlags = new();
-        private readonly Dictionary<string, int> _intFlags = new();
+        private readonly Dictionary<string, bool> _boolFlags = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _intFlags = new(StringComparer.Ordinal);
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics() => Instance = null;
+
+        internal static StoryFlagManager EnsureInstalled()
+        {
+            if (Instance != null) return Instance;
+            StoryFlagManager existing = FindFirstObjectByType<StoryFlagManager>(FindObjectsInactive.Include);
+            if (existing != null)
+            {
+                existing.Awake();
+                return Instance;
+            }
+
+            StoryFlagManager created = new GameObject("StoryFlagManager").AddComponent<StoryFlagManager>();
+            // EditMode compatibility callers also need an owner without waiting for Awake.
+            if (Instance == null) created.Awake();
+            return Instance;
+        }
 
         private void Awake()
         {
             if (Instance != null && Instance != this)
             {
-                Destroy(gameObject);
+                // Do not destroy other services on an authored shared root.
+                enabled = false;
+                if (Application.isPlaying) Destroy(this);
                 return;
             }
 
             Instance = this;
-            DontDestroyOnLoad(gameObject);
+            if (Application.isPlaying) DontDestroyOnLoad(gameObject);
         }
+
+        private void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
+
+        public Dictionary<string, bool> ExportBoolFlags() => new(_boolFlags, StringComparer.Ordinal);
+        public Dictionary<string, int> ExportIntFlags() => new(_intFlags, StringComparer.Ordinal);
+
+        // Legacy bool-only imports replace only that domain, leaving int flags intact.
+        public void ImportBoolFlags(Dictionary<string, bool> flags)
+        {
+            _boolFlags.Clear();
+            if (flags == null) return;
+            foreach (KeyValuePair<string, bool> pair in flags)
+                if (!string.IsNullOrEmpty(pair.Key)) _boolFlags[pair.Key] = pair.Value;
+        }
+
+        public void CaptureSaveData(GameSaveData saveData)
+        {
+            if (saveData == null) return;
+            saveData.story ??= new StorySaveData();
+            saveData.story.flags ??= new List<SaveBoolEntry>();
+            saveData.story.intFlags ??= new List<SaveIntEntry>();
+            saveData.story.flags.Clear();
+            saveData.story.intFlags.Clear();
+            foreach (KeyValuePair<string, bool> pair in _boolFlags)
+                saveData.story.flags.Add(new SaveBoolEntry { id = pair.Key, value = pair.Value });
+            foreach (KeyValuePair<string, int> pair in _intFlags)
+                saveData.story.intFlags.Add(new SaveIntEntry { id = pair.Key, value = pair.Value });
+            saveData.story.flags.Sort((left, right) => string.CompareOrdinal(left.id, right.id));
+            saveData.story.intFlags.Sort((left, right) => string.CompareOrdinal(left.id, right.id));
+        }
+
+        public void RestoreSaveData(GameSaveData saveData)
+        {
+            ClearAll();
+            // Last entry wins within each type, matching the old Database restore.
+            // Exact keys and separate bool/int domains preserve existing caller semantics.
+            if (saveData?.story?.flags != null)
+                foreach (SaveBoolEntry entry in saveData.story.flags)
+                    if (entry != null && !string.IsNullOrEmpty(entry.id)) _boolFlags[entry.id] = entry.value;
+            if (saveData?.story?.intFlags != null)
+                foreach (SaveIntEntry entry in saveData.story.intFlags)
+                    if (entry != null && !string.IsNullOrEmpty(entry.id)) _intFlags[entry.id] = entry.value;
+        }
+
+        public void ResetForNewGame() => ClearAll();
 
         public bool GetBool(string key)
         {

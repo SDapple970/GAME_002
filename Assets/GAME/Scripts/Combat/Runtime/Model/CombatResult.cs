@@ -1,5 +1,6 @@
 // GAME_002/Assets/GAME/Scripts/Combat/Model/CombatResult.cs
 using System.Collections.Generic;
+using System;
 
 namespace Game.Combat.Model
 {
@@ -9,6 +10,11 @@ namespace Game.Combat.Model
     public sealed class CombatResult
     {
         public string CompletionId { get; internal set; }
+        public string SkillAcquisitionRecipientCharacterId { get; internal set; }
+        public string ProgressionTargetCharacterId { get; internal set; }
+        public bool IsPartySkillAcquisitionEligible { get; internal set; }
+        public IReadOnlyList<CombatDefeatedEnemyRecord> DefeatedEnemySources { get; internal set; } =
+            Array.AsReadOnly(Array.Empty<CombatDefeatedEnemyRecord>());
         public bool IsWin;
         public CombatEndReason EndReason;
 

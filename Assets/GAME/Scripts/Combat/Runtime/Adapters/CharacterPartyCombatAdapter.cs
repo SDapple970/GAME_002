@@ -10,6 +10,30 @@ namespace Game.Combat.Adapters
     /// <summary>Production boundary from persistent party identity into isolated combat-entry data.</summary>
     public sealed class CharacterPartyCombatAdapter
     {
+        /// <summary>Validates the existing single-player field path without replacing encounter flow/configuration.</summary>
+        public bool TryBindSinglePlayerRequest(CombatStartRequest request, UnityEngine.GameObject player,
+            PartyRuntime party, CharacterProgressionService progression, out string message)
+        {
+            message = null;
+            if (request == null || player == null || request.AllyFieldObjects.Count != 1 || request.AllyFieldObjects[0] != player)
+            { message = "Single-player Party binding requires exactly the supplied player ally."; return false; }
+            if (party == null || party.StartDefinition == null)
+            {
+                // Existing unconfigured scenes/tests keep their previous leader binding behavior.
+                if (party != null) request.BindAllyCharacter(player, party.LeaderCharacterId);
+                return true;
+            }
+            PartyCombatBuildResult result = BuildRequest(party, progression,
+                new[] { new PartyCombatantBinding(party.LeaderCharacterId, player) }, request.EnemyFieldObjects,
+                request.Reason, request.InitiativeSide, request.InspirationMax, request.InspirationStart, request.OpeningEffectOrNull);
+            if (!result.Success) { message = result.FailureReason; return false; }
+            if (result.Request.AllyFieldObjects.Count != 1 || result.Request.AllyFieldObjects[0] != player)
+            { message = "The single-player field path requires the selected Party leader alone. Additional allies need explicit field bindings."; return false; }
+            request.BindAllyCharacter(player, result.Snapshots[0].CharacterId);
+            request.SetSkillAcquisitionRecipient(result.Request.SkillAcquisitionRecipientCharacterId);
+            return true;
+        }
+
         public PartyCombatBuildResult BuildRequest(
             PartyRuntime party,
             CharacterProgressionService progression,
@@ -51,9 +75,13 @@ namespace Game.Combat.Adapters
                 CombatSkillLoadoutComponent loadout = fieldObject.GetComponent<CombatSkillLoadoutComponent>();
                 snapshots.Add(new PartyCombatSnapshot(id, level, currentHp, maximumHp, loadout != null ? loadout.SkillIds : null));
                 request.AllyFieldObjects.Add(fieldObject);
+                request.BindAllyCharacter(fieldObject, id);
             }
 
             if (request.AllyFieldObjects.Count == 0) return Failed("Party combat lineup is empty.");
+            if (byId.TryGetValue(party.LeaderCharacterId ?? string.Empty, out UnityEngine.GameObject leader) &&
+                request.AllyFieldObjects.Contains(leader))
+                request.SetSkillAcquisitionRecipient(party.LeaderCharacterId);
             if (enemies != null) for (int i = 0; i < enemies.Count; i++) if (enemies[i] != null) request.EnemyFieldObjects.Add(enemies[i]);
             return new PartyCombatBuildResult(true, null, request, snapshots.ToArray());
         }

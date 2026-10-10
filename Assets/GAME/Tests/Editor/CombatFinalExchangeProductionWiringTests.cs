@@ -5,6 +5,7 @@ using System.Reflection;
 using Game.Combat.Adapters;
 using Game.Combat.Core;
 using Game.Combat.Data;
+using Game.Combat.Environment;
 using Game.Combat.Integration;
 using Game.Combat.Model;
 using Game.Combat.UI;
@@ -161,6 +162,61 @@ namespace Game.Tests.Combat
 
             Assert.That((string)formatHp.Invoke(null, new object[] { "ENEMY", enemy }),
                 Is.EqualTo("ENEMY  HP 5 / 8"));
+        }
+
+        [Test]
+        public void FinalBinder_FormatsPostureMentalAndStatusMarkersOnOneLineWithoutMutatingState()
+        {
+            DummyCombatant player = new DummyCombatant(1, Side.Allies, 10, KeywordMask.None, 0);
+            CombatSession session = new CombatSession(
+                StartReason.PlayerFirstHit,
+                Side.Allies,
+                new InspirationPool(10),
+                new CombatEnvironment(),
+                CombatFlowMode.StandoffClashChain,
+                new CombatRuntimeConfig(3, 0, 3, 0, 0f, 100f, 1f, 100, 100, 10, 5, 20, 0));
+            session.Allies.Add(player);
+            session.InitializeCombatStates(session.RuntimeConfig);
+            CombatantCombatState state = session.GetCombatState(player);
+
+            GameObject owner = new GameObject("FinalCombatUIBinder.PostureFormatting");
+            try
+            {
+                FinalCombatUIBinder binder = owner.AddComponent<FinalCombatUIBinder>();
+                SetField(binder, "_session", session);
+                MethodInfo formatPosture = typeof(FinalCombatUIBinder).GetMethod(
+                    "FormatPosture",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+
+                Assert.That(formatPosture, Is.Not.Null);
+                Assert.That((string)formatPosture.Invoke(binder, new object[] { "PLAYER", player }),
+                    Is.EqualTo("PLAYER  자세 0 / 3  정신력 100 / 100"));
+                Assert.That(state.CurrentPosture, Is.Zero);
+                Assert.That(state.CurrentMental, Is.EqualTo(100));
+                Assert.That(session.StandoffState.CurrentPressure, Is.Zero);
+
+                player.SetStunned(true);
+                string stunned = (string)formatPosture.Invoke(binder, new object[] { "PLAYER", player });
+                Assert.That(stunned, Does.Contain("기절"));
+                Assert.That(stunned, Does.Contain("정신력 100 / 100"));
+                Assert.That(stunned, Does.Not.Contain("\n"));
+
+                state.ApplyMentalDelta(-100);
+                string panicked = (string)formatPosture.Invoke(binder, new object[] { "PLAYER", player });
+                Assert.That(panicked, Does.Contain("정신력 0 / 100"));
+                Assert.That(panicked, Does.Contain("패닉"));
+                Assert.That(panicked, Does.Contain("기절"));
+                Assert.That(panicked, Does.Not.Contain("\n"));
+                Assert.That(state.CurrentMental, Is.Zero);
+                Assert.That(state.IsPanicked, Is.True);
+                Assert.That(player.IsStunned, Is.True);
+                Assert.That(session.StandoffState.MaxPressure, Is.EqualTo(100f));
+                Assert.That(session.StandoffState.CurrentPressure, Is.Zero);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(owner);
+            }
         }
 
         [TestCase(Phase.Standoff, null, "대치")]

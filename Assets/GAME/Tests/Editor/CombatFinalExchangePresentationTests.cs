@@ -333,18 +333,19 @@ namespace Game.Tests.Combat
             Assert.That(overcomeCues, Is.EqualTo(1));
         }
 
-        [UnityTest]
-        public IEnumerator PanicTransitionOutcome_RaisesOnePresentationCueWithoutRebindReplay()
+        [Test]
+        public void PanicTransitionOutcome_RaisesOnePresentationCueWithoutRebindReplay()
         {
             Fixture fixture = CreateFixture();
             CombatantCombatState enemyState = fixture.Session.GetCombatState(fixture.Enemy);
             enemyState.ApplyMentalDelta(-95);
             CombatOutcomePresentationRequest outcome = DriveNoResponseToOutcomeGate(fixture);
             Assert.That(outcome.MentalMutationResults[0].PanicApplied, Is.True);
+            Assert.That(outcome.MentalMutationResults[0].Target, Is.SameAs(fixture.Enemy));
+            Assert.That(enemyState.IsPanicked, Is.True);
+            Assert.That(enemyState.CurrentMental, Is.Zero);
 
             CombatDirector director = CreateActiveDirector();
-            typeof(CombatDirector).GetField("fallbackActionDelay", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.SetValue(director, 0f);
             int panicCues = 0;
             director.FinalPresentationCueRaised += cue =>
             {
@@ -353,10 +354,38 @@ namespace Game.Tests.Combat
             };
 
             Assert.That(director.BindFinalExchange(fixture.Orchestrator, fixture.Session), Is.True);
-            yield return null;
-            yield return null;
+            Assert.That(fixture.Orchestrator.PendingOutcomePresentationRequest, Is.SameAs(outcome));
+
+            FieldInfo activeRequest = typeof(CombatDirector).GetField(
+                "_activeFinalOutcomeRequest",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo activeRoutine = typeof(CombatDirector).GetField(
+                "_activeFinalOutcomeRoutine",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo bindingId = typeof(CombatDirector).GetField(
+                "_finalBindingId",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            MethodInfo playOutcome = typeof(CombatDirector).GetMethod(
+                "Co_PlayFinalOutcome",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(new MemberInfo[] { activeRequest, activeRoutine, bindingId, playOutcome }, Has.None.Null);
+            Assert.That(activeRequest.GetValue(director), Is.SameAs(outcome));
+            Assert.That(activeRoutine.GetValue(director), Is.Not.Null);
+
+            // EditMode does not reliably drive a normal MonoBehaviour coroutine. Pump the
+            // existing production iterator after proving the director consumed this outcome.
+            director.StopAllCoroutines();
+            IEnumerator presentation = (IEnumerator)playOutcome.Invoke(director, new object[]
+            {
+                bindingId.GetValue(director),
+                outcome
+            });
+            Assert.That(presentation.MoveNext(), Is.True);
+            Assert.That(presentation.MoveNext(), Is.True);
 
             Assert.That(panicCues, Is.EqualTo(1));
+            Assert.That(enemyState.IsPanicked, Is.True);
+            Assert.That(enemyState.CurrentMental, Is.Zero);
             Assert.That(outcome.TryComplete(), Is.True);
             director.UnbindFinalExchange();
             Assert.That(director.BindFinalExchange(fixture.Orchestrator, fixture.Session), Is.True);

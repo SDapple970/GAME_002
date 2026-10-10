@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -17,6 +18,8 @@ namespace Game.Tests.Integration
 {
     public sealed class Batch5FinalStabilizationTests
     {
+        private readonly List<CharacterProgressionDefinitionSO> createdDefinitions = new();
+
         [SetUp] public void SetUp() => Cleanup();
         [TearDown] public void TearDown() => Cleanup();
 
@@ -114,18 +117,20 @@ namespace Game.Tests.Integration
         { CharacterProgressionService service = new GameObject("Progression").AddComponent<CharacterProgressionService>(); Invoke(service, "ConfigureForTests", "hero", new[] { definition }); return service; }
         private static GameSaveData SaveState(string id, int level, int experience)
         { GameSaveData save = new(); save.progression.characters.Add(new CharacterProgressionStateSaveData { characterId = id, level = level, experience = experience }); return save; }
-        private static CharacterProgressionDefinitionSO CreateDefinition(string id, int start, int max, params int[] curve)
-        { CharacterProgressionDefinitionSO definition = ScriptableObject.CreateInstance<CharacterProgressionDefinitionSO>(); SerializedObject serialized = new(definition); serialized.FindProperty("characterId").stringValue = id; serialized.FindProperty("startingLevel").intValue = start; serialized.FindProperty("maximumLevel").intValue = max; SerializedProperty values = serialized.FindProperty("experienceRequiredByLevel"); values.arraySize = curve.Length; for (int i = 0; i < curve.Length; i++) values.GetArrayElementAtIndex(i).intValue = curve[i]; serialized.ApplyModifiedPropertiesWithoutUndo(); return definition; }
+        private CharacterProgressionDefinitionSO CreateDefinition(string id, int start, int max, params int[] curve)
+        { CharacterProgressionDefinitionSO definition = ScriptableObject.CreateInstance<CharacterProgressionDefinitionSO>(); createdDefinitions.Add(definition); SerializedObject serialized = new(definition); serialized.FindProperty("characterId").stringValue = id; serialized.FindProperty("startingLevel").intValue = start; serialized.FindProperty("maximumLevel").intValue = max; SerializedProperty values = serialized.FindProperty("experienceRequiredByLevel"); values.arraySize = curve.Length; for (int i = 0; i < curve.Length; i++) values.GetArrayElementAtIndex(i).intValue = curve[i]; serialized.ApplyModifiedPropertiesWithoutUndo(); return definition; }
         private static void AssertOne<T>() where T : UnityEngine.Object => Assert.That(UnityEngine.Object.FindObjectsByType<T>(FindObjectsInactive.Include, FindObjectsSortMode.None), Has.Length.EqualTo(1));
         private static void SetField(object target, string name, object value) => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(target, value);
         private static void Invoke(object target, string name, params object[] args) => target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(target, args);
 
-        private static void Cleanup()
+        private void Cleanup()
         {
             foreach (MonoBehaviour value in Resources.FindObjectsOfTypeAll<MonoBehaviour>())
-                if (value != null && (value is RuntimeBootstrapper || value is CurrencyWallet || value is InventoryService || value is CharacterProgressionService || value is RewardService || value is InteractionRuntime || value is InteractionRunner || value is PersonaStatusManager || value is PersonaSaveAdapter || value is SaveLoadService || value is GameStateMachine || value is GameFlowController || value is SceneFlowController || value is Game.UI.GameUIRootController || value is Game.UI.UIScreenRouter || value.GetType().Name == "GameInputInstaller"))
+                if (value != null && !EditorUtility.IsPersistent(value) && (value is RuntimeBootstrapper || value is CurrencyWallet || value is InventoryService || value is CharacterProgressionService || value is RewardService || value is InteractionRuntime || value is InteractionRunner || value is PersonaStatusManager || value is PersonaSaveAdapter || value is SaveLoadService || value is GameStateMachine || value is GameFlowController || value is SceneFlowController || value is Game.UI.GameUIRootController || value is Game.UI.UIScreenRouter || value.GetType().Name == "GameInputInstaller"))
                     UnityEngine.Object.DestroyImmediate(value.gameObject);
-            foreach (CharacterProgressionDefinitionSO value in Resources.FindObjectsOfTypeAll<CharacterProgressionDefinitionSO>()) UnityEngine.Object.DestroyImmediate(value);
+            foreach (CharacterProgressionDefinitionSO value in createdDefinitions)
+                if (value != null && !EditorUtility.IsPersistent(value)) UnityEngine.Object.DestroyImmediate(value);
+            createdDefinitions.Clear();
         }
     }
 }

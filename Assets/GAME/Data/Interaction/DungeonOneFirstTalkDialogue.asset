@@ -25,6 +25,46 @@ MonoBehaviour:
     timeoutChoiceIndex: 0
     timeoutNodeId: 
     hideBubbleAfterChoice: 0
+    nextNodeId: first-talk-choice
+    effects: []
+    endEvent: 0
+  - nodeId: first-talk-choice
+    speakerName: NPC
+    portrait: {fileID: 0}
+    body: "\uB4E4\uC5B4\uAC08\uAC70\uC784?"
+    choices:
+    - choiceId: enter
+      text: "\uB4E4\uC5B4\uAC04\uB2E4."
+      nextNodeId: first-talk-terminal
+      conditions: []
+      effects: []
+      hideIfConditionNotMet: 1
+      disabledReason:
+    - choiceId: wait
+      text: "\uC0DD\uAC01\uD574 \uBCF8\uB2E4."
+      nextNodeId: first-talk-terminal
+      conditions: []
+      effects: []
+      hideIfConditionNotMet: 1
+      disabledReason:
+    useTimedChoices: 1
+    choiceTimeLimitSeconds: 5
+    timeoutChoiceIndex: 0
+    timeoutNodeId: first-talk-terminal
+    hideBubbleAfterChoice: 0
+    nextNodeId:
+    effects: []
+    endEvent: 0
+  - nodeId: first-talk-terminal
+    speakerName: NPC
+    portrait: {fileID: 0}
+    body: "\uC870\uC2EC\uD574."
+    choices: []
+    useTimedChoices: 0
+    choiceTimeLimitSeconds: 5
+    timeoutChoiceIndex: 0
+    timeoutNodeId:
+    hideBubbleAfterChoice: 0
     nextNodeId: 
     effects:
     - type: 12

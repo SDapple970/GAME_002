@@ -12,10 +12,13 @@ namespace Game.NonCombat.Party
         private readonly List<string> _members = new();
         private readonly List<string> _combatLineup = new();
         private string _leaderCharacterId;
+        private CharacterStartDefinitionSO _startDefinition;
+        private bool _hasRuntimeState;
 
         public IReadOnlyList<string> Members => new List<string>(_members).AsReadOnly();
         public IReadOnlyList<string> CombatLineup => new List<string>(_combatLineup).AsReadOnly();
         public string LeaderCharacterId => _leaderCharacterId;
+        public CharacterStartDefinitionSO StartDefinition => _startDefinition;
         public event Action<PartyMutationResult> Changed;
         public event Action Refreshed;
 
@@ -30,6 +33,25 @@ namespace Game.NonCombat.Party
         }
 
         private void OnDestroy() { if (Instance == this) Instance = null; }
+
+        internal bool CanConfigureStartDefinition(CharacterStartDefinitionSO start, out string message)
+        {
+            if (start == null) { message = "Character start definition is missing."; return false; }
+            if (!start.TryValidate(out message)) return false;
+            if (_startDefinition != null && _startDefinition != start)
+            { message = "A different Character start definition already owns initial Party configuration."; return false; }
+            message = null;
+            return true;
+        }
+
+        public bool TryConfigureStartDefinition(CharacterStartDefinitionSO start, out string message)
+        {
+            if (!CanConfigureStartDefinition(start, out message)) return false;
+            _startDefinition = start;
+            // An explicitly restored empty Party is state too. Scene bootstrap must not reseed it.
+            if (!_hasRuntimeState) ResetForNewGame();
+            return true;
+        }
 
         public bool Contains(string characterId) => _members.Contains(CharacterIdentity.Normalize(characterId));
 
@@ -82,6 +104,7 @@ namespace Game.NonCombat.Party
 
         public void RestoreSaveData(GameSaveData saveData)
         {
+            _hasRuntimeState = true;
             _members.Clear(); _combatLineup.Clear(); _leaderCharacterId = null;
             if (saveData?.party?.memberIds != null)
                 foreach (string value in saveData.party.memberIds) AddUnique(_members, CharacterIdentity.Normalize(value));
@@ -98,13 +121,20 @@ namespace Game.NonCombat.Party
 
         public void ResetForNewGame()
         {
+            _hasRuntimeState = true;
             _members.Clear();
             _combatLineup.Clear();
             _leaderCharacterId = null;
+            if (_startDefinition != null)
+            {
+                foreach (string id in _startDefinition.InitialMemberIds) AddUnique(_members, CharacterIdentity.Normalize(id));
+                _leaderCharacterId = _startDefinition.InitialLeaderId;
+                foreach (string id in _startDefinition.InitialCombatMemberIds) AddUnique(_combatLineup, CharacterIdentity.Normalize(id));
+            }
             Refreshed?.Invoke();
         }
 
-        private PartyMutationResult Publish(string id) { PartyMutationResult result = Result(id, PartyMutationStatus.Success); Changed?.Invoke(result); return result; }
+        private PartyMutationResult Publish(string id) { _hasRuntimeState = true; PartyMutationResult result = Result(id, PartyMutationStatus.Success); Changed?.Invoke(result); return result; }
         private static PartyMutationResult Result(string id, PartyMutationStatus status) => new(id, status);
         private static bool AddUnique(List<string> list, string id) { if (id == null || list.Contains(id)) return false; list.Add(id); return true; }
     }

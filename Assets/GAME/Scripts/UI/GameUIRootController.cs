@@ -13,6 +13,7 @@ namespace Game.UI
         [SerializeField] private GameObject rewardRoot;
         [SerializeField] private GameObject pauseRoot;
         [SerializeField] private GameObject loadingRoot;
+        [SerializeField] private GameObject characterSkillRoot;
         [SerializeField] private bool allowCompatibilityAutoBinding = true;
 
         private readonly HashSet<string> _warnings = new();
@@ -25,13 +26,15 @@ namespace Game.UI
         public bool RewardVisible => IsVisible(rewardRoot);
         public bool PauseVisible => IsVisible(pauseRoot);
         public bool LoadingVisible => IsVisible(loadingRoot);
+        public bool CharacterSkillVisible => IsVisible(characterSkillRoot);
+        public bool HasCharacterSkillRoot => characterSkillRoot != null;
         public bool UsedCompatibilityAutoBinding { get; private set; }
         public bool HasAllRequiredRoots => titleRoot != null && fieldRoot != null && dialogueRoot != null &&
                                            choiceRoot != null && combatRoot != null && rewardRoot != null &&
                                            pauseRoot != null && loadingRoot != null;
         public bool IsGlobalRoot(GameObject candidate) => candidate != null &&
             (candidate == titleRoot || candidate == fieldRoot || candidate == dialogueRoot || candidate == choiceRoot ||
-             candidate == combatRoot || candidate == rewardRoot || candidate == pauseRoot || candidate == loadingRoot);
+             candidate == combatRoot || candidate == rewardRoot || candidate == pauseRoot || candidate == loadingRoot || candidate == characterSkillRoot);
 
         private void Awake()
         {
@@ -50,6 +53,7 @@ namespace Game.UI
         public void SetRewardVisible(bool visible) => SetVisible(rewardRoot, visible, nameof(rewardRoot));
         public void SetPauseVisible(bool visible) => SetVisible(pauseRoot, visible, nameof(pauseRoot));
         public void SetLoadingVisible(bool visible) => SetVisible(loadingRoot, visible, nameof(loadingRoot));
+        public void SetCharacterSkillVisible(bool visible) => SetVisible(characterSkillRoot, visible, nameof(characterSkillRoot));
 
         public void AutoBindMissingReferences()
         {
@@ -72,8 +76,8 @@ namespace Game.UI
         public bool ValidateRootGraph(bool logWarnings)
         {
             bool valid = true;
-            GameObject[] roots = { titleRoot, fieldRoot, dialogueRoot, choiceRoot, combatRoot, rewardRoot, pauseRoot, loadingRoot };
-            string[] names = { nameof(titleRoot), nameof(fieldRoot), nameof(dialogueRoot), nameof(choiceRoot), nameof(combatRoot), nameof(rewardRoot), nameof(pauseRoot), nameof(loadingRoot) };
+            GameObject[] roots = { titleRoot, fieldRoot, dialogueRoot, choiceRoot, combatRoot, rewardRoot, pauseRoot, loadingRoot, characterSkillRoot };
+            string[] names = { nameof(titleRoot), nameof(fieldRoot), nameof(dialogueRoot), nameof(choiceRoot), nameof(combatRoot), nameof(rewardRoot), nameof(pauseRoot), nameof(loadingRoot), nameof(characterSkillRoot) };
             Dictionary<GameObject, string> assigned = new();
             for (int i = 0; i < roots.Length; i++)
             {

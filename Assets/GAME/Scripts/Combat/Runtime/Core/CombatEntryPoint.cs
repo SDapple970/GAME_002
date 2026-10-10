@@ -38,6 +38,7 @@ namespace Game.Combat.Core
         public CombatStateMachine ActiveStateMachine { get; private set; }
         public CombatFlowOrchestrator FlowOrchestrator => flowOrchestrator;
         public FinalCombatRuntimeConfigSO FinalExchangeRuntimeConfig => finalExchangeRuntimeConfig;
+        public IReadOnlyList<SkillDefinitionSO> RegisteredSkillDefinitions => Array.AsReadOnly(skillDefinitions ?? Array.Empty<SkillDefinitionSO>());
 
         private SkillBook _book;
         private bool _endedRaised;
@@ -285,6 +286,8 @@ namespace Game.Combat.Core
                 return false;
             }
 
+            PersistentSkillCombatLoadoutBridge.ApplyToRequest(request, skillDefinitions, this);
+
             GameStateMachine stateMachine = GameStateMachine.Instance;
             GameFlowController gameFlow = GameFlowController.Instance;
             if (stateMachine == null)
@@ -344,6 +347,7 @@ namespace Game.Combat.Core
             try
             {
                 CombatStartRequest startupRequest = normalized.CreateRequest();
+                EnemyCombatProvenanceBridge.PrepareRequest(startupRequest, this);
                 FieldCombatantFactory factory = new FieldCombatantFactory(_book);
                 (createdSession, createdStateMachine) = CombatBootstrapper.StartCombat(startupRequest, _book, factory);
 
@@ -362,6 +366,15 @@ namespace Game.Combat.Core
                     createdSession,
                     normalized.EncounterOwnerOrNull);
 
+                // FinalExchange can advance from Standoff as soon as its command owners bind.
+                // Establish the policy-required Exploration -> CombatPlanning transition while
+                // the bootstrap phase is still stable, before any binding can request resolving.
+                createdStateMachine.OnPhaseChanged += HandleCombatPhaseChanged;
+                phaseSubscribed = true;
+
+                if (!TrySynchronizeGlobalCombatState(createdStateMachine.Phase))
+                    throw new InvalidOperationException($"Global combat state synchronization failed for phase {createdStateMachine.Phase}.");
+
                 if (flowOrchestrator != null)
                 {
                     flowOrchestrator.BindSession(createdSession);
@@ -375,9 +388,6 @@ namespace Game.Combat.Core
                     throw new InvalidOperationException(
                         "FinalExchange combat requires a bound CombatFlowOrchestrator.");
                 }
-
-                createdStateMachine.OnPhaseChanged += HandleCombatPhaseChanged;
-                phaseSubscribed = true;
 
                 if (createdSession.FlowMode == CombatFlowMode.StandoffClashChain)
                 {
@@ -494,6 +504,7 @@ namespace Game.Combat.Core
                 request.FlowMode,
                 resolvedRuntimeConfig,
                 request.EncounterOwnerOrNull,
+                request,
                 activeAllies,
                 activeEnemies);
 
@@ -742,6 +753,7 @@ namespace Game.Combat.Core
             public readonly CombatFlowMode FlowMode;
             public readonly CombatRuntimeConfig RuntimeConfig;
             public readonly UnityEngine.Object EncounterOwnerOrNull;
+            private readonly CombatStartRequest _sourceRequest;
             public readonly GameObject[] Allies;
             public readonly GameObject[] Enemies;
 
@@ -754,6 +766,7 @@ namespace Game.Combat.Core
                 CombatFlowMode flowMode,
                 CombatRuntimeConfig runtimeConfig,
                 UnityEngine.Object encounterOwnerOrNull,
+                CombatStartRequest sourceRequest,
                 GameObject[] allies,
                 GameObject[] enemies)
             {
@@ -765,6 +778,7 @@ namespace Game.Combat.Core
                 FlowMode = flowMode;
                 RuntimeConfig = runtimeConfig;
                 EncounterOwnerOrNull = encounterOwnerOrNull;
+                _sourceRequest = sourceRequest;
                 Allies = allies;
                 Enemies = enemies;
             }
@@ -782,6 +796,18 @@ namespace Game.Combat.Core
                 request.AllyFieldObjects.AddRange(Allies);
                 request.EnemyFieldObjects.AddRange(Enemies);
                 request.EncounterOwnerOrNull = EncounterOwnerOrNull;
+                request.SetSkillAcquisitionRecipient(_sourceRequest.SkillAcquisitionRecipientCharacterId);
+                for (int i = 0; i < Enemies.Length; i++)
+                    if (_sourceRequest.TryGetEnemySourceSnapshot(Enemies[i], out EnemySourceSnapshot source))
+                        request.SetEnemySourceSnapshot(Enemies[i], source);
+                for (int i = 0; i < Allies.Length; i++)
+                {
+                    GameObject ally = Allies[i];
+                    if (_sourceRequest.TryGetAllyCharacterId(ally, out string characterId))
+                        request.BindAllyCharacter(ally, characterId);
+                    if (_sourceRequest.TryGetAllyLoadoutSnapshot(ally, out CombatSkillLoadoutSnapshot snapshot))
+                        request.SetAllyLoadoutSnapshot(ally, snapshot);
+                }
                 return request;
             }
         }
@@ -905,6 +931,16 @@ namespace Game.Combat.Core
             ActiveSession = null;
             ActiveStateMachine = null;
             _startingCombat = false;
+
+            try
+            {
+                EnemySkillAcquisitionIntegration.ProcessCompletion(result, skillDefinitions, this);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[CombatEntryPoint] Skill acquisition failed for completion '{result.CompletionId}'; " +
+                    $"completion observers will still run. {exception}", this);
+            }
 
             RaiseCombatEnded(result);
         }

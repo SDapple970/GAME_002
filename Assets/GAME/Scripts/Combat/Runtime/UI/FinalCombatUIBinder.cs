@@ -421,8 +421,9 @@ namespace Game.Combat.UI
         private string FormatPosture(string label, ICombatant actor)
         {
             return _session.TryGetCombatState(actor, out CombatantCombatState state)
-                ? $"{label}  자세 {state.CurrentPosture} / {state.MaxPosture}{(actor.IsStunned ? "  기절" : string.Empty)}\n" +
-                  $"Mental {state.CurrentMental} / {state.MaxMental}{(state.IsPanicked ? "  패닉" : string.Empty)}"
+                ? $"{label}  자세 {state.CurrentPosture} / {state.MaxPosture}" +
+                  $"{(actor.IsStunned ? "  기절" : string.Empty)}  정신력 {state.CurrentMental} / {state.MaxMental}" +
+                  $"{(state.IsPanicked ? "  패닉" : string.Empty)}"
                 : $"{label}  자세 -";
         }
 

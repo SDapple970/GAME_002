@@ -14,6 +14,7 @@ using Game.NonCombat.Save;
 using Game.Quest;
 using Game.Reward;
 using Game.Story;
+using Game.Story.Core;
 using Game.Supply;
 using Game.Systems.Persona;
 using Game.World.Exploration;
@@ -984,6 +985,8 @@ namespace Game.Tests.Integration
 
         private static void CleanupObjects()
         {
+            foreach (StoryFlagManager flags in UnityEngine.Object.FindObjectsByType<StoryFlagManager>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                UnityEngine.Object.DestroyImmediate(flags.gameObject);
             foreach (MonoBehaviour item in UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 if (item is SaveLoadService || item is InventoryService || item is CurrencyWallet || item is RewardService || item is StoryProgressManager || item is GameStateMachine || item is GameFlowController || item is InteractionRuntime || item is CharacterProgressionService || item is CalendarService || item is PartyRuntime || item is PersonaStatusManager || item is PersonaSaveAdapter || item is StoryFlagDatabase || item is QuestRuntime || item is QuestCalendarIntegration || item is DaySettlementFlow || item is ExplorationResourceRuntime || item is PersistentConditionRuntime || item is SupplyLoadoutService || item is CombatEncounterGroup)
                     UnityEngine.Object.DestroyImmediate(item.gameObject);

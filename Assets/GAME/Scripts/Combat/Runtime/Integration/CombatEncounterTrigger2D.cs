@@ -7,6 +7,8 @@ using Game.Combat.Model;
 using Game.Combat.Adapters;
 using Game.Core;
 using Game.Player;
+using Game.NonCombat.Party;
+using Game.NonCombat.Progress;
 using Game.NonCombat.Save;
 
 namespace Game.Combat.Integration
@@ -86,23 +88,34 @@ namespace Game.Combat.Integration
         private void OnTriggerEnter2D(Collider2D other)
         {
             LogDebug($"OnTriggerEnter2D other='{GetColliderName(other)}', tag='{GetColliderTag(other)}'.");
+            TryStartContact(other, logUnresolvedPlayer: true);
+        }
 
+        private void OnTriggerStay2D(Collider2D other)
+        {
+            TryStartContact(other, logUnresolvedPlayer: false);
+        }
+
+        // A contact can arrive while another flow is completing its state transition.
+        // Keep the player's presence registered and retry only after the canonical entry
+        // conditions are valid again; Enter alone cannot observe that recovery.
+        private void TryStartContact(Collider2D other, bool logUnresolvedPlayer)
+        {
             GameObject playerRoot = ResolvePlayerRoot(other);
             if (playerRoot == null)
             {
-                LogDebug($"Ignored trigger from '{GetColliderName(other)}' because a player root could not be resolved.");
-                Debug.LogWarning("[CombatEncounterTrigger2D] Player root could not be resolved from the trigger collider. Check PlayerInputController, CombatHpComponent, or Player tag placement.", this);
+                if (logUnresolvedPlayer)
+                {
+                    LogDebug($"Ignored trigger from '{GetColliderName(other)}' because a player root could not be resolved.");
+                    Debug.LogWarning("[CombatEncounterTrigger2D] Player root could not be resolved from the trigger collider. Check PlayerInputController, CombatHpComponent, or Player tag placement.", this);
+                }
                 return;
             }
 
             RuntimeOwner.RegisterPlayerCollider(other);
 
-            if (RuntimeOwner.Lifecycle != EncounterRuntimeLifecycle.Idle ||
-                _requestInProgress ||
-                _lastRequestFrame == Time.frameCount)
+            if (!CanAttemptContactStart())
             {
-                _armed = false;
-                LogDebug($"Ignored trigger from {GetColliderName(other)} because lifecycle is {RuntimeOwner.Lifecycle} or a request is already processing.");
                 return;
             }
 
@@ -110,16 +123,6 @@ namespace Game.Combat.Integration
             {
                 _armed = false;
                 LogDebug($"Encounter reservation rejected in lifecycle {RuntimeOwner.Lifecycle}.");
-                return;
-            }
-
-            if (entryPoint == null)
-                entryPoint = FindFirstObjectByType<CombatEntryPoint>();
-
-            if (entryPoint == null)
-            {
-                RuntimeOwner.ReleaseReservation(this);
-                Debug.LogError("[CombatEncounterTrigger2D] EntryPoint is missing.");
                 return;
             }
 
@@ -152,6 +155,11 @@ namespace Game.Combat.Integration
             }
 
             CombatStartRequest request = CreateEncounterRequest(allies, enemies);
+            if (request == null)
+            {
+                RuntimeOwner.ReleaseReservation(this);
+                return;
+            }
             bool started = false;
             _requestInProgress = true;
             _lastRequestFrame = Time.frameCount;
@@ -192,6 +200,47 @@ namespace Game.Combat.Integration
                     $"Allies={allies.Count}, Enemies={enemies.Count}"
                 );
             }
+        }
+
+        private bool CanAttemptContactStart()
+        {
+            if (RuntimeOwner.Lifecycle != EncounterRuntimeLifecycle.Idle)
+            {
+                _armed = false;
+                LogDebug($"Contact start deferred because lifecycle is {RuntimeOwner.Lifecycle}.");
+                return false;
+            }
+
+            if (_requestInProgress || _lastRequestFrame == Time.frameCount)
+            {
+                LogDebug("Contact start deferred because a request is already processing this frame.");
+                return false;
+            }
+
+            GameStateMachine stateMachine = GameStateMachine.Instance;
+            if (stateMachine == null || !stateMachine.Is(GameState.Exploration))
+            {
+                LogDebug($"Contact start deferred because GameState is {GetCurrentGameStateText()}, not Exploration.");
+                return false;
+            }
+
+            if (entryPoint == null)
+                entryPoint = FindFirstObjectByType<CombatEntryPoint>();
+
+            if (entryPoint == null)
+            {
+                LogDebug("Contact start deferred because CombatEntryPoint is missing.");
+                return false;
+            }
+
+            if (entryPoint.ActiveSession != null || entryPoint.ActiveStateMachine != null)
+            {
+                _armed = false;
+                LogDebug("Contact start deferred because CombatEntryPoint already has an active session or state machine.");
+                return false;
+            }
+
+            return true;
         }
 
         private void OnTriggerExit2D(Collider2D other)
@@ -464,6 +513,13 @@ namespace Game.Combat.Integration
 
             AddValidObjects(request.AllyFieldObjects, allies);
             AddValidObjects(request.EnemyFieldObjects, enemies);
+            if (request.AllyFieldObjects.Count == 1 &&
+                !new CharacterPartyCombatAdapter().TryBindSinglePlayerRequest(request, request.AllyFieldObjects[0],
+                    PartyRuntime.Instance, CharacterProgressionService.Instance, out string partyMessage))
+            {
+                Debug.LogWarning($"[CombatEncounterTrigger2D] Party binding rejected: {partyMessage}", this);
+                return null;
+            }
             request.EncounterOwnerOrNull = RuntimeOwner as UnityEngine.Object;
             return request;
         }

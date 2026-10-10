@@ -75,6 +75,8 @@ namespace Game.Core
             // participants before the completion callback runs.
             yield return null;
 
+            RuntimeBootstrapper.EnsureLoadedSceneCoreServices();
+
             completed?.Invoke(true);
 
             // A scene whose bootstrap root is removed together with duplicate Core

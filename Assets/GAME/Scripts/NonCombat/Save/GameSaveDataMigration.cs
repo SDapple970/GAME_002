@@ -48,6 +48,14 @@ namespace Game.NonCombat.Save
                     MigrateVersion5(data);
                 if (version <= 6)
                     MigrateVersion6(data);
+                if (version <= 7)
+                    MigrateVersion7(data);
+                if (version <= 8)
+                    MigrateVersion8(data);
+                if (version <= 9)
+                    MigrateVersion9(data);
+                if (version <= 10)
+                    MigrateVersion10(data);
             }
             else
             {
@@ -175,6 +183,42 @@ namespace Game.NonCombat.Save
             data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
         }
 
+        private static void MigrateVersion7(GameSaveData data)
+        {
+            data.header ??= new SaveHeaderData();
+            data.characterSkills ??= new CharacterSkillCollectionSaveData();
+            data.characterSkills.characters ??= new List<CharacterAcquiredSkillSaveData>();
+            data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
+        }
+
+        private static void MigrateVersion8(GameSaveData data)
+        {
+            data.header ??= new SaveHeaderData();
+            data.characterSkills ??= new CharacterSkillCollectionSaveData();
+            data.characterSkills.characters ??= new List<CharacterAcquiredSkillSaveData>();
+            for (int i = 0; i < data.characterSkills.characters.Count; i++)
+                if (data.characterSkills.characters[i] != null)
+                    data.characterSkills.characters[i].equippedSkillKeys ??= new List<string>();
+            data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
+        }
+
+        private static void MigrateVersion9(GameSaveData data)
+        {
+            data.header ??= new SaveHeaderData();
+            data.characterSkills ??= new CharacterSkillCollectionSaveData();
+            data.characterSkills.sharedFilmSkillKeys ??= new List<string>();
+            // Preserve per-character data; classification and promotion wait for the production registry.
+            data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
+        }
+
+        private static void MigrateVersion10(GameSaveData data)
+        {
+            data.header ??= new SaveHeaderData();
+            data.story ??= new StorySaveData();
+            data.story.intFlags ??= new List<SaveIntEntry>();
+            data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
+        }
+
         private static GameSaveData FromLegacy(SaveData old)
         {
             GameSaveData data = new();
@@ -192,7 +236,7 @@ namespace Game.NonCombat.Save
                         data.inventory.items.Add(new SaveIntEntry { id = entry.id, value = entry.value });
             if (old.flags != null)
                 foreach (BoolEntry entry in old.flags)
-                    if (entry != null && !string.IsNullOrWhiteSpace(entry.id))
+                    if (entry != null && !string.IsNullOrEmpty(entry.id))
                         data.story.flags.Add(new SaveBoolEntry { id = entry.id, value = entry.value });
             if (old.personaStats != null)
                 foreach (PersonaStatEntry entry in old.personaStats)
@@ -227,9 +271,21 @@ namespace Game.NonCombat.Save
 
             identityRecords += data?.world?.interactions?.Count ?? 0;
             identityRecords += data?.progression?.characters?.Count ?? 0;
+            identityRecords += data?.characterSkills?.sharedFilmSkillKeys?.Count ?? 0;
+            if (data?.characterSkills?.characters != null)
+            {
+                identityRecords += data.characterSkills.characters.Count;
+                for (int i = 0; i < data.characterSkills.characters.Count; i++)
+                {
+                    identityRecords += data.characterSkills.characters[i]?.acquiredSkillKeys?.Count ?? 0;
+                    identityRecords += data.characterSkills.characters[i]?.equippedSkillKeys?.Count ?? 0;
+                }
+            }
             identityRecords += data?.party?.memberIds?.Count ?? 0;
             identityRecords += data?.party?.selectedCombatMemberIds?.Count ?? 0;
             identityRecords += data?.exploration?.conditions?.Count ?? 0;
+            identityRecords += data?.story?.flags?.Count ?? 0;
+            identityRecords += data?.story?.intFlags?.Count ?? 0;
             if (data?.world?.interactions != null)
             {
                 for (int i = 0; i < data.world.interactions.Count; i++)
@@ -251,6 +307,7 @@ namespace Game.NonCombat.Save
             if (data == null) return;
             data.header ??= new SaveHeaderData(); data.quest ??= new QuestSaveData(); data.inventory ??= new InventorySaveData();
             data.currency ??= new CurrencySaveData(); data.party ??= new PartySaveData(); data.progression ??= new ProgressionSaveData();
+            data.characterSkills ??= new CharacterSkillCollectionSaveData();
             data.demoMission ??= new DemoMissionSaveData(); data.futureDaily ??= new FutureDailySaveData(); data.story ??= new StorySaveData();
             data.reward ??= new RewardSaveData(); data.world ??= new WorldSaveData(); data.location ??= new PlayerLocationSaveData();
             data.exploration ??= new ExplorationSaveData();
@@ -260,8 +317,10 @@ namespace Game.NonCombat.Save
             data.currency.gold = Mathf.Max(0, data.currency.gold);
             NormalizeIntEntries(data.inventory.items);
             NormalizeCharacterProgression(data.progression);
+            NormalizeCharacterSkills(data.characterSkills);
             NormalizeParty(data.party);
             NormalizeStrings(data.story.completedEventIds, MaxGeneralIdEntries);
+            NormalizeStoryFlags(data.story);
             NormalizeStrings(data.world.clearedEncounterIds, MaxGeneralIdEntries);
             data.futureDaily.appliedQuestDayCostIds ??= new List<string>();
             NormalizeStrings(data.futureDaily.appliedQuestDayCostIds, MaxGeneralIdEntries);
@@ -270,6 +329,28 @@ namespace Game.NonCombat.Save
             if (data.quest.quests != null)
                 foreach (QuestStateSaveData quest in data.quest.quests)
                     if (quest != null) NormalizeQuestState(quest);
+        }
+
+        private static void NormalizeStoryFlags(StorySaveData story)
+        {
+            story.flags ??= new List<SaveBoolEntry>();
+            story.intFlags ??= new List<SaveIntEntry>();
+            Dictionary<string, bool> bools = new(StringComparer.Ordinal);
+            Dictionary<string, int> ints = new(StringComparer.Ordinal);
+            // Preserve exact keys, explicit false/zero, signed ints and cross-type keys.
+            // Last occurrence wins, as in the existing compatibility Database restore.
+            foreach (SaveBoolEntry entry in story.flags)
+                if (entry != null && !string.IsNullOrEmpty(entry.id)) bools[entry.id] = entry.value;
+            foreach (SaveIntEntry entry in story.intFlags)
+                if (entry != null && !string.IsNullOrEmpty(entry.id)) ints[entry.id] = entry.value;
+            story.flags.Clear();
+            story.intFlags.Clear();
+            foreach (KeyValuePair<string, bool> pair in bools)
+                story.flags.Add(new SaveBoolEntry { id = pair.Key, value = pair.Value });
+            foreach (KeyValuePair<string, int> pair in ints)
+                story.intFlags.Add(new SaveIntEntry { id = pair.Key, value = pair.Value });
+            story.flags.Sort((left, right) => string.CompareOrdinal(left.id, right.id));
+            story.intFlags.Sort((left, right) => string.CompareOrdinal(left.id, right.id));
         }
 
         private static void NormalizeParty(PartySaveData party)
@@ -345,6 +426,74 @@ namespace Game.NonCombat.Save
             progression.characters.Clear();
             progression.characters.AddRange(unique.Values);
             progression.characters.Sort((a, b) => string.CompareOrdinal(a.characterId, b.characterId));
+        }
+
+        private static void NormalizeCharacterSkills(CharacterSkillCollectionSaveData characterSkills)
+        {
+            characterSkills.sharedFilmSkillKeys ??= new List<string>();
+            NormalizeStableIds(characterSkills.sharedFilmSkillKeys);
+            HashSet<string> sharedFilms = new(characterSkills.sharedFilmSkillKeys, StringComparer.Ordinal);
+            characterSkills.characters ??= new List<CharacterAcquiredSkillSaveData>();
+            SortedDictionary<string, SortedSet<string>> acquiredByCharacter = new(StringComparer.Ordinal);
+            foreach (CharacterAcquiredSkillSaveData entry in characterSkills.characters)
+            {
+                string characterId = NormalizeId(entry?.characterId);
+                if (characterId == null)
+                    continue;
+
+                if (!acquiredByCharacter.TryGetValue(characterId, out SortedSet<string> keys))
+                {
+                    keys = new SortedSet<string>(StringComparer.Ordinal);
+                    acquiredByCharacter.Add(characterId, keys);
+                }
+
+                if (entry.acquiredSkillKeys == null)
+                    continue;
+
+                foreach (string rawKey in entry.acquiredSkillKeys)
+                {
+                    string key = NormalizeId(rawKey);
+                    if (key != null)
+                        keys.Add(key);
+                }
+            }
+
+            SortedDictionary<string, List<string>> equippedByCharacter = new(StringComparer.Ordinal);
+            foreach (CharacterAcquiredSkillSaveData entry in characterSkills.characters)
+            {
+                string characterId = NormalizeId(entry?.characterId);
+                if (characterId == null || entry.equippedSkillKeys == null ||
+                    !acquiredByCharacter.TryGetValue(characterId, out SortedSet<string> acquired))
+                {
+                    continue;
+                }
+
+                if (!equippedByCharacter.TryGetValue(characterId, out List<string> equipped))
+                {
+                    equipped = new List<string>();
+                    equippedByCharacter.Add(characterId, equipped);
+                }
+
+                foreach (string rawKey in entry.equippedSkillKeys)
+                {
+                    string key = NormalizeId(rawKey);
+                    if (key != null && (acquired.Contains(key) || sharedFilms.Contains(key)) && !equipped.Contains(key))
+                        equipped.Add(key);
+                }
+            }
+
+            characterSkills.characters.Clear();
+            foreach (KeyValuePair<string, SortedSet<string>> pair in acquiredByCharacter)
+            {
+                characterSkills.characters.Add(new CharacterAcquiredSkillSaveData
+                {
+                    characterId = pair.Key,
+                    acquiredSkillKeys = new List<string>(pair.Value),
+                    equippedSkillKeys = equippedByCharacter.TryGetValue(pair.Key, out List<string> equipped)
+                        ? equipped
+                        : new List<string>()
+                });
+            }
         }
 
         private static void NormalizeQuestState(QuestStateSaveData quest)
