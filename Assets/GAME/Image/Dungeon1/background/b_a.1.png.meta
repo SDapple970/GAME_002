@@ -122,9 +122,9 @@ TextureImporter:
       name: b_a.1_0
       rect:
         serializedVersion: 2
-        x: 47
-        y: 99
-        width: 55
+        x: 31
+        y: 143
+        width: 76
         height: 21
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
@@ -144,9 +144,9 @@ TextureImporter:
       name: b_a.1_1
       rect:
         serializedVersion: 2
-        x: 35
-        y: 68
-        width: 105
+        x: 25
+        y: 102
+        width: 91
         height: 21
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
@@ -166,10 +166,10 @@ TextureImporter:
       name: b_a.1_2
       rect:
         serializedVersion: 2
-        x: 2
-        y: 1
-        width: 161
-        height: 44
+        x: 35
+        y: 68
+        width: 105
+        height: 21
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -180,6 +180,28 @@ TextureImporter:
       bones: []
       spriteID: b1060125d52fab010800000000000000
       internalID: 1205542332897714203
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: b_a.1_3
+      rect:
+        serializedVersion: 2
+        x: 2
+        y: 1
+        width: 161
+        height: 44
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: a03887d5201452e439d0d07e540835af
+      internalID: -1836889806
       vertices: []
       indices: 
       edges: []
@@ -203,6 +225,7 @@ TextureImporter:
       b_a.1_0: 2324862846989901068
       b_a.1_1: 3691241243737025002
       b_a.1_2: 1205542332897714203
+      b_a.1_3: -1836889806
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
