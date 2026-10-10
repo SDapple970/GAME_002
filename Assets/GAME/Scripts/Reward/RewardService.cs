@@ -189,7 +189,8 @@ namespace Game.Reward
                 RewardSourceType.Combat,
                 resolvedSourceId,
                 result.TotalGold,
-                result.TotalExp);
+                result.TotalExp,
+                progressionTargetId: result.ProgressionTargetCharacterId);
         }
 
         internal void ResetCombatLedgerForTests()

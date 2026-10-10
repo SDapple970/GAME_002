@@ -1526,6 +1526,7 @@ namespace Game.Tests.Integration
             CreateCompletionFlow(runtime, service, 0, false);
 
             CombatEncounterGroup target = CreateComponent<CombatEncounterGroup>("ValidationEncounter");
+            SetField(target, "_activeCompletionId", "combat-validation-01");
             CombatQuestObjectivePublisher publisher = CreateCombatQuestPublisher(
                 target,
                 "validation.production.npc.quest",
@@ -1809,6 +1810,7 @@ namespace Game.Tests.Integration
             ForceState(state, GameState.CombatPlanning);
 
             CombatEncounterGroup target = CreateComponent<CombatEncounterGroup>("ValidationEncounter");
+            SetField(target, "_activeCompletionId", "combat-validation-01");
             CombatQuestObjectivePublisher publisher = CreateCombatQuestPublisher(
                 target,
                 definition.QuestId,

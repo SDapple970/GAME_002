@@ -13,6 +13,26 @@ namespace Game.Combat.Model
 
         private readonly Dictionary<ICombatant, CombatantCombatState> _combatStates =
             new Dictionary<ICombatant, CombatantCombatState>(CombatantReferenceComparer.Instance);
+        private readonly Dictionary<ICombatant, EnemySourceSnapshot> _enemySources =
+            new(CombatantReferenceComparer.Instance);
+
+        public string SkillAcquisitionRecipientCharacterId { get; internal set; }
+        public string ProgressionTargetCharacterId { get; internal set; }
+        public bool IsPartySkillAcquisitionEligible { get; internal set; }
+
+        internal void RegisterEnemySource(ICombatant enemy, EnemySourceSnapshot source)
+        {
+            if (enemy != null && enemy.Side == Side.Enemies && source?.SourceKey != null)
+                _enemySources.TryAdd(enemy, source);
+        }
+
+        public bool TryGetEnemySource(ICombatant enemy, out EnemySourceSnapshot source)
+        {
+            if (enemy != null && _enemySources.TryGetValue(enemy, out source))
+                return true;
+            source = null;
+            return false;
+        }
 
         public InspirationPool Inspiration { get; }
         public CombatEnvironment Env { get; }

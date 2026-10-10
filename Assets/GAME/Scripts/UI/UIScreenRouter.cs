@@ -18,6 +18,31 @@ namespace Game.UI
         private bool _ambiguousStateMachineWarned;
         private GameState? _lastState;
         private GameState? _lastContentState;
+        private bool _characterSkillRequested;
+
+        public bool CanOpenCharacterSkills => isActiveAndEnabled && uiRoot != null && uiRoot.HasCharacterSkillRoot &&
+            stateMachine != null && stateMachine.Current == GameState.Exploration && GameFlowController.Instance != null;
+
+        public void OpenCharacterSkills() => TryOpenCharacterSkills();
+        public void CloseCharacterSkills() => TryCloseCharacterSkills();
+
+        public bool TryOpenCharacterSkills()
+        {
+            ResolveAndSubscribe();
+            if (!CanOpenCharacterSkills) return false;
+            _characterSkillRequested = true;
+            if (GameFlowController.Instance.RequestState(GameState.UIOnly, nameof(OpenCharacterSkills))) return true;
+            _characterSkillRequested = false;
+            ApplyCurrentRoute();
+            return false;
+        }
+
+        public bool TryCloseCharacterSkills()
+        {
+            if (!_characterSkillRequested || stateMachine == null || stateMachine.Current != GameState.UIOnly ||
+                GameFlowController.Instance == null) return false;
+            return GameFlowController.Instance.RequestState(GameState.Exploration, nameof(CloseCharacterSkills));
+        }
 
         internal GameState? CurrentRoutedState => _lastState;
         internal GameState? CurrentContentState => _lastContentState;
@@ -46,6 +71,8 @@ namespace Game.UI
         {
             SceneManager.sceneLoaded -= HandleSceneLoaded;
             UnsubscribeFromStateMachine();
+            _characterSkillRequested = false;
+            if (uiRoot != null) uiRoot.SetCharacterSkillVisible(false);
         }
 
         public void ApplyCurrentRoute()
@@ -82,8 +109,12 @@ namespace Game.UI
                 ? ResolvePausedContentState()
                 : state;
 
+            // Other UIOnly consumers keep their existing route. Pause can resume this request.
+            if (contentState != GameState.UIOnly) _characterSkillRequested = false;
+
             ApplyContentRoute(contentState);
             uiRoot.SetPauseVisible(state == GameState.Paused);
+            uiRoot.SetCharacterSkillVisible(state == GameState.UIOnly && _characterSkillRequested);
 
             bool changed = _lastState != state || _lastContentState != contentState;
             _lastState = state;

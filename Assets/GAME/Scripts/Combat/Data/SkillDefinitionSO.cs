@@ -12,6 +12,18 @@ namespace Game.Combat.Data
         public int skillId;
         public string displayName;
 
+        [Header("Persistent Save Identity")]
+        [SerializeField] private string persistentKey;
+
+        public string PersistentKey => persistentKey;
+
+        [Header("Persistent Ownership Role")]
+        [SerializeField] private SkillOwnershipCategory ownershipCategory;
+        [SerializeField] private string uniqueOwnerCharacterId;
+
+        public SkillOwnershipCategory OwnershipCategory => ownershipCategory;
+        public string UniqueOwnerCharacterId => uniqueOwnerCharacterId;
+
         [Header("Costs / Tags")]
         public int inspirationCost;
         [SerializeField] private int mpCost;

@@ -146,7 +146,7 @@ namespace Game.Tests.Integration
             foreach (CurrencyWallet value in Resources.FindObjectsOfTypeAll<CurrencyWallet>()) if (value != null) UnityEngine.Object.DestroyImmediate(value.gameObject);
             foreach (InventoryService value in Resources.FindObjectsOfTypeAll<InventoryService>()) if (value != null) UnityEngine.Object.DestroyImmediate(value.gameObject);
             foreach (CharacterProgressionService value in Resources.FindObjectsOfTypeAll<CharacterProgressionService>()) if (value != null) UnityEngine.Object.DestroyImmediate(value.gameObject);
-            foreach (CharacterProgressionDefinitionSO value in Resources.FindObjectsOfTypeAll<CharacterProgressionDefinitionSO>()) UnityEngine.Object.DestroyImmediate(value);
+            foreach (CharacterProgressionDefinitionSO value in Resources.FindObjectsOfTypeAll<CharacterProgressionDefinitionSO>()) if (!EditorUtility.IsPersistent(value)) UnityEngine.Object.DestroyImmediate(value);
             foreach (ItemDefinitionSO value in Resources.FindObjectsOfTypeAll<ItemDefinitionSO>()) UnityEngine.Object.DestroyImmediate(value);
             foreach (ItemCatalogSO value in Resources.FindObjectsOfTypeAll<ItemCatalogSO>()) UnityEngine.Object.DestroyImmediate(value);
         }

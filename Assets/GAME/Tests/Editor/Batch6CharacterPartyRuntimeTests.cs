@@ -70,7 +70,7 @@ namespace Game.Tests.Integration
             List<string> members = Enumerable.Range(0, 300).Select(i => $"c{i:000}").ToList();
             string json = "{\"header\":{\"formatId\":\"GAME_002\",\"schemaVersion\":6},\"party\":{\"memberIds\":[\"" + string.Join("\",\"", members) + "\"]}}";
             GameSaveData data = Migrate(json);
-            Assert.That(data.header.schemaVersion, Is.EqualTo(7)); Assert.That(data.party.memberIds, Has.Count.EqualTo(300));
+            Assert.That(data.header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion)); Assert.That(data.party.memberIds, Has.Count.EqualTo(300));
             Assert.That(data.party.leaderCharacterId, Is.EqualTo("c000")); Assert.That(data.party.selectedCombatMemberIds, Has.Count.EqualTo(300));
         }
 

@@ -14,6 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Data.SkillDefinitionSO
   skillId: 11
   displayName: "\uCC9C\uC0AC \uACF5\uACA9"
+  persistentKey: skill.production.0011
   inspirationCost: 0
   mpCost: 0
   tag: 0

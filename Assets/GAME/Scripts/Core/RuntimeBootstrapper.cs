@@ -9,6 +9,7 @@ using Game.NonCombat.Progress;
 using Game.Systems.Persona;
 using Game.NonCombat.Party;
 using Game.World.Exploration;
+using Game.Story.Core;
 
 namespace Game.Core
 {
@@ -25,12 +26,15 @@ namespace Game.Core
         [SerializeField] private bool applyInitialStateOnStart = true;
         [SerializeField] private bool createMissingCoreServices = true;
         [SerializeField] private bool logWarnings = true;
+        [Tooltip("Assign only approved character/initial Party data. Empty retains existing scene and Test Hero compatibility.")]
+        [SerializeField] private CharacterStartDefinitionSO characterStartDefinition;
 
         private int _initialStateAppliedSceneHandle = int.MinValue;
 
         /// <summary>
         /// Raised after a runtime bootstrapper has installed the scene's core/UI services and
-        /// applied that scene's authored initial GameState.
+        /// acknowledged that scene's initial-state policy. During save restoration,
+        /// readiness is published while the restore coordinator retains Loading.
         /// </summary>
         public static event Action<Scene> OnInitialStateApplied;
 
@@ -43,6 +47,16 @@ namespace Game.Core
         {
             if (applyInitialStateOnStart)
                 ApplyInitialStateForActiveScene();
+        }
+
+        internal static void EnsureLoadedSceneCoreServices()
+        {
+            // Duplicate singleton components can destroy an authored bootstrap root and its
+            // child services at end of frame. Recover through this owner before save restore.
+            RuntimeBootstrapper bootstrapper = FindFirstObjectByType<RuntimeBootstrapper>();
+            if (bootstrapper == null)
+                bootstrapper = new GameObject("RuntimeBootstrapper").AddComponent<RuntimeBootstrapper>();
+            bootstrapper.BootstrapCoreServices(bootstrapper.createMissingCoreServices, bootstrapper.logWarnings, false);
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -75,13 +89,17 @@ namespace Game.Core
             FindOrCreate<global::GameInputInstaller>("GameInputInstaller", createMissing, warn);
             FindOrCreate<GameFlowController>("GameFlowController", createMissing, warn);
             FindOrCreate<SceneFlowController>("SceneFlowController", createMissing, warn);
+            FindOrCreate<StoryFlagManager>("StoryFlagManager", createMissing, warn);
             FindOrCreate<CurrencyWallet>("CurrencyWallet", createMissing, warn);
             FindOrCreate<InventoryService>("InventoryService", createMissing, warn);
-            FindOrCreate<PartyRuntime>("PartyRuntime", createMissing, warn);
+            PartyRuntime party = FindOrCreate<PartyRuntime>("PartyRuntime", createMissing, warn);
             FindOrCreate<ExplorationResourceRuntime>("ExplorationResourceRuntime", createMissing, warn);
             FindOrCreate<PersistentConditionRuntime>("PersistentConditionRuntime", createMissing, warn);
             FindOrCreate<FeastService>("FeastService", createMissing, warn);
-            FindOrCreate<CharacterProgressionService>("CharacterProgressionService", createMissing, warn);
+            CharacterProgressionService progression = FindOrCreate<CharacterProgressionService>("CharacterProgressionService", createMissing, warn);
+            ConfigureCharacterServices(PartyRuntime.Instance != null ? PartyRuntime.Instance : party,
+                CharacterProgressionService.Instance != null ? CharacterProgressionService.Instance : progression, warn);
+            FindOrCreate<CharacterSkillSaveParticipant>("CharacterSkillSaveParticipant", createMissing, warn);
             FindOrCreate<PersonaStatusManager>("PersonaStatusManager", createMissing, warn);
             FindOrCreate<PersonaSaveAdapter>("PersonaSaveAdapter", createMissing, warn);
             InteractionRuntime interactionRuntime = FindOrCreate<InteractionRuntime>(
@@ -97,6 +115,20 @@ namespace Game.Core
             FindOrCreate<RewardService>("RewardService", createMissing, warn);
             FindOrCreate<GameUIRootController>("GameUIRootController", createMissing, warn);
             FindOrCreate<UIScreenRouter>("UIScreenRouter", createMissing, warn);
+        }
+
+        private void ConfigureCharacterServices(PartyRuntime party, CharacterProgressionService progression, bool warn)
+        {
+            if (characterStartDefinition == null || party == null || progression == null) return;
+            // Validate both owners before either adopts authored configuration. Bootstrap never resets a session.
+            if (!progression.CanConfigureStartDefinition(characterStartDefinition, out string message) ||
+                !party.CanConfigureStartDefinition(characterStartDefinition, out message))
+            {
+                if (warn) Debug.LogWarning($"[RuntimeBootstrapper] Character startup configuration rejected: {message}", this);
+                return;
+            }
+            progression.TryConfigureStartDefinition(characterStartDefinition, out _);
+            party.TryConfigureStartDefinition(characterStartDefinition, out _);
         }
 
         private GameState ResolveInitialState()
@@ -161,7 +193,12 @@ namespace Game.Core
             if (!activeScene.IsValid() || HasAppliedInitialStateFor(activeScene))
                 return;
 
-            ApplyInitialState(ResolveInitialState());
+            SaveLoadService save = SaveLoadService.Instance;
+            bool restoring = save != null && (save.CurrentOperationState == SaveLoadService.OperationState.WaitingForScene ||
+                                             save.CurrentOperationState == SaveLoadService.OperationState.Restoring);
+            // Publish scene readiness for adapters that defer until OnLoadCompleted, while
+            // the restore coordinator alone releases Loading after participants restore.
+            if (!restoring) ApplyInitialState(ResolveInitialState());
             _initialStateAppliedSceneHandle = activeScene.handle;
             OnInitialStateApplied?.Invoke(activeScene);
         }

@@ -12,6 +12,7 @@ namespace Game.NonCombat.Save
         public CurrencySaveData currency = new();
         public PartySaveData party = new();
         public ProgressionSaveData progression = new();
+        public CharacterSkillCollectionSaveData characterSkills = new();
         public DemoMissionSaveData demoMission = new();
         public FutureDailySaveData futureDaily = new();
         public StorySaveData story = new();
@@ -115,6 +116,21 @@ namespace Game.NonCombat.Save
     }
 
     [Serializable]
+    public sealed class CharacterSkillCollectionSaveData
+    {
+        public List<string> sharedFilmSkillKeys = new();
+        public List<CharacterAcquiredSkillSaveData> characters = new();
+    }
+
+    [Serializable]
+    public sealed class CharacterAcquiredSkillSaveData
+    {
+        public string characterId;
+        public List<string> acquiredSkillKeys = new();
+        public List<string> equippedSkillKeys = new();
+    }
+
+    [Serializable]
     public sealed class PersonaStatSaveData
     {
         public string stat;
@@ -159,7 +175,7 @@ namespace Game.NonCombat.Save
     public static class GameSaveDataFormat
     {
         public const string FormatId = "GAME_002";
-        public const int CurrentSchemaVersion = 7;
+        public const int CurrentSchemaVersion = 11;
     }
 
     [Serializable]
@@ -169,6 +185,7 @@ namespace Game.NonCombat.Save
         public int mainProgress;
         public List<string> completedEventIds = new();
         public List<SaveBoolEntry> flags = new();
+        public List<SaveIntEntry> intFlags = new();
     }
 
     [Serializable]

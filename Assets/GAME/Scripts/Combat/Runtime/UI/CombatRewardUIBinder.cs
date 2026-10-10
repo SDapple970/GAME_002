@@ -215,6 +215,9 @@ namespace Game.Combat.UI
             if (!_ownsEntryPoint || result == null)
                 return;
 
+            // Scene-load duplicate cleanup may replace a formerly serialized service owner.
+            AutoBindReferences();
+
             RewardGrantRequest request = RewardService.CreateCombatRewardRequest(result, null);
             string completionId = request.SourceId;
 

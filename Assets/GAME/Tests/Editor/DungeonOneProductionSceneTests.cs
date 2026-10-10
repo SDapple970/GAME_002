@@ -54,7 +54,15 @@ namespace Game.Tests.Integration
 
             Assert.That(scene.IsValid(), Is.True);
             Assert.That(scene.path, Is.EqualTo(DungeonOneProductionMigrationUtility.ProductionScenePath));
+            const string dialoguePath = "Assets/GAME/Data/Interaction/DungeonOneFirstTalkDialogue.asset";
+            const string interactionPath = "Assets/GAME/Data/Interaction/DungeonOneFirstTalkStoryInteraction.asset";
+            string dialogueBefore = System.IO.File.ReadAllText(dialoguePath);
+            string interactionBefore = System.IO.File.ReadAllText(interactionPath);
             Assert.DoesNotThrow(DungeonOneProductionMigrationUtility.ValidateProductionScene);
+            Assert.That(System.IO.File.ReadAllText(dialoguePath), Is.EqualTo(dialogueBefore),
+                "Scene validation must not re-author the persistent FirstTalk definition.");
+            Assert.That(System.IO.File.ReadAllText(interactionPath), Is.EqualTo(interactionBefore),
+                "Scene validation must not re-author the persistent NPC interaction.");
 
             string[] roots = scene.GetRootGameObjects().Select(item => item.name).ToArray();
             Assert.That(roots, Does.Contain("Runtime"));
@@ -485,7 +493,7 @@ namespace Game.Tests.Integration
 
         [Test]
         [Category("D108Gate")]
-        public void ProductionDungeonOne_NpcFirstTalkUsesChoiceFreeLegacyContentThroughStoryContract()
+        public void ProductionDungeonOne_NpcFirstTalkPreservesLegacyOpeningThroughTimedChoiceStoryContract()
         {
             StoryInteractionEventSO interactionEvent = AssetDatabase.LoadAssetAtPath<StoryInteractionEventSO>(
                 "Assets/GAME/Data/Interaction/DungeonOneFirstTalkStoryInteraction.asset");
@@ -497,23 +505,33 @@ namespace Game.Tests.Integration
             Assert.That(interactionEvent.EventDefinition, Is.SameAs(dialogue));
             Assert.That(interactionEvent.ActionId, Is.EqualTo("dungeon1.npc.first-talk.interact"));
             Assert.That(dialogue.EventId, Is.EqualTo("dungeon1.npc.first-talk.story"));
-            Assert.That(dialogue.Nodes, Has.Count.EqualTo(1));
+            Assert.That(dialogue.Nodes, Has.Count.EqualTo(3));
 
             StoryNode firstTalk = dialogue.Nodes[0];
             Assert.That(firstTalk.NodeId, Is.EqualTo("first-talk"));
             Assert.That(firstTalk.SpeakerName, Is.EqualTo("NPC"));
             Assert.That(firstTalk.Body, Is.EqualTo("여기 ㅈㄴ 위험한 곳임. 들어갈거임?"));
             Assert.That(firstTalk.Choices, Is.Empty);
-            Assert.That(firstTalk.Effects, Has.Count.EqualTo(1));
-            Assert.That(firstTalk.EndEvent, Is.True);
+            Assert.That(firstTalk.Effects, Is.Empty);
+            Assert.That(firstTalk.EndEvent, Is.False);
+            StoryNode choice = dialogue.GetNode(firstTalk.NextNodeId);
+            Assert.That(choice, Is.Not.Null);
+            Assert.That(choice.Choices, Has.Count.EqualTo(2));
+            Assert.That(choice.UseTimedChoices, Is.True);
+            StoryNode terminal = dialogue.GetNode(choice.TimeoutNodeId);
+            Assert.That(terminal, Is.Not.Null);
+            Assert.That(choice.Choices.All(branch => branch.NextNodeId == terminal.NodeId), Is.True);
+            Assert.That(terminal.Effects, Has.Count.EqualTo(1));
+            Assert.That(terminal.EndEvent, Is.True);
 
             SerializedProperty effect = new SerializedObject(dialogue)
-                .FindProperty("nodes").GetArrayElementAtIndex(0)
+                .FindProperty("nodes").GetArrayElementAtIndex(2)
                 .FindPropertyRelative("effects").GetArrayElementAtIndex(0);
             Assert.That(effect.FindPropertyRelative("type").intValue, Is.EqualTo((int)StoryEffectType.PublishQuestEvent));
             Assert.That(effect.FindPropertyRelative("missionId").stringValue, Is.EqualTo("ch01.find-first-npc"));
             Assert.That(effect.FindPropertyRelative("objectiveId").stringValue, Is.EqualTo("talk_first_npc"));
             Assert.That(effect.FindPropertyRelative("questEventType").intValue, Is.EqualTo((int)QuestEventType.Talk));
+            Assert.That(effect.FindPropertyRelative("questTargetId").stringValue, Is.EqualTo("dungeon1.npc.first-talk"));
             Assert.That(effect.FindPropertyRelative("intValue").intValue, Is.EqualTo(1));
         }
 
@@ -921,8 +939,12 @@ namespace Game.Tests.Integration
                 InvokeAwake(bootstrapper);
 
                 SceneStartStoryEventAdapter adapter = owner.AddComponent<SceneStartStoryEventAdapter>();
+                InvokeIfPresent(adapter, "OnEnable");
                 Assert.That(CountBootstrapSubscriptions(adapter), Is.EqualTo(1));
 
+                InvokeIfPresent(adapter, "OnDestroy");
+                Assert.That(CountBootstrapSubscriptions(adapter), Is.Zero,
+                    "OnDestroy must remove the listener even without a preceding OnDisable.");
                 Object.DestroyImmediate(owner);
 
                 Assert.That(CountBootstrapSubscriptions(adapter), Is.Zero,
@@ -932,7 +954,10 @@ namespace Game.Tests.Integration
             finally
             {
                 if (owner != null)
+                {
+                    StopSceneStartAdapter(owner.GetComponent<SceneStartStoryEventAdapter>());
                     Object.DestroyImmediate(owner);
+                }
                 Object.DestroyImmediate(bootstrapOwner);
                 Object.DestroyImmediate(core);
             }
@@ -946,14 +971,17 @@ namespace Game.Tests.Integration
             try
             {
                 SceneStartStoryEventAdapter adapter = owner.AddComponent<SceneStartStoryEventAdapter>();
+                InvokeIfPresent(adapter, "OnEnable");
                 Assert.That(CountBootstrapSubscriptions(adapter), Is.EqualTo(1));
 
                 adapter.enabled = false;
+                InvokeIfPresent(adapter, "OnDisable");
 
                 Assert.That(CountBootstrapSubscriptions(adapter), Is.Zero);
             }
             finally
             {
+                StopSceneStartAdapter(owner.GetComponent<SceneStartStoryEventAdapter>());
                 Object.DestroyImmediate(owner);
             }
         }
@@ -966,13 +994,18 @@ namespace Game.Tests.Integration
             try
             {
                 SceneStartStoryEventAdapter adapter = owner.AddComponent<SceneStartStoryEventAdapter>();
+                InvokeIfPresent(adapter, "OnEnable");
                 adapter.enabled = false;
+                InvokeIfPresent(adapter, "OnDisable");
+                Assert.That(CountBootstrapSubscriptions(adapter), Is.Zero);
                 adapter.enabled = true;
+                InvokeIfPresent(adapter, "OnEnable");
 
                 Assert.That(CountBootstrapSubscriptions(adapter), Is.EqualTo(1));
             }
             finally
             {
+                StopSceneStartAdapter(owner.GetComponent<SceneStartStoryEventAdapter>());
                 Object.DestroyImmediate(owner);
             }
         }
@@ -1029,19 +1062,23 @@ namespace Game.Tests.Integration
         {
             GameObject firstOwner = new("D105_FirstAdapter");
             SceneStartStoryEventAdapter first = firstOwner.AddComponent<SceneStartStoryEventAdapter>();
+            InvokeIfPresent(first, "OnEnable");
             Assert.That(CountBootstrapSubscriptions(first), Is.EqualTo(1));
 
+            StopSceneStartAdapter(first);
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             GameObject replacementOwner = new("D105_ReplacementAdapter");
             try
             {
                 SceneStartStoryEventAdapter replacement = replacementOwner.AddComponent<SceneStartStoryEventAdapter>();
+                InvokeIfPresent(replacement, "OnEnable");
                 Assert.That(CountBootstrapSubscriptions(first), Is.Zero);
                 Assert.That(CountBootstrapSubscriptions(replacement), Is.EqualTo(1));
             }
             finally
             {
+                StopSceneStartAdapter(replacementOwner.GetComponent<SceneStartStoryEventAdapter>());
                 Object.DestroyImmediate(replacementOwner);
             }
         }
@@ -1352,6 +1389,17 @@ namespace Game.Tests.Integration
                 BindingFlags.Static | BindingFlags.NonPublic);
             System.Delegate callbacks = listeners?.GetValue(null) as System.Delegate;
             return callbacks?.GetInvocationList().Count(callback => ReferenceEquals(callback.Target, adapter)) ?? 0;
+        }
+
+        private static void StopSceneStartAdapter(SceneStartStoryEventAdapter adapter)
+        {
+            // Non-ExecuteAlways behaviours do not receive runtime lifecycle callbacks
+            // automatically in EditMode. Drive both idempotent terminal paths explicitly.
+            if (adapter == null)
+                return;
+
+            InvokeIfPresent(adapter, "OnDisable");
+            InvokeIfPresent(adapter, "OnDestroy");
         }
 
         private static GameObject CreatePlayerAt(Vector3 position)

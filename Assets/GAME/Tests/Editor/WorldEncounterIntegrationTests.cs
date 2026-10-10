@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Reflection;
 using Game.Combat.Adapters;
 using Game.Combat.Core;
+using Game.Combat.Data;
+using Game.Combat.Effects;
 using Game.Combat.Integration;
 using Game.Combat.Model;
 using Game.Core;
@@ -11,6 +13,7 @@ using Game.Enemies;
 using Game.NonCombat.Save;
 using Game.Player;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
@@ -367,6 +370,71 @@ namespace Game.Tests.Combat
             trigger.TryReserve(_entry);
             trigger.ReleaseReservation(_entry);
             Assert.That(trigger.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.Idle));
+        }
+
+        [Test]
+        public void Contact_ReattemptsOnStayAfterTransientNonExplorationState_AndStartsOnce()
+        {
+            CombatEncounterGroup group = CreateGroup();
+            CombatEncounterTrigger2D trigger = CreateTrigger("Contact", group.transform);
+            SetField(trigger, "encounterGroup", group);
+            SetField(trigger, "entryPoint", _entry);
+            SetField(group, "useEncounterFlowMode", true);
+            SetField(group, "encounterFlowMode", CombatFlowMode.StandoffClashChain);
+            CreateCombatant("Enemy", 10, group.transform);
+            ConfigureFinalExchangeEntry();
+
+            GameObject player = CreateCombatant("Player", 10);
+            player.tag = "Player";
+            Collider2D playerCollider = player.AddComponent<BoxCollider2D>();
+
+            SetAutoProperty(_stateMachine, "Current", GameState.Dialogue);
+            Invoke(trigger, "OnTriggerEnter2D", playerCollider);
+
+            Assert.That(_entry.ActiveSession, Is.Null);
+            Assert.That(group.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.Idle));
+            Assert.That(group.HasPlayerPresence, Is.True);
+
+            SetAutoProperty(_stateMachine, "Current", GameState.Exploration);
+            Invoke(trigger, "OnTriggerStay2D", playerCollider);
+
+            CombatSession session = _entry.ActiveSession;
+            Assert.That(session, Is.Not.Null);
+            Assert.That(session.StartReason, Is.EqualTo(StartReason.PlayerGotHit));
+            Assert.That(session.InitiativeSide, Is.EqualTo(Side.Enemies));
+            Assert.That(session.FlowMode, Is.EqualTo(CombatFlowMode.StandoffClashChain));
+            Assert.That(_entry.ActiveStateMachine, Is.Not.Null);
+            Assert.That(_entry.ActiveStateMachine.Phase, Is.EqualTo(Phase.Standoff));
+            Assert.That(_stateMachine.Current, Is.EqualTo(GameState.CombatPlanning));
+            Assert.That(group.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.ActiveCombat));
+
+            Invoke(trigger, "OnTriggerStay2D", playerCollider);
+            Assert.That(_entry.ActiveSession, Is.SameAs(session));
+            Assert.That(group.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.ActiveCombat));
+        }
+
+        [Test]
+        public void ClearedContact_DoesNotRestartFromEnterOrStay()
+        {
+            CombatEncounterGroup group = CreateGroup();
+            CombatEncounterTrigger2D trigger = CreateTrigger("Contact", group.transform);
+            SetField(trigger, "encounterGroup", group);
+            SetField(trigger, "entryPoint", _entry);
+            CreateCombatant("Enemy", 10, group.transform);
+
+            GameObject player = CreateCombatant("Player", 10);
+            player.tag = "Player";
+            Collider2D playerCollider = player.AddComponent<BoxCollider2D>();
+            group.AdoptAcceptedSession("cleared");
+            CombatResult result = Result("cleared", CombatEndReason.Victory);
+            Assert.That(group.TryBeginOutcome(result), Is.True);
+            group.CompleteOutcome(result, hasActiveEnemyMembers: false);
+
+            Invoke(trigger, "OnTriggerEnter2D", playerCollider);
+            Invoke(trigger, "OnTriggerStay2D", playerCollider);
+
+            Assert.That(group.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.Cleared));
+            Assert.That(_entry.ActiveSession, Is.Null);
         }
 
         [Test]
@@ -1159,6 +1227,21 @@ namespace Game.Tests.Combat
         {
             GameObject go = CreateGameObject(name, parent, typeof(BoxCollider2D));
             return go.AddComponent<CombatEncounterTrigger2D>();
+        }
+
+        private void ConfigureFinalExchangeEntry()
+        {
+            FinalCombatRuntimeConfigSO config = AssetDatabase.LoadAssetAtPath<FinalCombatRuntimeConfigSO>(
+                "Assets/GAME/Data/Combat/Runtime/FinalCombatRuntimeConfig_V1.asset");
+            Assert.That(config, Is.Not.Null);
+
+            CombatFlowOrchestrator orchestrator = _entry.gameObject.AddComponent<CombatFlowOrchestrator>();
+            CombatDirector director = _entry.gameObject.AddComponent<CombatDirector>();
+            SetField(orchestrator, "entryPoint", _entry);
+            SetField(director, "entryPoint", _entry);
+            SetField(_entry, "flowOrchestrator", orchestrator);
+            SetField(_entry, "director", director);
+            SetField(_entry, "finalExchangeRuntimeConfig", config);
         }
 
         private Collider2D CreateCollider(string name)

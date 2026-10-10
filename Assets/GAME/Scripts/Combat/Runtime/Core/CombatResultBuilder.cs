@@ -1,5 +1,6 @@
 // GAME_002/Assets/GAME/Scripts/Combat/Core/CombatResultBuilder.cs
 using Game.Combat.Model;
+using System.Collections.Generic;
 
 namespace Game.Combat.Core
 {
@@ -10,6 +11,9 @@ namespace Game.Combat.Core
             var result = new CombatResult
             {
                 CompletionId = session != null ? session.CompletionId : null,
+                SkillAcquisitionRecipientCharacterId = session?.SkillAcquisitionRecipientCharacterId,
+                ProgressionTargetCharacterId = session?.ProgressionTargetCharacterId,
+                IsPartySkillAcquisitionEligible = session?.IsPartySkillAcquisitionEligible ?? false,
                 EndReason = endReason,
                 IsWin = endReason == CombatEndReason.Victory,
                 EscapeSucceeded = endReason == CombatEndReason.Escape,
@@ -27,6 +31,7 @@ namespace Game.Combat.Core
                 result.TotalGold = 50;
             }
 
+            List<CombatDefeatedEnemyRecord> defeatedSources = new();
             if (session.Enemies != null)
             {
                 for (int i = 0; i < session.Enemies.Count; i++)
@@ -37,7 +42,11 @@ namespace Game.Combat.Core
                     int remainingHp = GetRemainingHp(session, enemy);
                     result.RemainingHpByCombatantId[enemy.Id.Value] = remainingHp;
                     if (remainingHp <= 0)
+                    {
                         result.DefeatedEnemyIds.Add(enemy.Id.Value);
+                        if (session.TryGetEnemySource(enemy, out EnemySourceSnapshot source))
+                            defeatedSources.Add(new CombatDefeatedEnemyRecord(enemy.Id.Value, source));
+                    }
                 }
             }
 
@@ -55,6 +64,7 @@ namespace Game.Combat.Core
                 }
             }
 
+            result.DefeatedEnemySources = defeatedSources.AsReadOnly();
             return result;
         }
 

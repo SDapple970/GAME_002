@@ -10,6 +10,11 @@ namespace Game.Combat.Adapters
     /// </summary>
     public sealed class CombatStartRequest
     {
+        private readonly Dictionary<GameObject, string> _allyCharacterIds = new();
+        private readonly Dictionary<GameObject, CombatSkillLoadoutSnapshot> _allyLoadouts = new();
+        private readonly Dictionary<GameObject, EnemySourceSnapshot> _enemySources = new();
+        public string SkillAcquisitionRecipientCharacterId { get; private set; }
+        public bool IsPartySkillAcquisitionEligible { get; internal set; }
         public readonly StartReason Reason;
         public readonly Side InitiativeSide;
         public readonly int InspirationMax;
@@ -79,6 +84,67 @@ namespace Game.Combat.Adapters
                 ? flowMode
                 : CombatFlowMode.LegacyPlanning;
             RuntimeConfig = runtimeConfig;
+        }
+
+        /// <summary>Associates an ally field object with its persistent party identity before combat integration resolves skills.</summary>
+        public void BindAllyCharacter(GameObject fieldObject, string characterId)
+        {
+            if (fieldObject == null || string.IsNullOrWhiteSpace(characterId))
+                return;
+
+            _allyCharacterIds[fieldObject] = characterId.Trim();
+        }
+
+        public bool TryGetAllyCharacterId(GameObject fieldObject, out string characterId)
+        {
+            if (fieldObject != null && _allyCharacterIds.TryGetValue(fieldObject, out characterId))
+                return true;
+
+            characterId = null;
+            return false;
+        }
+
+        /// <summary>Stores an already-resolved immutable loadout; no persistent state is carried into combat core.</summary>
+        public void SetAllyLoadoutSnapshot(GameObject fieldObject, CombatSkillLoadoutSnapshot snapshot)
+        {
+            if (fieldObject == null || snapshot == null || snapshot.Skills.Count == 0)
+                return;
+
+            _allyLoadouts[fieldObject] = snapshot;
+        }
+
+        public bool TryGetAllyLoadoutSnapshot(GameObject fieldObject, out CombatSkillLoadoutSnapshot snapshot)
+        {
+            if (fieldObject != null && _allyLoadouts.TryGetValue(fieldObject, out snapshot))
+                return true;
+
+            snapshot = null;
+            return false;
+        }
+
+        internal void ClearAllyLoadoutSnapshot(GameObject fieldObject)
+        {
+            if (fieldObject != null) _allyLoadouts.Remove(fieldObject);
+        }
+
+        /// <summary>Explicit leader recipient for callers with multiple bound allies. Blank clears the recipient.</summary>
+        public void SetSkillAcquisitionRecipient(string characterId)
+        {
+            SkillAcquisitionRecipientCharacterId = string.IsNullOrWhiteSpace(characterId) ? null : characterId.Trim();
+        }
+
+        public void SetEnemySourceSnapshot(GameObject fieldObject, EnemySourceSnapshot snapshot)
+        {
+            if (fieldObject != null && snapshot != null && snapshot.SourceKey != null)
+                _enemySources[fieldObject] = snapshot;
+        }
+
+        public bool TryGetEnemySourceSnapshot(GameObject fieldObject, out EnemySourceSnapshot snapshot)
+        {
+            if (fieldObject != null && _enemySources.TryGetValue(fieldObject, out snapshot))
+                return true;
+            snapshot = null;
+            return false;
         }
     }
 }
