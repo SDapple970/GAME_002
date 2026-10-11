@@ -1,5 +1,7 @@
 # GAME_002 NPC / Dialogue / Choice 제작 가이드
 
+> 최신 구현 대조: 2026-10-11 · Unity 6000.3.23f1 · 저장 schema 12. 기존 XML/완료 보고서를 확인했으며 이번 문서 갱신에서 Unity 테스트를 재실행하지 않았다. 정식 콘텐츠·Scene/Player 검증은 별도로 기록한다.
+
 > 대상: 기획자, Unity 콘텐츠 작업자. 기준은 현재 Production Interaction/Story 경로다.
 
 ## 1. 콘텐츠 개요
@@ -95,3 +97,6 @@ NPC 하나당 trigger, production event, event definition, Story UI 경로가 �
 ## 16. 관련 문서 링크
 
 [공통 표준](GAME002_ContentProductionStandards.md) · [NPC 기획 템플릿](GAME002_NPCDialogue_PlanningTemplate.md) · [NPC 검증 체크리스트](GAME002_NPCDialogue_ValidationChecklist.md) · [Quest 가이드](GAME002_Quest_AuthoringGuide.md)
+
+## 2026-10-11 저장 연동 보강
+NPC는 기존 Interaction→StoryEventRunner 경로를 유지한다. StoryEffect의 bool/int Flag는 canonical StoryFlagManager의 Save participant로 복원된다. Dialogue 완료/Choice 효과의 재진입·중복 여부는 실제 authored eventId/nodeId/choiceId로 검수한다. generic NPC DB·dialogue 중간 resume·범용 컷신은 Flag persistence와 별개다. 상세: [Story Event/Cutscene 가이드](GAME002_StoryEventCutscene_AuthoringGuide.md).

@@ -1,5 +1,7 @@
 # B02 — Character / Initial Party / Progression 연결
 
+> 2026-10-11 후속 기준 안내: 본문은 B02 당시 단일 플레이어/schema 11 구현·검증 보고로 보존한다. 이후 CBT-PARTY-04/05에서 1~3인 참가자 Character ID 결과·전액 EXP(KO 포함/미참가 제외)·수령자별 단일 Completion ledger와 schema 12가 구현됐다. 프로젝트 ‘개발 작업 우선순위 정리’ 대화에 EXP 정책 확정이 기록되어 있다. ‘기능구현’의 2026-10-10 기록에는 초기 파티/리더/편성=아난 1명이 확정돼 있으나 공식 Character ID·성장 표·정식 공유 시작 SO 배치는 여전히 별도다. 현행 참조: [Production Guide](https://docs.google.com/document/d/1-eHB2QEf9RuW6KK_7UM4zCR1YhOJuqzJTTsAW_Fk-Jo/edit).
+
 ## 판정과 승인 근거
 
 B02 전체는 **구현 중 — 요구사항 미확정**이다. 승인 정책에 의존하지 않는 시작 설정, 초기화, 단일 플레이어 identity/EXP, 저장 호환 연결을 구현했다. 정식 캐릭터 콘텐츠를 Production Scene에 배치한 작업으로 판정하지 않는다.

@@ -1,12 +1,14 @@
 # GAME_002 Item / Reward 제작 가이드
 
+> 최신 구현 대조: 2026-10-11 · Unity 6000.3.23f1 · 저장 schema 12. 기존 XML/완료 보고서를 확인했으며 이번 문서 갱신에서 Unity 테스트를 재실행하지 않았다. 정식 콘텐츠·Scene/Player 검증은 별도로 기록한다.
+
 ## 1. 콘텐츠 개요
 
 일반 item은 `ItemDefinitionSO`와 `ItemCatalogSO`로 정의하고 `InventoryService`가 수량/저장을 소유한다. Gold/EXP/item 지급은 `RewardService`가 stable source/action identity의 ledger로 한 번만 적용한다. Shared Film은 item이 아니라 별도 CharacterSkillRuntime 경로다.
 
 ## 2. 현재 구현 상태
 
-item ID, 이름/설명/icon, 최대 stack, catalog 검증, inventory save, gold/EXP/item reward, partial grant와 duplicate blocking이 구현돼 있다. Item 사용 효과, 판매 가격, item type, inventory UI는 이 문서가 Inspector-only로 보장하지 않는다.
+item ID, 이름/설명/icon, 최대 stack, catalog 검증, inventory save, gold/EXP/item reward, partial grant와 duplicate blocking이 구현돼 있다. FinalExchange의 HP 회복/상태 부여 전투 item 사용은 후속 구현에 포함된다(아래 절). 일반 필드 사용, 판매 가격, item type, 범용 inventory UI는 별도 범위다.
 
 ## 3. Production Owner
 
@@ -80,7 +82,7 @@ catalog 등록 뒤 `InventoryService.TryAddItem`이 resolved definition을 찾�
 
 ## 14. 구현되지 않은 기능
 
-item 사용/장비/소비 효과, 가격/판매/상점 정책, rarity/type field, item reward editor UI는 현재 data fields로 제공되지 않는다.
+일반 필드 item 사용, 장비, 가격/판매/상점 정책, rarity/type field, item reward editor UI는 이 절에서 보장하지 않는다. 전투 RestoreHp/ApplyStatus 소비 효과는 아래 후속 지원 범위를 따른다.
 
 ## 15. 수정 시 주의사항
 
@@ -89,3 +91,12 @@ item 사용/장비/소비 효과, 가격/판매/상점 정책, rarity/type field
 ## 16. 관련 문서 링크
 
 [Item/Reward 템플릿](GAME002_ItemReward_PlanningTemplate.md) · [검증 체크리스트](GAME002_ItemReward_ValidationChecklist.md) · [Quest 가이드](GAME002_Quest_AuthoringGuide.md) · [공통 표준](GAME002_ContentProductionStandards.md)
+
+## 2026-10-11 전투 아이템 제작 및 연결
+1. 기존 ItemDefinitionSO/ItemCatalogSO에 stable inventory itemId를 등록한다. 수량 Owner는 InventoryService다.
+2. **Create > Game > Combat > Item Definition**으로 `CombatItemDefinitionSO`를 만든다. `itemId`, `displayNameOverride`, `targetRule(Self/SingleAlly)`, `effectKind(RestoreHp/ApplyStatus)`, `hpRecovery` 또는 `appliedStatus`를 입력한다.
+3. `CombatItemCatalogSO`에 Definition을 등록한다. `CombatItemUseAdapter`의 `flowOrchestrator`, `inventoryService`, `combatItemCatalog`를 명시 연결한다. Production Scene/Prefab 배치는 별도 authoring 작업이다.
+4. FinalCombatUIBinder → FinalCombatPlayerCommandController → CombatFlowOrchestrator의 기존 명령 경로를 사용한다. Executor는 Inventory 수량/효과 연결만 하며 전투 phase Owner가 아니다.
+5. 올바른 현재 명령·생존 아군·실제 roster·대상/효과 조건을 검증한 뒤 1개 차감한다. stale/중복/잘못된 대상/회복 불필요는 소비하지 않고 효과 실패 시 반환을 시도한다. Panic 사용자는 기존 eligibility로 거부한다.
+6. 격리 Editor EnterPlayMode의 동일 Item 테스트는 최신 CBT_PARTY_05_Regression.xml에서 PASS다. 이전 CBT_ITEM_01_PlayMode_Final.xml은 FAIL이므로 이름만 보고 통과로 쓰지 않는다. 실제 Production Catalog/Scene 및 디스크 재시작은 별도로 검증한다.
+전투 사용 2종을 일반 필드 사용·장비·상점·희귀도·범용 Inventory UI 완료로 확대하지 않는다.

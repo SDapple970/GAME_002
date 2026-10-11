@@ -1,5 +1,7 @@
 # Production Narrative Setup
 
+> 2026-10-11 문서 역할 갱신: 아래 본문은 기존 상세 Setup/호환성·당시 검증 참고로 보존한다. 현재 Production 연결은 [통합 Production Guide](https://docs.google.com/document/d/1-eHB2QEf9RuW6KK_7UM4zCR1YhOJuqzJTTsAW_Fk-Jo/edit)와 [콘텐츠 제작 인덱스](GAME002_ContentAuthoring_Index.md)를 우선한다. 현행 Unity 6000.3.23f1, FinalExchange, SceneTravel→SceneFlow 위임, 저장 schema 12, B01 Flag/Party EXP 확장을 확인했다. 아래 옛 Planning·schema·기본 EXP target·미구현 설명을 현행 상태로 그대로 사용하지 않는다. 정식 콘텐츠/Scene/Player 검증은 별도로 남긴다.
+
 `StoryEventRunner` is the only Production owner of Story lifecycle, node branching, choice outcomes, completion, cancellation, and Narrative GameState ownership. `StoryDialogueHUD`, `TimedChoicePanel`, and `DialoguePanel` only present runner-resolved data and emit user intent.
 
 ## Starting a Story

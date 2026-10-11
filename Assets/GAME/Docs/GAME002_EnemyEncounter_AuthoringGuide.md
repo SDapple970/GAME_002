@@ -1,5 +1,7 @@
 # GAME_002 Enemy / Encounter 제작 가이드
 
+> 최신 구현 대조: 2026-10-11 · Unity 6000.3.23f1 · 저장 schema 12. 기존 XML/완료 보고서를 확인했으며 이번 문서 갱신에서 Unity 테스트를 재실행하지 않았다. 정식 콘텐츠·Scene/Player 검증은 별도로 기록한다.
+
 ## 1. 콘텐츠 개요
 
 Production field enemy는 `FieldEnemyMotor2D`/`FieldEnemyPatrolAI2D`, combat HP/loadout, `CombatEncounterGroup` 또는 `CombatEncounterTrigger2D`로 구성된다. 전투 시작은 오직 `CombatEntryPoint`로 수렴한다. `EnemyDefinitionSO`/`EnemySourceComponent`는 기본 공격과 별개로 Film 획득 source를 authoring한다.
@@ -92,3 +94,8 @@ spawn table, loot probability, random Film drop, respawn timer, boss phase AI, m
 ## 16. 관련 문서 링크
 
 [스킬 가이드](GAME002_SkillContent_AuthoringGuide.md) · [Enemy 템플릿](GAME002_EnemyEncounter_PlanningTemplate.md) · [Enemy 체크리스트](GAME002_EnemyEncounter_ValidationChecklist.md) · [Dungeon 가이드](GAME002_DungeonStage_AuthoringGuide.md)
+
+## 2026-10-11 선택적 Party roster
+접촉 조우의 `CombatEncounterTrigger2D.usePartyCombatRoster`는 opt-in이다. 활성화 시 `partyRuntime`, `characterProgression`, `partyCombatantBindings`의 Character ID↔fieldObject를 명시 연결한다. PartyRuntime 편성은 1~3명이며 Definition/state/유효 HP/binding이 필요하다. 0명/4명 이상, 누락·중복 ID/객체, HP 0은 진입을 거부한다. 과거 oversized 저장을 조용히 잘라내지 않는다.
+Adapter → 기존 CombatEntryPoint → session 참가자 snapshot → CombatResult.AllyParticipants → RewardService를 사용한다. 승리 EXP는 진입 참가자 전원 각각 전액이며 KO도 포함, 미참가는 제외한다. 수령자별 Grant를 반복 호출하지 않고 한 Completion 안에서 처리한다.
+현재 PlayerFieldAttackController는 TryBindSinglePlayerRequest 경로이므로 접촉 roster 옵션이 필드 공격 다인 연결까지 자동 확장되지 않는다. Production Scene의 다인 배치/공유 CharacterStart SO/영구 HP·MP는 별도 검증이다.

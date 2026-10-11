@@ -1,5 +1,7 @@
 # GAME_002 공통 콘텐츠 제작 표준
 
+> 최신 구현 대조: 2026-10-11 · Unity 6000.3.23f1 · 저장 schema 12. 기존 XML/완료 보고서를 확인했으며 이번 문서 갱신에서 Unity 테스트를 재실행하지 않았다. 정식 콘텐츠·Scene/Player 검증은 별도로 기록한다.
+
 > 이 문서는 콘텐츠 authoring의 공통 계약이다. 실제 Production 코드와 serialized asset이 우선이며, 새 Manager/EntryPoint/ID 체계를 만드는 설계 문서가 아니다.
 
 ## 1. 제작 단계와 완료 정의
@@ -73,7 +75,7 @@ Inspector에 없는 요구는 아래 표로 개발 요청을 만든다.
 | --- | --- | --- | --- | --- | --- |
 | | | 지원/일부/미지원/미확인 | | | |
 
-예: 확률 drop table, 새 Quest objective type, item use effect, generic Story Timeline/cutscene, custom skill targeting은 authoring 데이터가 아니라 추가 개발 요청이다.
+예: 확률 drop table, 새 Quest objective type, 지원된 RestoreHp/ApplyStatus 범위 밖의 item use effect, generic Story Timeline/cutscene, custom skill targeting은 추가 개발 요청이다.
 
 ## 8. 최소 검증 규칙
 
@@ -84,3 +86,7 @@ Inspector에 없는 요구는 아래 표로 개발 요청을 만든다.
 - 문서에는 실행한 검증만 PASS라고 적고, 검증하지 않은 항목은 미실행/미확인으로 남긴다.
 
 분야별 절차는 [전체 인덱스](GAME002_ContentAuthoring_Index.md)를 사용한다.
+
+## 2026-10-11 지원 범위 및 증거 운영
+FinalExchange의 전투 item HP 회복/상태 부여, combat status 수치 보정/duration/읽기 전용 UI, 명시 binding 기반 1~3 Party roster와 참가자별 전액 EXP, bool/int Story Flag persistence를 현행 범위로 추가한다. 각 분야 가이드/체크리스트에서 실제 authored 데이터와 검증을 기록한다.
+현재 schema 12를 사용하되 Historical Report의 schema/Unity/테스트 숫자를 일괄 교체하지 않는다. 기존 1343/1343 XML은 당시 실행 증거이며 현재 HEAD 재실행·정식 콘텐츠/Player 완료 판정과 구분한다. 공식 Character ID·성장 곡선·공유 시작 SO와 신규 다인 실제 디스크 재시작은 아직 별도다.

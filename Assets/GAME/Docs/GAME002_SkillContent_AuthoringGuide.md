@@ -1,5 +1,7 @@
 # GAME_002 Film / Unique / Combat Skill 콘텐츠 제작 가이드
 
+> 최신 구현 대조: 2026-10-11 · Unity 6000.3.23f1 · 저장 schema 12. 기존 XML/완료 보고서를 확인했으며 이번 문서 갱신에서 Unity 테스트를 재실행하지 않았다. 정식 콘텐츠·Scene/Player 검증은 별도로 기록한다.
+
 > 대상: 기획자와 Unity 콘텐츠 적용 담당자  
 > 기준: 현재 `main`의 Production 코드와 `Dungeon_1_Production` 연결 상태  
 > 범위: 일반 전투 스킬, Film 스킬, Character Unique 스킬, 적 처치 기반 Film 획득  
@@ -206,3 +208,8 @@ Dungeon_1_Production (예시 구조; 실제 이름은 콘텐츠에 맞춤)
 - Production 콘텐츠 작성 전에는 승인된 매핑 표를 확보한다.
 
 관련 양식: [기획 템플릿](GAME002_SkillContent_PlanningTemplate.md) · [검증 체크리스트](GAME002_SkillContent_ValidationChecklist.md)
+
+## 2026-10-11 추가 지원 — FinalExchange 상태 효과
+`CombatStatusDefinitionSO`의 `damageModifier`, `clashModifier`, `postureModifier`는 signed 정수이며 기본값 0이다. 기존 Stack/Refresh/Replace 및 maximumStacks를 재사용한다. 피해 보정은 SkillRunner, 합은 기존 Clash 입력/Resolver, 체간과 duration은 기존 StateMachine 규칙 안에서 처리한다.
+상태 보유자가 참여한 정상 완료 Exchange마다 duration을 1회 감소한다. 그 Exchange에서 새 적용/변경된 상태는 즉시 효과를 내지만 해당 종료의 감소는 면제한다. stale/취소/중복 완료는 tick하지 않는다. UntilRemoved 및 Explicit duration 0은 비만료 호환 계약이다. Disease/Quirk·Party 영구 버프·새 MP/Mental 보정으로 확장하지 않는다.
+`CombatantCombatState.StatusSnapshots` → `FinalCombatStatusListPresenter` → `FinalCombatUIBinder.statusListPresenter`가 읽기 전용 표시 경로다. 실제 Production 상태 SO·Presenter 배치 완료를 자동 가정하지 않는다. 근거: CBT_STATUS_02C_PlayMode.xml 1/1 및 CBT_PARTY_05_Regression.xml의 동일 격리 상태 테스트 PASS(기존 실행).

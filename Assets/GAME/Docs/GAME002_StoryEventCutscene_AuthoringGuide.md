@@ -1,5 +1,7 @@
 # GAME_002 Story Event / Cutscene 제작 가이드
 
+> 최신 구현 대조: 2026-10-11 · Unity 6000.3.23f1 · 저장 schema 12. 기존 XML/완료 보고서를 확인했으며 이번 문서 갱신에서 Unity 테스트를 재실행하지 않았다. 정식 콘텐츠·Scene/Player 검증은 별도로 기록한다.
+
 ## 1. 콘텐츠 개요
 
 Production Story Event는 `StoryEventDefinitionSO`의 node graph를 `StoryEventRunner`가 실행하는 데이터 콘텐츠다. 대화/선택/condition/effect는 이 graph에 포함된다. 별도 영상 cutscene은 일반 Story Event 표준으로 완성돼 있지 않다.
@@ -10,7 +12,7 @@ Story Event SO, node/choice timed branch, StoryCondition, StoryEffect(Set flag/p
 
 ## 3. Production Owner
 
-`StoryEventRunner`이 graph 진행, `StoryDialogueHUD`/`TimedChoicePanel`이 presentation, Story flag/progress service와 `RewardService`/`QuestRuntime`이 effect 결과를 각자 소유한다. `StoryEffect`가 사용하는 `StoryFlagManager`의 개별 flag 저장 범위는 이 authoring 절차만으로 보장하지 않으므로 Save/Load 요구가 있으면 실제 owner를 별도 검증한다. Story SO가 UI root나 GameState manager를 직접 새로 만들지 않는다.
+`StoryEventRunner`이 graph 진행, `StoryDialogueHUD`/`TimedChoicePanel`이 presentation, Story flag/progress service와 `RewardService`/`QuestRuntime`이 effect 결과를 각자 소유한다. `StoryEffect`가 사용하는 canonical `StoryFlagManager`는 B01 이후 bool/int flag의 Save provider/consumer 및 New Game reset을 지원한다. authored key/시나리오 검증과 graph resume·컷신 checkpoint는 별도 범위다. Story SO가 UI root나 GameState manager를 직접 새로 만들지 않는다.
 
 ## 4. 사용 코드/Asset 목록
 
@@ -90,3 +92,7 @@ Production Story graph에서 Timeline, camera shot track, generic VideoPlayer pl
 ## 16. 관련 문서 링크
 
 [Story 템플릿](GAME002_StoryEventCutscene_PlanningTemplate.md) · [Story 체크리스트](GAME002_StoryEventCutscene_ValidationChecklist.md) · [NPC 가이드](GAME002_NPCDialogue_AuthoringGuide.md) · [공통 표준](GAME002_ContentProductionStandards.md)
+
+## 2026-10-11 Flag persistence
+`StoryFlagManager`가 bool/int 두 도메인의 상태를 소유하고 `GameSaveData.story.flags/intFlags`에 capture/restore한다. `StoryFlagDatabase` 등 facade를 두 번째 writable Owner로 만들지 않는다. 반복 Load는 두 도메인을 대체 복원하며 과거 bool-only import 호환은 유지한다.
+기존 B01 전체 1250/1250과 최신 1343/1343 XML의 Flag 회귀를 확인했다. 이 숫자는 당시 실행 증거다. bool false와 signed int, 동일 이름의 typed key, 존재/기본값, 반복 복원과 New Game 초기화를 authored Story에서 확인한다. Flag 저장 지원이 Story node 중간 재개/Video·Timeline resume를 의미하지 않는다.

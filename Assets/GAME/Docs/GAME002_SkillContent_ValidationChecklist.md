@@ -1,5 +1,7 @@
 # GAME_002 Skill Content Validation Checklist
 
+> 최신 구현 대조: 2026-10-11 · Unity 6000.3.23f1 · 저장 schema 12. 기존 XML/완료 보고서를 확인했으며 이번 문서 갱신에서 Unity 테스트를 재실행하지 않았다. 정식 콘텐츠·Scene/Player 검증은 별도로 기록한다.
+
 > 콘텐츠 단위 또는 콘텐츠 묶음마다 복사하여 기록한다.  
 > 구현 상태와 검증 상태는 다르다. Inspector 입력이 끝났어도 Play Mode / 통합 검증 전에는 완료로 표시하지 않는다.
 
@@ -120,3 +122,10 @@
 | Unity 적용 | | | |
 | QA / Play Mode 검수 | | | |
 | 기술 검토 | | | |
+
+## 2026-10-11 후속 상태 효과 검수
+- [ ] FinalExchange 모드에서 damage/clash/posture 보정과 Stack 합산을 확인한다.
+- [ ] 정상 Exchange마다 tick 1회, 새/변경 상태의 동일 Exchange 면제, 만료 후 효과 제거를 확인한다.
+- [ ] Explicit duration 0/UntilRemoved 비만료 호환을 확인한다.
+- [ ] 선택 Presenter의 stack/duration 표시와 전투 종료·다음 Session 정리를 확인한다.
+- [ ] 정식 Skill/Status SO 검수와 격리 테스트 증거를 구분한다.

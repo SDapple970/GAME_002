@@ -1,5 +1,7 @@
 # GAME_002 Dungeon / Stage 제작 가이드
 
+> 최신 구현 대조: 2026-10-11 · Unity 6000.3.23f1 · 저장 schema 12. 기존 XML/완료 보고서를 확인했으며 이번 문서 갱신에서 Unity 테스트를 재실행하지 않았다. 정식 콘텐츠·Scene/Player 검증은 별도로 기록한다.
+
 ## 1. 콘텐츠 개요
 
 새 Production dungeon의 기준은 `Assets/GAME/Scenes/Dungeon_Template.unity`다. 이 template에는 Runtime/Combat/UI, PlayerSpawn, interaction, quest, encounter의 canonical 연결이 있으며 `Assets/GAME/Scenes/Dungeon_1_Production.unity`는 실제 Production 적용 예다.
@@ -91,3 +93,9 @@ template을 scene hierarchy의 source로 삼되 `Dungeon_1_Production`의 System
 ## 16. 관련 문서 링크
 
 [Dungeon 템플릿](GAME002_DungeonStage_PlanningTemplate.md) · [Dungeon 체크리스트](GAME002_DungeonStage_ValidationChecklist.md) · [Enemy 가이드](GAME002_EnemyEncounter_AuthoringGuide.md) · [기존 Dungeon Template Setup](DungeonTemplateSetup.md)
+
+## 2026-10-11 현행 Scene/전투 경계
+SceneTravelService는 spawn pending/apply Adapter이며 실제 load/state는 SceneFlowController.LoadScene으로 위임한다. 별도 loader/state writer를 다시 만들지 않는다.
+Dungeon_1_Production의 현행 Encounter는 FinalExchange(StandoffClashChain)이다. LegacyPlanning UI는 호환 참고로 구분한다. D108/D109 자동 Gate 로그 및 최신 Production scene validation PASS는 있으나 정식 Dungeon 수동 E2E/System Complete와 구분한다.
+D1-05 SceneStartStoryEventAdapter는 현재 Scene에서 비활성이다. lifecycle fixture PASS로 Intro authored 활성화나 사용자 보류 해제를 판단하지 않는다. Quest 파생 DungeonCompletionFlow/Exit 계약이 존재하며 실제 목적지/귀환 authoring은 별도 확인한다.
+Party roster, CombatItemUseAdapter, Status Presenter는 선택적 연결이다. 격리 테스트에서 보인 기능이 정식 Scene/Prefab에 배치됐다고 가정하지 않는다.
