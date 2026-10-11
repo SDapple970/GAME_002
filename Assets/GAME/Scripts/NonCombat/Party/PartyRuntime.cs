@@ -8,6 +8,8 @@ namespace Game.NonCombat.Party
 {
     public sealed class PartyRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
+        public const int MaxCombatLineupSize = 3;
+
         public static PartyRuntime Instance { get; private set; }
         private readonly List<string> _members = new();
         private readonly List<string> _combatLineup = new();
@@ -89,9 +91,13 @@ namespace Game.NonCombat.Party
             string id = CharacterIdentity.Normalize(characterId);
             if (id == null) return Result(id, PartyMutationStatus.InvalidCharacterId);
             if (!_members.Contains(id)) return Result(id, PartyMutationStatus.NotOwned);
+            if (selected && !_combatLineup.Contains(id) && _combatLineup.Count >= MaxCombatLineupSize)
+                return Result(id, PartyMutationStatus.CombatLineupFull);
             bool changed = selected ? AddUnique(_combatLineup, id) : _combatLineup.Remove(id);
             return changed ? Publish(id) : Result(id, PartyMutationStatus.NoChange);
         }
+
+        public static bool IsValidCombatLineupCount(int count) => count >= 1 && count <= MaxCombatLineupSize;
 
         public void CaptureSaveData(GameSaveData saveData)
         {

@@ -56,6 +56,8 @@ namespace Game.NonCombat.Save
                     MigrateVersion9(data);
                 if (version <= 10)
                     MigrateVersion10(data);
+                if (version <= 11)
+                    MigrateVersion11(data);
             }
             else
             {
@@ -77,6 +79,14 @@ namespace Game.NonCombat.Save
 
             GameSaveDataValidator.Normalize(data);
             return GameSaveDataValidator.TryValidate(data, out error);
+        }
+
+        private static void MigrateVersion11(GameSaveData data)
+        {
+            // Preserve paid/pending single-recipient entries. The new optional recipient
+            // records are normalized without recalculating historical rewards.
+            data.header ??= new SaveHeaderData();
+            data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
         }
 
         private static void MigrateVersion1(GameSaveData data)
@@ -260,6 +270,9 @@ namespace Game.NonCombat.Save
             long identityRecords = Math.Max(
                 data?.reward?.ledger?.Count ?? 0,
                 data?.reward?.combatLedger?.Count ?? 0);
+            if (data?.reward?.ledger != null)
+                foreach (RewardLedgerSaveData entry in data.reward.ledger)
+                    identityRecords += entry?.experienceRecipients?.Count ?? 0;
             if (data?.quest?.quests != null)
             {
                 for (int i = 0; i < data.quest.quests.Count; i++)
@@ -546,7 +559,35 @@ namespace Game.NonCombat.Save
                 entry.itemId = NormalizeId(entry.itemId);
                 entry.itemCount = entry.itemId == null ? 0 : Mathf.Max(0, entry.itemCount);
                 entry.progressionTargetId = NormalizeId(entry.progressionTargetId);
-                entry.expSettled = entry.expSettled || entry.requestedExp <= entry.exp;
+                entry.hasExplicitExperienceRecipients |= entry.experienceRecipients?.Count > 0;
+                if (entry.hasExplicitExperienceRecipients)
+                {
+                    Dictionary<string, RewardExperienceSaveData> recipients = new(StringComparer.Ordinal);
+                    if (entry.experienceRecipients != null)
+                        foreach (RewardExperienceSaveData recipient in entry.experienceRecipients)
+                        {
+                            string id = NormalizeId(recipient?.characterId);
+                            if (id == null) continue;
+                            recipient.characterId = id;
+                            recipient.requestedExp = Mathf.Max(0, recipient.requestedExp);
+                            recipient.appliedExp = Mathf.Max(0, recipient.appliedExp);
+                            recipient.settled |= recipient.appliedExp >= recipient.requestedExp;
+                            if (!recipients.TryGetValue(id, out RewardExperienceSaveData existing))
+                                recipients.Add(id, recipient);
+                            else
+                            {
+                                existing.requestedExp = Math.Max(existing.requestedExp, recipient.requestedExp);
+                                existing.appliedExp = Math.Max(existing.appliedExp, recipient.appliedExp);
+                                existing.settled |= recipient.settled;
+                            }
+                        }
+                    entry.experienceRecipients = new List<RewardExperienceSaveData>(recipients.Values);
+                    entry.experienceRecipients.Sort((a, b) => string.CompareOrdinal(a.characterId, b.characterId));
+                    entry.expSettled = entry.requestedExp == 0 ||
+                        entry.experienceRecipients.Count > 0 && entry.experienceRecipients.TrueForAll(recipient => recipient.settled);
+                }
+                else
+                    entry.expSettled = entry.expSettled || entry.requestedExp <= entry.exp;
                 unique.TryAdd(identity.CanonicalId, entry);
             }
 

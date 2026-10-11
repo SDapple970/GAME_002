@@ -99,7 +99,7 @@ namespace Game.Tests.Integration
             // Use the actual pre-B01 payload shape rather than the new DTO default.
             string json = SaveSerializer.ToJson(old).Replace("\"intFlags\": []", "\"unusedOldField\": []");
             GameSaveData loaded = Migrate(json);
-            Assert.That(loaded.header.schemaVersion, Is.EqualTo(11));
+            Assert.That(loaded.header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion));
             Assert.That(loaded.story.intFlags, Is.Empty);
             Assert.That(loaded.currency.gold, Is.EqualTo(73));
             Assert.That(loaded.inventory.items.Single().value, Is.EqualTo(3));
@@ -228,7 +228,7 @@ namespace Game.Tests.Integration
             GameSaveData loaded = Migrate(SaveSerializer.ToJson(save));
             Assert.That(loaded.story.flags, Has.Count.EqualTo(300));
             Assert.That(loaded.story.intFlags, Has.Count.EqualTo(300));
-            save.header.schemaVersion = 12;
+            save.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion + 1;
             object[] args = { SaveSerializer.ToJson(save), null, false, null };
             Assert.That((bool)MigrationMethod().Invoke(null, args), Is.False);
         }

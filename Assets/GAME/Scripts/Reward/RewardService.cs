@@ -20,6 +20,7 @@ namespace Game.Reward
         [SerializeField] private CharacterProgressionService characterProgressionService;
 
         private readonly Dictionary<string, RewardGrantResult> _grantLedger = new();
+        private readonly HashSet<string> _processingCompletions = new(StringComparer.Ordinal);
 
         private bool _missingCurrencyWalletWarned;
         private bool _missingInventoryServiceWarned;
@@ -124,52 +125,53 @@ namespace Game.Reward
             string requestedItemId = NormalizeItemId(request.ItemId);
             int requestedItemCount = NormalizeItemCount(requestedItemId, request.ItemCount);
 
-            int appliedGold = 0;
-            int appliedExp = 0;
-            int appliedItemCount = 0;
-            if (requestedGold > 0)
-                appliedGold = GrantGold(requestedGold, request, identity.CanonicalId);
-
-            if (requestedItemCount > 0)
-                appliedItemCount = GrantItem(requestedItemId, requestedItemCount, request, identity.CanonicalId);
-
-            string progressionTargetId = ResolveProgressionTarget(request.ProgressionTargetId);
-            bool expSettled = requestedExp == 0;
-            if (requestedExp > 0)
+            bool explicitRecipients = request.ExperienceRecipientIds != null;
+            string progressionTargetId = explicitRecipients
+                ? CharacterProgressionService.NormalizeId(request.ProgressionTargetId)
+                : ResolveProgressionTarget(request.ProgressionTargetId);
+            List<ExperienceApplyResult> recipients = new();
+            if (explicitRecipients)
             {
-                ExperienceApplyResult experience = GrantExperience(progressionTargetId, requestedExp, request, identity.CanonicalId);
-                appliedExp = experience.AppliedExperience;
-                expSettled = experience.Settled;
+                foreach (string id in request.ExperienceRecipientIds)
+                    recipients.Add(PendingExperience(id, requestedExp));
             }
+            else
+                recipients.Add(PendingExperience(progressionTargetId, requestedExp));
 
-            bool partialFailure = appliedGold != requestedGold ||
-                                  appliedExp != requestedExp ||
-                                  appliedItemCount != requestedItemCount;
-
-            RewardGrantResult result = new RewardGrantResult(
+            // Reserve the Completion before any channel can invoke callbacks. Each EXP recipient
+            // is checkpointed before progression observers, allowing safe pending-only retries.
+            _grantLedger[ledgerKey] = new RewardGrantResult(
                 request.SourceType,
                 identity.SourceId,
                 requestedGold,
                 requestedExp,
-                appliedGold,
-                appliedExp,
+                0,
+                0,
                 requestedItemId,
                 requestedItemCount,
-                appliedItemCount > 0 ? requestedItemId : null,
-                appliedItemCount,
+                null,
+                0,
                 false,
-                partialFailure,
-                false,
+                requestedGold > 0 || requestedExp > 0 || requestedItemCount > 0,
+                explicitRecipients && recipients.Count == 0 && requestedExp > 0,
                 identity.ActionId,
                 progressionTargetId,
-                expSettled);
+                requestedExp == 0,
+                explicitRecipients,
+                recipients);
+            _processingCompletions.Add(ledgerKey);
+            try
+            {
+                int appliedGold = requestedGold > 0 ? GrantGold(requestedGold, request, ledgerKey) : 0;
+                UpdateLedger(ledgerKey, appliedGold, 0);
+                int appliedItemCount = requestedItemCount > 0 ? GrantItem(requestedItemId, requestedItemCount, request, ledgerKey) : 0;
+                UpdateLedger(ledgerKey, appliedGold, appliedItemCount);
+                SettleExperience(ledgerKey, request);
+            }
+            finally { _processingCompletions.Remove(ledgerKey); }
+            RewardGrantResult result = _grantLedger[ledgerKey];
 
-            // All sources use a permanently-consumed attempt. This is intentionally not
-            // resumable: retrying a partial multi-channel grant could duplicate a channel
-            // which already succeeded.
-            _grantLedger[ledgerKey] = result;
-
-            Debug.Log($"[QuestRewardTrace] RewardService.GrantReward applied. canonicalLedgerKey={ledgerKey}, duplicateBlocked={result.DuplicateBlocked}, requestedGold={requestedGold}, appliedGold={appliedGold}, rewardServiceInstanceId={GetInstanceID()}", this);
+            Debug.Log($"[QuestRewardTrace] RewardService.GrantReward applied. canonicalLedgerKey={ledgerKey}, duplicateBlocked={result.DuplicateBlocked}, requestedGold={requestedGold}, appliedGold={result.Gold}, rewardServiceInstanceId={GetInstanceID()}", this);
 
             return result;
         }
@@ -185,12 +187,21 @@ namespace Game.Reward
             if (!IsVictory(result))
                 return new RewardGrantRequest(RewardSourceType.Combat, resolvedSourceId);
 
+            List<string> recipients = null;
+            if (result.RequiresExplicitExperienceRecipients || result.AllyParticipants?.Count > 0)
+            {
+                recipients = new List<string>();
+                if (result.AllyParticipants != null)
+                    foreach (CombatAllyParticipantResult participant in result.AllyParticipants)
+                        if (participant != null) recipients.Add(participant.CharacterId);
+            }
             return new RewardGrantRequest(
                 RewardSourceType.Combat,
                 resolvedSourceId,
                 result.TotalGold,
                 result.TotalExp,
-                progressionTargetId: result.ProgressionTargetCharacterId);
+                progressionTargetId: result.ProgressionTargetCharacterId,
+                experienceRecipientIds: recipients);
         }
 
         internal void ResetCombatLedgerForTests()
@@ -241,8 +252,18 @@ namespace Game.Reward
                     itemCount = result.ItemCount,
                     partialFailure = result.PartialFailure,
                     progressionTargetId = result.ProgressionTargetId,
-                    expSettled = result.ExpSettled
+                    expSettled = result.ExpSettled,
+                    hasExplicitExperienceRecipients = result.HasExplicitExperienceRecipients
                 };
+                if (result.HasExplicitExperienceRecipients)
+                    foreach (ExperienceApplyResult recipient in result.ExperienceResults)
+                        entry.experienceRecipients.Add(new RewardExperienceSaveData
+                        {
+                            characterId = recipient.CharacterId,
+                            requestedExp = recipient.RequestedExperience,
+                            appliedExp = recipient.AppliedExperience,
+                            settled = recipient.Settled
+                        });
                 saveData.reward.ledger.Add(entry);
 
                 if (result.SourceType == RewardSourceType.Combat)
@@ -280,6 +301,28 @@ namespace Game.Reward
                                requestedGold != appliedGold ||
                                requestedExp != appliedExp ||
                                requestedItemCount != appliedItemCount;
+                bool explicitRecipients = entry.hasExplicitExperienceRecipients || entry.experienceRecipients?.Count > 0;
+                List<ExperienceApplyResult> recipients = new();
+                if (explicitRecipients)
+                {
+                    Dictionary<string, ExperienceApplyResult> unique = new(StringComparer.Ordinal);
+                    if (entry.experienceRecipients != null)
+                        foreach (RewardExperienceSaveData recipient in entry.experienceRecipients)
+                        {
+                            string id = CharacterProgressionService.NormalizeId(recipient?.characterId);
+                            if (id == null) continue;
+                            ExperienceApplyResult restored = new(id, Mathf.Max(0, recipient.requestedExp), Mathf.Max(0, recipient.appliedExp),
+                                0, 0, 0, 0, 0, recipient.settled ? ExperienceApplyStatus.Settled : ExperienceApplyStatus.Pending);
+                            if (!unique.TryGetValue(id, out ExperienceApplyResult existing) ||
+                                restored.AppliedExperience > existing.AppliedExperience || restored.Settled && !existing.Settled)
+                                unique[id] = restored;
+                        }
+                    List<string> ids = new(unique.Keys); ids.Sort(StringComparer.Ordinal);
+                    foreach (string id in ids) recipients.Add(unique[id]);
+                }
+                else
+                    recipients.Add(new ExperienceApplyResult(entry.progressionTargetId, requestedExp, appliedExp,
+                        0, 0, 0, 0, 0, entry.expSettled || requestedExp <= appliedExp ? ExperienceApplyStatus.Settled : ExperienceApplyStatus.Pending));
                 _grantLedger[identity.CanonicalId] = new RewardGrantResult(
                     sourceType,
                     identity.SourceId,
@@ -293,10 +336,13 @@ namespace Game.Reward
                     appliedItemCount,
                     false,
                     partial,
-                    false,
+                    explicitRecipients && recipients.Count == 0 && requestedExp > 0,
                     identity.ActionId,
                     entry.progressionTargetId,
-                    entry.expSettled);
+                    entry.expSettled,
+                    explicitRecipients,
+                    recipients);
+                UpdateLedger(identity.CanonicalId, appliedGold, appliedItemCount);
             }
 
             ReconcilePendingExperience();
@@ -396,23 +442,68 @@ namespace Game.Reward
             List<string> keys = new(_grantLedger.Keys);
             foreach (string key in keys)
             {
-                RewardGrantResult recorded = _grantLedger[key];
-                int pending = Mathf.Max(0, recorded.RequestedExp - recorded.Exp);
-                if (pending == 0 || recorded.ExpSettled) continue;
-                string target = ResolveProgressionTarget(recorded.ProgressionTargetId);
-                ExperienceApplyResult applied = GrantExperience(target, pending, default, key);
-                if (!applied.Settled) continue;
-                int totalApplied = recorded.Exp > int.MaxValue - applied.AppliedExperience ? int.MaxValue : recorded.Exp + applied.AppliedExperience;
-                _grantLedger[key] = new RewardGrantResult(recorded.SourceType, recorded.SourceId, recorded.RequestedGold, recorded.RequestedExp,
-                    recorded.Gold, totalApplied, recorded.RequestedItemId, recorded.RequestedItemCount, recorded.ItemId, recorded.ItemCount,
-                    false, recorded.Gold != recorded.RequestedGold || totalApplied != recorded.RequestedExp || recorded.ItemCount != recorded.RequestedItemCount,
-                    false, recorded.ActionId, target, true);
-                settledCount++;
+                if (!_processingCompletions.Add(key)) continue;
+                try { settledCount += SettleExperience(key, default); }
+                finally { _processingCompletions.Remove(key); }
             }
             return settledCount;
         }
 
-        private ExperienceApplyResult GrantExperience(string targetId, int amount, RewardGrantRequest request, string sourceId)
+        private static ExperienceApplyResult PendingExperience(string id, int amount) =>
+            new(id, amount, 0, 0, 0, 0, 0, 0, amount == 0 ? ExperienceApplyStatus.Settled : ExperienceApplyStatus.Pending);
+
+        private int SettleExperience(string key, RewardGrantRequest request)
+        {
+            int settled = 0;
+            int count = _grantLedger[key].ExperienceResults.Count;
+            for (int i = 0; i < count; i++)
+            {
+                RewardGrantResult recorded = _grantLedger[key];
+                ExperienceApplyResult previous = recorded.ExperienceResults[i];
+                int pending = Mathf.Max(0, previous.RequestedExperience - previous.AppliedExperience);
+                if (previous.Settled || pending == 0) continue;
+                string target = recorded.HasExplicitExperienceRecipients
+                    ? previous.CharacterId : ResolveProgressionTarget(previous.CharacterId);
+                int index = i;
+                Action<ExperienceApplyResult> checkpoint = applied =>
+                {
+                    List<ExperienceApplyResult> recipients = new(_grantLedger[key].ExperienceResults);
+                    recipients[index] = new ExperienceApplyResult(target, previous.RequestedExperience,
+                        previous.AppliedExperience + applied.AppliedExperience, applied.PreviousLevel, applied.ResultingLevel,
+                        applied.PreviousExperience, applied.ResultingExperience, applied.LevelsGained, applied.Status);
+                    RewardGrantResult current = _grantLedger[key];
+                    UpdateLedger(key, current.Gold, current.ItemCount, recipients);
+                };
+                ExperienceApplyResult result = GrantExperience(target, pending, request, key, checkpoint);
+                if (result.Settled) settled++;
+            }
+            return settled;
+        }
+
+        private void UpdateLedger(string key, int gold, int itemCount, List<ExperienceApplyResult> recipients = null)
+        {
+            RewardGrantResult current = _grantLedger[key];
+            recipients ??= new List<ExperienceApplyResult>(current.ExperienceResults);
+            // Legacy Exp is a per-recipient amount, never the sum across the party.
+            int exp = recipients.Count > 0 ? int.MaxValue : 0;
+            bool settled = current.RequestedExp == 0 || recipients.Count > 0;
+            bool partial = gold != current.RequestedGold || itemCount != current.RequestedItemCount ||
+                recipients.Count == 0 && current.RequestedExp > 0;
+            foreach (ExperienceApplyResult recipient in recipients)
+            {
+                exp = Math.Min(exp, recipient.AppliedExperience);
+                settled &= recipient.Settled;
+                partial |= !recipient.Settled || recipient.AppliedExperience != recipient.RequestedExperience;
+            }
+            _grantLedger[key] = new RewardGrantResult(current.SourceType, current.SourceId, current.RequestedGold, current.RequestedExp,
+                gold, exp, current.RequestedItemId, current.RequestedItemCount, itemCount > 0 ? current.RequestedItemId : null, itemCount,
+                false, partial, current.InvalidRequest, current.ActionId,
+                current.HasExplicitExperienceRecipients ? current.ProgressionTargetId : recipients[0].CharacterId,
+                settled, current.HasExplicitExperienceRecipients, recipients);
+        }
+
+        private ExperienceApplyResult GrantExperience(string targetId, int amount, RewardGrantRequest request, string sourceId,
+            Action<ExperienceApplyResult> checkpoint)
         {
             CharacterProgressionService progression = characterProgressionService != null ? characterProgressionService : CharacterProgressionService.Instance;
             if (progression == null || string.IsNullOrWhiteSpace(targetId))
@@ -420,7 +511,7 @@ namespace Game.Reward
                 WarnMissingProgressionOnce(amount, request, sourceId);
                 return new ExperienceApplyResult(targetId, amount, 0, 0, 0, 0, 0, 0, ExperienceApplyStatus.Pending);
             }
-            try { return progression.ApplyExperience(targetId, amount); }
+            try { return progression.ApplyExperience(targetId, amount, checkpoint); }
             catch (Exception exception)
             {
                 Debug.LogError($"[RewardService] Character progression failed. sourceId={sourceId}, target={targetId}, exception={exception}", this);
@@ -484,7 +575,9 @@ namespace Game.Reward
                 false,
                 recorded.ActionId,
                 recorded.ProgressionTargetId,
-                recorded.ExpSettled);
+                recorded.ExpSettled,
+                recorded.HasExplicitExperienceRecipients,
+                recorded.ExperienceResults);
         }
 
         private static string NormalizeItemId(string itemId)

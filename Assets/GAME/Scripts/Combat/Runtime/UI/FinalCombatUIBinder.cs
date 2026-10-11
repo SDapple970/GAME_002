@@ -45,6 +45,9 @@ namespace Game.Combat.UI
         [SerializeField] private Text playerPostureText;
         [SerializeField] private Text enemyPostureText;
 
+        [Header("Optional Status Presentation")]
+        [SerializeField] private FinalCombatStatusListPresenter statusListPresenter;
+
         private readonly List<Button> _spawnedButtons = new List<Button>();
         private FinalCombatPlayerCommandController _controller;
         private CombatSession _session;
@@ -122,6 +125,7 @@ namespace Game.Combat.UI
             _stateMachine = null;
             _viewState = PlayerCombatDecisionViewState.Empty;
             ClearDynamicButtons();
+            statusListPresenter?.Clear();
             SetVisible(panelRoot, false);
         }
 
@@ -395,6 +399,7 @@ namespace Game.Combat.UI
             SetText(pressureText, $"압박 {pressurePercent:0}%");
             SetText(playerPostureText, FormatPosture("PLAYER", player));
             SetText(enemyPostureText, FormatPosture("ENEMY", enemy));
+            statusListPresenter?.Render(_session);
         }
 
         private ICombatant FindStatusEnemy()

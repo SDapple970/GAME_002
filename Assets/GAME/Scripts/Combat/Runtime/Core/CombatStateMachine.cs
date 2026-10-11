@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Game.Combat.Model;
 using UnityEngine;
 
@@ -630,7 +631,9 @@ namespace Game.Combat.Core
             int postureDelta;
             try
             {
-                postureDelta = Math.Max(0, postureRule.ResolvePostureDelta(request));
+                postureDelta = postureRule is FinalCombatPostureRule finalPostureRule
+                    ? Math.Max(0, finalPostureRule.ResolvePostureDelta(request, _session))
+                    : Math.Max(0, postureRule.ResolvePostureDelta(request));
             }
             catch (Exception)
             {
@@ -900,6 +903,7 @@ namespace Game.Combat.Core
                 return false;
             }
 
+            AdvanceStatusDurationsForCompletedExchange(exchange);
             EnterExit(terminalDecision.EndReason);
             return Phase == Phase.ExitCombat && EndReason == terminalDecision.EndReason;
         }
@@ -962,6 +966,7 @@ namespace Game.Combat.Core
             }
 
             exchange.StoreAttackAuthority(authority.Winner);
+            AdvanceStatusDurationsForCompletedExchange(exchange);
             exchange.FinalizeApplyOutcome(isAllOutCandidate);
 
             if (isTerminal)
@@ -974,6 +979,58 @@ namespace Game.Combat.Core
             exchange.BeginChainDecision(authority.Winner);
             SetPhase(Phase.ChainDecision);
             return true;
+        }
+
+        private void AdvanceStatusDurationsForCompletedExchange(CombatExchangeState exchange)
+        {
+            if (exchange == null || exchange.AreStatusDurationsAdvanced)
+                return;
+
+            CombatAttackDeclaration declaration = exchange.CurrentDeclaration;
+            if (declaration?.Attacker == null || declaration.Target == null)
+                return;
+
+            Dictionary<ICombatant, HashSet<string>> newlyChangedStatuses =
+                new Dictionary<ICombatant, HashSet<string>>();
+            IReadOnlyList<CombatStatusApplicationResult> appliedStatuses =
+                exchange.CurrentExecutionResult?.AppliedStatusResults;
+            if (appliedStatuses != null)
+            {
+                for (int i = 0; i < appliedStatuses.Count; i++)
+                {
+                    CombatStatusApplicationResult applied = appliedStatuses[i];
+                    if (applied?.Changed != true || applied.Target == null ||
+                        applied.Status == null || string.IsNullOrEmpty(applied.Status.StatusId))
+                    {
+                        continue;
+                    }
+
+                    if (!newlyChangedStatuses.TryGetValue(applied.Target, out HashSet<string> ids))
+                    {
+                        ids = new HashSet<string>(StringComparer.Ordinal);
+                        newlyChangedStatuses.Add(applied.Target, ids);
+                    }
+
+                    ids.Add(applied.Status.StatusId);
+                }
+            }
+
+            HashSet<ICombatant> participants = new HashSet<ICombatant>();
+            participants.Add(declaration.Attacker);
+            participants.Add(declaration.Target);
+            if (exchange.CurrentResponse?.Responder != null)
+                participants.Add(exchange.CurrentResponse.Responder);
+
+            foreach (ICombatant participant in participants)
+            {
+                if (_session.TryGetCombatState(participant, out CombatantCombatState state))
+                {
+                    newlyChangedStatuses.TryGetValue(participant, out HashSet<string> exclusions);
+                    state.AdvanceStatusDurations(exclusions);
+                }
+            }
+
+            exchange.MarkStatusDurationsAdvanced();
         }
 
         /// <summary>

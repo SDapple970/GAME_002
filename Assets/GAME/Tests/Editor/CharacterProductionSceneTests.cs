@@ -74,7 +74,7 @@ namespace Game.Tests.Integration
             Teleport(Player().transform.position + new Vector3(30, 30, 0));
             Assert.That(service.TrySave(out string saveMessage), Is.True, saveMessage);
             string savedJson = File.ReadAllText(service.PrimarySavePath);
-            Assert.That(JsonUtility.FromJson<GameSaveData>(savedJson).header.schemaVersion, Is.EqualTo(11));
+            Assert.That(JsonUtility.FromJson<GameSaveData>(savedJson).header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion));
 
             _sceneReady = false; SceneFlowController.Instance.LoadScene("TitleScene", HandleSceneReady);
             yield return Wait(() => _sceneReady && GameStateMachine.Instance.Current == GameState.Title, "return Title");

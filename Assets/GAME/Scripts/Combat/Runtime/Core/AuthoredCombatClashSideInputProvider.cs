@@ -8,6 +8,17 @@ namespace Game.Combat.Core
     /// </summary>
     public sealed class AuthoredCombatClashSideInputProvider : ICombatClashSideInputProvider
     {
+        private readonly CombatSession _session;
+
+        public AuthoredCombatClashSideInputProvider()
+        {
+        }
+
+        public AuthoredCombatClashSideInputProvider(CombatSession session)
+        {
+            _session = session;
+        }
+
         public bool TryCreate(
             ICombatant actor,
             ISkill skill,
@@ -22,7 +33,7 @@ namespace Game.Combat.Core
                 actor.Id,
                 skill.Id,
                 finalStats.ClashPower < 0 ? 0 : finalStats.ClashPower,
-                0,
+                CombatStatusModifierResolver.ResolveClashModifier(_session, actor),
                 skill.Speed,
                 isCurrentAttackOwner);
             return true;

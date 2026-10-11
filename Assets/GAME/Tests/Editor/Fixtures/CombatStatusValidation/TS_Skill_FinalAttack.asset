@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ae81748dc58caa24ea0ef0da4e0d3329, type: 3}
+  m_Name: TS_Skill_FinalAttack
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Data.SkillDefinitionSO
+  skillId: 920002
+  displayName: Test Final Attack
+  persistentKey: test.skill.final_attack
+  ownershipCategory: 0
+  uniqueOwnerCharacterId: 
+  inspirationCost: 0
+  mpCost: 0
+  tag: 0
+  targeting: 2
+  consumesTurn: 1
+  keywords: 0
+  movementMode: 0
+  desiredTargetDistance: 1
+  moveSpeed: 6
+  actionDelayAfterMove: 0.15
+  finalMpCost: 0
+  clashPower: 1
+  appliedStatusEffects: []
+  combatAnimationTrigger: Attack
+  fieldAnimationTrigger: Attack
+  fieldUsable: 0
+  fieldCooldown: 0.35
+  fieldHitDelay: 0.12
+  fieldHitBoxSize: {x: 1.2, y: 0.8}
+  fieldHitBoxOffset: {x: 0, y: 0}
+  castVfxPrefab: {fileID: 0}
+  impactVfxPrefab: {fileID: 0}
+  castSfx: {fileID: 0}
+  impactSfx: {fileID: 0}
+  baseDamage: 3
+  baseStagger: 0
+  weaknessStaggerBonus: 0
+  speed: 1

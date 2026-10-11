@@ -50,6 +50,7 @@ namespace Game.Combat.Core
                 }
             }
 
+            List<CombatAllyParticipantResult> allyParticipants = new();
             if (session.Allies != null)
             {
                 for (int i = 0; i < session.Allies.Count; i++)
@@ -64,7 +65,14 @@ namespace Game.Combat.Core
                 }
             }
 
+            // Entry mappings survive KO and any later roster edits; enemies cannot register here.
+            foreach (KeyValuePair<ICombatant, string> participant in session.AllyCharacterIds)
+                allyParticipants.Add(new CombatAllyParticipantResult(
+                    participant.Value, participant.Key.Id.Value, GetRemainingHp(session, participant.Key)));
+            result.RequiresExplicitExperienceRecipients = session.RequiresExplicitExperienceRecipients ||
+                session.Allies.Count > 1 || allyParticipants.Count > 0;
             result.DefeatedEnemySources = defeatedSources.AsReadOnly();
+            result.AllyParticipants = allyParticipants.AsReadOnly();
             return result;
         }
 

@@ -175,7 +175,7 @@ namespace Game.NonCombat.Save
     public static class GameSaveDataFormat
     {
         public const string FormatId = "GAME_002";
-        public const int CurrentSchemaVersion = 11;
+        public const int CurrentSchemaVersion = 12;
     }
 
     [Serializable]
@@ -219,11 +219,29 @@ namespace Game.NonCombat.Save
         public bool partialFailure;
         public string progressionTargetId;
         public bool expSettled;
+        public bool hasExplicitExperienceRecipients;
+        public List<RewardExperienceSaveData> experienceRecipients = new();
 
         public RewardLedgerSaveData Clone()
         {
-            return (RewardLedgerSaveData)MemberwiseClone();
+            RewardLedgerSaveData clone = (RewardLedgerSaveData)MemberwiseClone();
+            clone.experienceRecipients = new List<RewardExperienceSaveData>();
+            if (experienceRecipients != null)
+                foreach (RewardExperienceSaveData recipient in experienceRecipients)
+                    if (recipient != null) clone.experienceRecipients.Add(recipient.Clone());
+            return clone;
         }
+    }
+
+    [Serializable]
+    public sealed class RewardExperienceSaveData
+    {
+        public string characterId;
+        public int requestedExp;
+        public int appliedExp;
+        public bool settled;
+
+        public RewardExperienceSaveData Clone() => (RewardExperienceSaveData)MemberwiseClone();
     }
 
     [Serializable]

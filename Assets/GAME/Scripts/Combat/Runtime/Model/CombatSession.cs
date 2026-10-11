@@ -15,15 +15,42 @@ namespace Game.Combat.Model
             new Dictionary<ICombatant, CombatantCombatState>(CombatantReferenceComparer.Instance);
         private readonly Dictionary<ICombatant, EnemySourceSnapshot> _enemySources =
             new(CombatantReferenceComparer.Instance);
+        private readonly Dictionary<ICombatant, string> _allyCharacterIds =
+            new(CombatantReferenceComparer.Instance);
+        private readonly HashSet<string> _registeredAllyCharacterIds = new(StringComparer.Ordinal);
 
         public string SkillAcquisitionRecipientCharacterId { get; internal set; }
         public string ProgressionTargetCharacterId { get; internal set; }
         public bool IsPartySkillAcquisitionEligible { get; internal set; }
+        internal bool RequiresExplicitExperienceRecipients { get; set; }
+        internal IReadOnlyDictionary<ICombatant, string> AllyCharacterIds => _allyCharacterIds;
 
         internal void RegisterEnemySource(ICombatant enemy, EnemySourceSnapshot source)
         {
             if (enemy != null && enemy.Side == Side.Enemies && source?.SourceKey != null)
                 _enemySources.TryAdd(enemy, source);
+        }
+
+        internal bool RegisterAllyCharacter(ICombatant ally, string characterId)
+        {
+            if (ally == null || ally.Side != Side.Allies || string.IsNullOrWhiteSpace(characterId))
+                return false;
+
+            string normalizedId = characterId.Trim();
+            if (!_registeredAllyCharacterIds.Add(normalizedId))
+                return false;
+
+            _allyCharacterIds[ally] = normalizedId;
+            return true;
+        }
+
+        public bool TryGetAllyCharacterId(ICombatant ally, out string characterId)
+        {
+            if (ally != null && ally.Side == Side.Allies && _allyCharacterIds.TryGetValue(ally, out characterId))
+                return true;
+
+            characterId = null;
+            return false;
         }
 
         public bool TryGetEnemySource(ICombatant enemy, out EnemySourceSnapshot source)

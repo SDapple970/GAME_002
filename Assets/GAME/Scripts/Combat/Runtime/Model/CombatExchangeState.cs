@@ -15,6 +15,7 @@ namespace Game.Combat.Model
         public bool IsChainActive { get; private set; }
         public ICombatant ChainOwner { get; private set; }
         public bool IsApplyOutcomeFinalized { get; private set; }
+        public bool AreStatusDurationsAdvanced { get; private set; }
         public bool IsAllOutCandidate { get; private set; }
         public CombatAttackDeclaration CurrentDeclaration { get; private set; }
         public CombatResponseState ResponseState { get; private set; }
@@ -81,6 +82,7 @@ namespace Game.Combat.Model
             CurrentClashResult = null;
             ClearPreparedOutcome();
             ClearCommit();
+            AreStatusDurationsAdvanced = false;
             AdvanceVersion();
         }
 
@@ -250,6 +252,11 @@ namespace Game.Combat.Model
             AdvanceVersion();
         }
 
+        internal void MarkStatusDurationsAdvanced()
+        {
+            AreStatusDurationsAdvanced = true;
+        }
+
         internal void BeginChainDecision(ICombatant owner)
         {
             if (owner == null)
@@ -287,6 +294,7 @@ namespace Game.Combat.Model
             HandoffCount = 0;
             IsApplyOutcomeFinalized = false;
             IsAllOutCandidate = false;
+            AreStatusDurationsAdvanced = false;
             AdvanceVersion();
         }
 
@@ -377,6 +385,7 @@ namespace Game.Combat.Model
             CurrentClashResult = null;
             ClearPreparedOutcome();
             ClearCommit();
+            AreStatusDurationsAdvanced = false;
         }
     }
 }

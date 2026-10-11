@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace Game.Reward
 {
     public readonly struct RewardGrantRequest
@@ -10,6 +13,8 @@ namespace Game.Reward
         public readonly int ItemCount;
         public readonly string ActionId;
         public readonly string ProgressionTargetId;
+        // Null preserves the legacy single-target fallback; empty explicitly grants no EXP.
+        public readonly IReadOnlyList<string> ExperienceRecipientIds;
 
         public RewardGrantRequest(
             RewardSourceType sourceType,
@@ -19,7 +24,8 @@ namespace Game.Reward
             string itemId = null,
             int itemCount = 0,
             string actionId = null,
-            string progressionTargetId = null)
+            string progressionTargetId = null,
+            IEnumerable<string> experienceRecipientIds = null)
         {
             SourceType = sourceType;
             SourceId = sourceId;
@@ -29,6 +35,15 @@ namespace Game.Reward
             ItemCount = itemCount;
             ActionId = actionId;
             ProgressionTargetId = progressionTargetId;
+            if (experienceRecipientIds == null)
+                ExperienceRecipientIds = null;
+            else
+            {
+                SortedSet<string> unique = new(StringComparer.Ordinal);
+                foreach (string id in experienceRecipientIds)
+                    if (!string.IsNullOrWhiteSpace(id)) unique.Add(id.Trim());
+                ExperienceRecipientIds = new List<string>(unique).AsReadOnly();
+            }
         }
     }
 }

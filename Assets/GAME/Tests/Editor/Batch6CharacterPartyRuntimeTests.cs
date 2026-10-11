@@ -50,6 +50,20 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void PartyMutation_RejectsA4thCombatSelectionWithoutReorderingTheLineup()
+        {
+            PartyRuntime party = new GameObject("Party").AddComponent<PartyRuntime>();
+            foreach (string id in new[] { "a", "b", "c", "d" })
+                party.AddMember(id);
+
+            Assert.That(party.SelectForCombat("a", true).Changed, Is.True);
+            Assert.That(party.SelectForCombat("b", true).Changed, Is.True);
+            Assert.That(party.SelectForCombat("c", true).Changed, Is.True);
+            Assert.That(party.SelectForCombat("d", true).Status, Is.EqualTo(PartyMutationStatus.CombatLineupFull));
+            Assert.That(party.CombatLineup, Is.EqualTo(new[] { "a", "b", "c" }));
+        }
+
+        [Test]
         public void PartySaveRestore_PreservesStateSilentlyAndDoesNotWriteLevels()
         {
             PartyRuntime party = new GameObject("Party").AddComponent<PartyRuntime>();

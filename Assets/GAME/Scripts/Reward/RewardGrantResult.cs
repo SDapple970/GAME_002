@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using Game.NonCombat.Progress;
+
 namespace Game.Reward
 {
     public readonly struct RewardGrantResult
@@ -31,6 +35,8 @@ namespace Game.Reward
         public readonly bool InvalidRequest;
         public readonly string ProgressionTargetId;
         public readonly bool ExpSettled;
+        public readonly bool HasExplicitExperienceRecipients;
+        public readonly IReadOnlyList<ExperienceApplyResult> ExperienceResults;
 
         public RewardGrantResult(
             RewardSourceType sourceType,
@@ -76,7 +82,9 @@ namespace Game.Reward
             bool invalidRequest,
             string actionId = null,
             string progressionTargetId = null,
-            bool expSettled = false)
+            bool expSettled = false,
+            bool hasExplicitExperienceRecipients = false,
+            IEnumerable<ExperienceApplyResult> experienceResults = null)
         {
             SourceType = sourceType;
             SourceId = sourceId;
@@ -94,6 +102,10 @@ namespace Game.Reward
             InvalidRequest = invalidRequest;
             ProgressionTargetId = progressionTargetId;
             ExpSettled = expSettled;
+            HasExplicitExperienceRecipients = hasExplicitExperienceRecipients;
+            ExperienceResults = experienceResults == null
+                ? Array.AsReadOnly(Array.Empty<ExperienceApplyResult>())
+                : new List<ExperienceApplyResult>(experienceResults).AsReadOnly();
         }
 
         public bool HasAnyReward => Gold > 0 || Exp > 0 || ItemCount > 0;

@@ -83,6 +83,36 @@ namespace Game.NonCombat.Progress
 
         public ExperienceApplyResult ApplyExperience(string characterId, int amount)
         {
+            return ApplyExperience(characterId, amount, null);
+        }
+
+        // RewardService checkpoints the recipient before observers can save or reenter rewards.
+        internal ExperienceApplyResult ApplyExperience(string characterId, int amount, Action<ExperienceApplyResult> checkpoint)
+        {
+            _states.TryGetValue(NormalizeId(characterId) ?? string.Empty, out State previousState);
+            int previousLevel = previousState?.Level ?? 0;
+            int previousExperience = previousState?.Experience ?? 0;
+            ExperienceApplyResult result = ApplyExperienceCore(characterId, amount);
+            try { checkpoint?.Invoke(result); }
+            catch
+            {
+                // A failed ledger checkpoint cannot leave unrecorded EXP applied.
+                if (previousState != null)
+                { previousState.Level = previousLevel; previousState.Experience = previousExperience; }
+                throw;
+            }
+            if (result.Changed && ProgressionChanged != null)
+                foreach (Action<ExperienceApplyResult> subscriber in ProgressionChanged.GetInvocationList())
+                {
+                    try { subscriber(result); }
+                    catch (Exception exception)
+                    { Debug.LogError($"[CharacterProgressionService] ProgressionChanged subscriber failed for '{result.CharacterId}': {exception}", this); }
+                }
+            return result;
+        }
+
+        private ExperienceApplyResult ApplyExperienceCore(string characterId, int amount)
+        {
             string id = NormalizeId(characterId);
             if (id == null) return Empty(id, amount, ExperienceApplyStatus.InvalidCharacterId);
             if (amount <= 0) return Empty(id, amount, ExperienceApplyStatus.InvalidAmount);
@@ -97,7 +127,6 @@ namespace Game.NonCombat.Progress
             state.Experience = experience;
             // EXP that cannot change a valid max-level target is terminally settled.
             ExperienceApplyResult result = Result(id, amount, applied, state, previousLevel, previousExperience, ExperienceApplyStatus.Settled);
-            if (applied > 0) ProgressionChanged?.Invoke(result);
             return result;
         }
 

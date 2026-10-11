@@ -31,7 +31,15 @@ namespace Game.Combat.Actions
                 if (revealsWeakness)
                     session.Knowledge.RevealWeakness(target.Id);
                 else if (appliesCombatantDamage && request.Skill.BaseDamage > 0)
-                    target.ApplyDamage(request.Skill.BaseDamage);
+                {
+                    int damage = session.FlowMode == CombatFlowMode.StandoffClashChain
+                        ? CombatStatusModifierResolver.ApplyDamageModifier(
+                            session,
+                            request.Actor,
+                            request.Skill.BaseDamage)
+                        : request.Skill.BaseDamage;
+                    target.ApplyDamage(damage);
+                }
 
                 targetResults.Add(new CombatSkillTargetResult(target, hpBefore, target.HP));
             }

@@ -37,6 +37,11 @@ namespace Game.Combat.Data
         [SerializeField] private CombatStatusDurationKind durationKind;
         [Min(0), SerializeField] private int explicitDuration;
 
+        [Header("FinalExchange V1 Modifiers")]
+        [SerializeField] private int damageModifier;
+        [SerializeField] private int clashModifier;
+        [SerializeField] private int postureModifier;
+
         public string StatusId => string.IsNullOrWhiteSpace(statusId) ? string.Empty : statusId.Trim();
         public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? StatusId : displayName.Trim();
         public CombatStatusPolarity Polarity => polarity;
@@ -46,6 +51,9 @@ namespace Game.Combat.Data
         public int ExplicitDuration => durationKind == CombatStatusDurationKind.Explicit
             ? Mathf.Max(0, explicitDuration)
             : 0;
+        public int DamageModifier => damageModifier;
+        public int ClashModifier => clashModifier;
+        public int PostureModifier => postureModifier;
 
         private void OnValidate()
         {

@@ -26,10 +26,11 @@ namespace Game.Combat.Adapters
         {
             session.SkillAcquisitionRecipientCharacterId = req.SkillAcquisitionRecipientCharacterId;
             session.IsPartySkillAcquisitionEligible = req.IsPartySkillAcquisitionEligible;
+            session.RequiresExplicitExperienceRecipients = req.AllyFieldObjects.Count > 1;
             int id = 1;
             CreateSide(session, req, req.AllyFieldObjects, Side.Allies, _defaultStaggerMaxAllies, ref id);
             // Snapshot the sole field ally's identity at entry. A later Party/default-target change
-            // must not redirect this combat's EXP; multi-ally distribution remains an authored policy.
+            // must not redirect this combat's EXP. Party EXP uses the registered participant snapshot.
             if (session.Allies.Count == 1 && req.AllyFieldObjects.Count == 1 &&
                 req.TryGetAllyCharacterId(req.AllyFieldObjects[0], out string characterId))
                 session.ProgressionTargetCharacterId = characterId;
@@ -88,7 +89,12 @@ namespace Game.Combat.Adapters
                 if (list.Count == 0)
                     Debug.LogWarning($"[FieldCombatantFactory] {go.name} has no combat skills. Add CombatSkillLoadoutComponent or register fallback SkillDefinitionSO assets.");
 
-                if (side == Side.Allies) session.Allies.Add(combatant);
+                if (side == Side.Allies)
+                {
+                    session.Allies.Add(combatant);
+                    if (request.TryGetAllyCharacterId(go, out string characterId))
+                        session.RegisterAllyCharacter(combatant, characterId);
+                }
                 else
                 {
                     session.Enemies.Add(combatant);

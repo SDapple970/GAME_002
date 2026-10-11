@@ -16,6 +16,9 @@ namespace Game.Combat.Model
         public string StatusId { get; }
         public int StackCount { get; private set; }
         public int RemainingDuration { get; private set; }
+        public bool IsExpired { get; private set; }
+        public bool HasFiniteDuration => DurationKind == CombatStatusDurationKind.Explicit &&
+                                         RemainingDuration > 0;
         public CombatStatusDurationKind DurationKind => Definition.DurationKind;
         public CombatStatusPolarity Polarity => Definition.Polarity;
 
@@ -24,6 +27,7 @@ namespace Game.Combat.Model
             int previousStacks = StackCount;
             int previousDuration = RemainingDuration;
             Definition = definition;
+            IsExpired = false;
 
             switch (definition.StackPolicy)
             {
@@ -40,6 +44,22 @@ namespace Game.Combat.Model
             }
 
             return previousStacks != StackCount || previousDuration != RemainingDuration;
+        }
+
+        internal bool TryAdvanceCompletedExchange(out bool expired)
+        {
+            expired = false;
+            if (!HasFiniteDuration || IsExpired)
+                return false;
+
+            RemainingDuration--;
+            if (RemainingDuration > 0)
+                return true;
+
+            RemainingDuration = 0;
+            IsExpired = true;
+            expired = true;
+            return true;
         }
     }
 
@@ -66,5 +86,26 @@ namespace Game.Combat.Model
         public int CurrentStacks { get; }
         public bool WasAdded { get; }
         public bool Changed { get; }
+    }
+
+    public sealed class CombatStatusDurationResult
+    {
+        internal CombatStatusDurationResult(
+            ICombatant target,
+            CombatStatusSnapshot snapshot,
+            int remainingDurationBefore,
+            bool expired)
+        {
+            Target = target;
+            Snapshot = snapshot;
+            RemainingDurationBefore = remainingDurationBefore;
+            Expired = expired;
+        }
+
+        public ICombatant Target { get; }
+        public CombatStatusSnapshot Snapshot { get; }
+        public int RemainingDurationBefore { get; }
+        public int RemainingDuration => Snapshot?.RemainingDuration ?? 0;
+        public bool Expired { get; }
     }
 }

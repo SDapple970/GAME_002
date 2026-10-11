@@ -1,6 +1,6 @@
 namespace Game.NonCombat.Party
 {
-    public enum PartyMutationStatus { Success, InvalidCharacterId, AlreadyMember, NotOwned, InvalidLeader, NoChange }
+    public enum PartyMutationStatus { Success, InvalidCharacterId, AlreadyMember, NotOwned, InvalidLeader, CombatLineupFull, NoChange }
 
     public readonly struct PartyMutationResult
     {

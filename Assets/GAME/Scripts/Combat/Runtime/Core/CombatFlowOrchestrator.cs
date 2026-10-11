@@ -69,7 +69,7 @@ namespace Game.Combat.Core
             BindFinalExchangeCore(
                 entryPoint.ActiveStateMachine,
                 new UnityCombatRuleRandomSource(),
-                new AuthoredCombatClashSideInputProvider());
+                new AuthoredCombatClashSideInputProvider(_session));
         }
 
         public bool BindFinalExchange(
@@ -90,7 +90,7 @@ namespace Game.Combat.Core
             BindFinalExchangeCore(
                 stateMachine,
                 randomSource,
-                clashInputProvider ?? new AuthoredCombatClashSideInputProvider());
+                clashInputProvider ?? new AuthoredCombatClashSideInputProvider(_session));
             return true;
         }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Game.NonCombat.Party;
 using UnityEngine;
 
 namespace Game.NonCombat.Progress
@@ -47,7 +48,8 @@ namespace Game.NonCombat.Progress
                 string id = CharacterIdentity.Normalize(value);
                 if (id == null || !members.Contains(id) || !lineup.Add(id)) return Failed("Initial combat members must be unique owned Character IDs.", out message);
             }
-            if (lineup.Count == 0) return Failed("Initial combat lineup is not configured.", out message);
+            if (!PartyRuntime.IsValidCombatLineupCount(lineup.Count))
+                return Failed($"Initial combat lineup must contain 1 to {PartyRuntime.MaxCombatLineupSize} members.", out message);
             if (DefaultRewardTargetId == null || !known.Contains(DefaultRewardTargetId))
                 return Failed("Default Reward EXP target must reference an authored Character ID.", out message);
             message = null;

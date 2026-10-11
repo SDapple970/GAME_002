@@ -11,6 +11,16 @@ namespace Game.Combat.Adapters
         public PartyCombatantBinding(string characterId, GameObject fieldObject) { CharacterId = characterId; FieldObject = fieldObject; }
     }
 
+    /// <summary>Optional Inspector-authored bridge from a Party character ID to its field combatant.</summary>
+    [Serializable]
+    public sealed class PartyCombatantReference
+    {
+        [SerializeField] private string characterId;
+        [SerializeField] private GameObject fieldObject;
+
+        public PartyCombatantBinding ToBinding() => new PartyCombatantBinding(characterId, fieldObject);
+    }
+
     public sealed class PartyCombatSnapshot
     {
         public string CharacterId { get; }

@@ -31,6 +31,12 @@ namespace Game.Combat.Integration
         // Retained for standalone encounters and pre-group-configured serialized assets.
         [SerializeField] private CombatFlowMode flowMode = CombatFlowMode.LegacyPlanning;
 
+        [Header("Optional Party Combat Roster")]
+        [SerializeField] private bool usePartyCombatRoster;
+        [SerializeField] private PartyRuntime partyRuntime;
+        [SerializeField] private CharacterProgressionService characterProgression;
+        [SerializeField] private List<PartyCombatantReference> partyCombatantBindings = new();
+
         [Header("Filter")]
         [SerializeField] private string playerTag = "Player";
 
@@ -502,24 +508,69 @@ namespace Game.Combat.Integration
 
         private CombatStartRequest CreateEncounterRequest(List<GameObject> allies, List<GameObject> enemies)
         {
-            CombatStartRequest request = new CombatStartRequest(
-                startReason,
-                initiativeSide,
-                0,
-                -1,
-                openingEffectOrNull,
-                RuntimeOwner.ResolveCombatFlowMode(flowMode)
-            );
+            CombatFlowMode resolvedFlowMode = RuntimeOwner.ResolveCombatFlowMode(flowMode);
+            CombatStartRequest request;
 
-            AddValidObjects(request.AllyFieldObjects, allies);
-            AddValidObjects(request.EnemyFieldObjects, enemies);
-            if (request.AllyFieldObjects.Count == 1 &&
-                !new CharacterPartyCombatAdapter().TryBindSinglePlayerRequest(request, request.AllyFieldObjects[0],
-                    PartyRuntime.Instance, CharacterProgressionService.Instance, out string partyMessage))
+            if (usePartyCombatRoster)
             {
-                Debug.LogWarning($"[CombatEncounterTrigger2D] Party binding rejected: {partyMessage}", this);
-                return null;
+                if (partyRuntime == null || characterProgression == null)
+                {
+                    Debug.LogWarning("[CombatEncounterTrigger2D] Party combat roster requires explicit PartyRuntime and CharacterProgressionService references.", this);
+                    return null;
+                }
+
+                List<PartyCombatantBinding> bindings = new(partyCombatantBindings?.Count ?? 0);
+                if (partyCombatantBindings != null)
+                {
+                    for (int i = 0; i < partyCombatantBindings.Count; i++)
+                    {
+                        PartyCombatantReference binding = partyCombatantBindings[i];
+                        if (binding != null)
+                            bindings.Add(binding.ToBinding());
+                    }
+                }
+
+                PartyCombatBuildResult result = new CharacterPartyCombatAdapter().BuildRequest(
+                    partyRuntime,
+                    characterProgression,
+                    bindings,
+                    enemies,
+                    startReason,
+                    initiativeSide,
+                    0,
+                    -1,
+                    openingEffectOrNull,
+                    resolvedFlowMode);
+                if (!result.Success)
+                {
+                    Debug.LogWarning($"[CombatEncounterTrigger2D] Party roster binding rejected: {result.FailureReason}", this);
+                    return null;
+                }
+
+                request = result.Request;
             }
+            else
+            {
+                request = new CombatStartRequest(
+                    startReason,
+                    initiativeSide,
+                    0,
+                    -1,
+                    openingEffectOrNull,
+                    resolvedFlowMode
+                );
+
+                AddValidObjects(request.AllyFieldObjects, allies);
+                AddValidObjects(request.EnemyFieldObjects, enemies);
+                if (request.AllyFieldObjects.Count == 1 &&
+                    !new CharacterPartyCombatAdapter().TryBindSinglePlayerRequest(request, request.AllyFieldObjects[0],
+                        PartyRuntime.Instance, CharacterProgressionService.Instance, out string partyMessage))
+                {
+                    Debug.LogWarning($"[CombatEncounterTrigger2D] Party binding rejected: {partyMessage}", this);
+                    return null;
+                }
+            }
+
             request.EncounterOwnerOrNull = RuntimeOwner as UnityEngine.Object;
             return request;
         }

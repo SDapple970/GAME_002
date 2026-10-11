@@ -187,7 +187,7 @@ namespace Game.Tests.Integration
                 State(progression, "b02.test.a", 2, 7); Assert.That(party.Members, Is.EqualTo(new[] { "b02.test.a", "b02.test.b" }));
                 Assert.That(party.LeaderCharacterId, Is.EqualTo("b02.test.b")); Assert.That(party.CombatLineup, Is.EqualTo(new[] { "b02.test.b" }));
             }
-            Assert.That(restored.header.schemaVersion, Is.EqualTo(11)); Assert.That(restored.story.flags[0].value, Is.False); Assert.That(restored.story.intFlags[0].value, Is.EqualTo(17));
+            Assert.That(restored.header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion)); Assert.That(restored.story.flags[0].value, Is.False); Assert.That(restored.story.intFlags[0].value, Is.EqualTo(17));
         }
 
         [TestCase(5)]
@@ -197,7 +197,7 @@ namespace Game.Tests.Integration
         {
             string json = "{\"header\":{\"formatId\":\"GAME_002\",\"schemaVersion\":" + schema + "},\"party\":{\"memberIds\":[\"hero.test\"],\"memberLevels\":[{\"id\":\"hero.test\",\"value\":2}]},\"progression\":{\"characters\":[{\"characterId\":\"hero.test\",\"level\":2,\"experience\":5}]},\"story\":{\"flags\":[{\"id\":\"keep\",\"value\":true}]}}";
             GameSaveData save = Migrate(json);
-            Assert.That(save.header.schemaVersion, Is.EqualTo(11)); Assert.That(save.party.memberIds, Contains.Item("hero.test"));
+            Assert.That(save.header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion)); Assert.That(save.party.memberIds, Contains.Item("hero.test"));
             Assert.That(save.progression.characters[0].characterId, Is.EqualTo("hero.test")); Assert.That(save.story.flags[0].value, Is.True);
         }
 

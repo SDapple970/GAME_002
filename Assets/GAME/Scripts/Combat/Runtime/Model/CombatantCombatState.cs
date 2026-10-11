@@ -25,6 +25,7 @@ namespace Game.Combat.Model
         public CombatMentalState MentalState { get; private set; }
         public bool IsPanicked => MentalState == CombatMentalState.Panicked;
         public IReadOnlyList<CombatStatusRuntime> ActiveStatuses => GetActiveStatuses();
+        public IReadOnlyList<CombatStatusSnapshot> StatusSnapshots => GetStatusSnapshots();
 
         public CombatantCombatState(ICombatant combatant, CombatRuntimeConfig config)
         {
@@ -238,11 +239,65 @@ namespace Game.Combat.Model
             return _statuses.TryGetValue(statusId.Trim(), out status);
         }
 
+        internal IReadOnlyList<CombatStatusDurationResult> AdvanceStatusDurations(
+            ISet<string> excludedStatusIds)
+        {
+            if (_statuses.Count == 0)
+                return Array.Empty<CombatStatusDurationResult>();
+
+            List<CombatStatusDurationResult> results = null;
+            List<string> expiredStatusIds = null;
+            foreach (KeyValuePair<string, CombatStatusRuntime> pair in _statuses)
+            {
+                if (excludedStatusIds != null && excludedStatusIds.Contains(pair.Key))
+                    continue;
+
+                CombatStatusRuntime status = pair.Value;
+                int durationBefore = status.RemainingDuration;
+                if (!status.TryAdvanceCompletedExchange(out bool expired))
+                    continue;
+
+                results ??= new List<CombatStatusDurationResult>();
+                CombatStatusSnapshot snapshot = new CombatStatusSnapshot(status);
+                results.Add(new CombatStatusDurationResult(
+                    Combatant,
+                    snapshot,
+                    durationBefore,
+                    expired));
+
+                if (expired)
+                {
+                    expiredStatusIds ??= new List<string>();
+                    expiredStatusIds.Add(pair.Key);
+                }
+            }
+
+            if (expiredStatusIds != null)
+            {
+                for (int i = 0; i < expiredStatusIds.Count; i++)
+                    _statuses.Remove(expiredStatusIds[i]);
+            }
+
+            return results == null
+                ? Array.Empty<CombatStatusDurationResult>()
+                : results.AsReadOnly();
+        }
+
         private IReadOnlyList<CombatStatusRuntime> GetActiveStatuses()
         {
             List<CombatStatusRuntime> values = new List<CombatStatusRuntime>(_statuses.Values);
             values.Sort((left, right) => string.CompareOrdinal(left.StatusId, right.StatusId));
             return values.AsReadOnly();
+        }
+
+        private IReadOnlyList<CombatStatusSnapshot> GetStatusSnapshots()
+        {
+            List<CombatStatusSnapshot> snapshots = new List<CombatStatusSnapshot>(_statuses.Count);
+            foreach (CombatStatusRuntime status in _statuses.Values)
+                snapshots.Add(new CombatStatusSnapshot(status));
+
+            snapshots.Sort((left, right) => string.CompareOrdinal(left.StatusId, right.StatusId));
+            return snapshots.AsReadOnly();
         }
 
         private static int AddClamped(int current, int amount, int max)

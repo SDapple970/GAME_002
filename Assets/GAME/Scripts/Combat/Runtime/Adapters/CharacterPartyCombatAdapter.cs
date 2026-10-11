@@ -43,22 +43,42 @@ namespace Game.Combat.Adapters
             Side initiativeSide,
             int inspirationMax,
             int inspirationStart,
-            OpeningEffectSO openingEffect = null)
+            OpeningEffectSO openingEffect = null,
+            CombatFlowMode flowMode = CombatFlowMode.LegacyPlanning,
+            CombatRuntimeConfig runtimeConfig = default)
         {
             if (party == null || progression == null)
                 return Failed("PartyRuntime or CharacterProgressionService is missing.");
 
+            IReadOnlyList<string> lineup = party.CombatLineup;
+            if (!PartyRuntime.IsValidCombatLineupCount(lineup.Count))
+                return Failed($"Party combat lineup must contain 1 to {PartyRuntime.MaxCombatLineupSize} members.");
+
             Dictionary<string, UnityEngine.GameObject> byId = new(StringComparer.Ordinal);
+            HashSet<UnityEngine.GameObject> boundFieldObjects = new();
             if (bindings != null)
                 for (int i = 0; i < bindings.Count; i++)
                 {
                     string id = CharacterIdentity.Normalize(bindings[i].CharacterId);
-                    if (id != null && bindings[i].FieldObject != null && !byId.ContainsKey(id)) byId.Add(id, bindings[i].FieldObject);
+                    UnityEngine.GameObject fieldObject = bindings[i].FieldObject;
+                    if (id == null || fieldObject == null)
+                        continue;
+                    if (!byId.TryAdd(id, fieldObject))
+                        return Failed($"Character '{id}' has duplicate field bindings.");
+                    if (!boundFieldObjects.Add(fieldObject))
+                        return Failed($"Field object '{fieldObject.name}' is bound to more than one Character ID.");
                 }
 
-            CombatStartRequest request = new(reason, initiativeSide, inspirationMax, inspirationStart, openingEffect);
+            CombatStartRequest request = new(
+                reason,
+                initiativeSide,
+                inspirationMax,
+                inspirationStart,
+                openingEffect,
+                flowMode,
+                runtimeConfig);
             List<PartyCombatSnapshot> snapshots = new();
-            IReadOnlyList<string> lineup = party.CombatLineup;
+            HashSet<UnityEngine.GameObject> selectedFieldObjects = new();
             for (int i = 0; i < lineup.Count; i++)
             {
                 string id = lineup[i];
@@ -66,11 +86,13 @@ namespace Game.Combat.Adapters
                     return Failed($"Character '{id}' has no authored definition or progression state.");
                 if (!byId.TryGetValue(id, out UnityEngine.GameObject fieldObject))
                     return Failed($"Character '{id}' has no explicit field binding.");
+                if (!selectedFieldObjects.Add(fieldObject))
+                    return Failed($"Character '{id}' reuses a field binding already selected for combat.");
                 HpAccessor hp = HpAccessor.TryCreate(fieldObject);
                 if (hp == null || !hp.IsValid)
                     return Failed($"Character '{id}' has no valid HP source.");
                 int currentHp = hp.GetHp(); int maximumHp = hp.GetMaxHpOrCurrent();
-                if (maximumHp <= 0 || currentHp < 0 || currentHp > maximumHp)
+                if (maximumHp <= 0 || currentHp <= 0 || currentHp > maximumHp)
                     return Failed($"Character '{id}' has invalid HP data.");
                 CombatSkillLoadoutComponent loadout = fieldObject.GetComponent<CombatSkillLoadoutComponent>();
                 snapshots.Add(new PartyCombatSnapshot(id, level, currentHp, maximumHp, loadout != null ? loadout.SkillIds : null));

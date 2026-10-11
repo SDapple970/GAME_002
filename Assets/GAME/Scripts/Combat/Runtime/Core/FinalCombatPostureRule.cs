@@ -22,6 +22,15 @@ namespace Game.Combat.Core
             return CalculatePostureDamage();
         }
 
+        internal int ResolvePostureDelta(CombatPostureRequest request, CombatSession session)
+        {
+            if (request?.Loser == null)
+                throw new ArgumentException("A clash loser is required for posture resolution.");
+
+            return CalculatePostureDamage(
+                CombatStatusModifierResolver.ResolvePostureModifier(session, request.Winner));
+        }
+
         public bool TryApplyLoss(
             CombatantCombatState loserState,
             ICombatant loser,
@@ -53,9 +62,9 @@ namespace Game.Combat.Core
             return !reachedMaximum || loser.IsStunned;
         }
 
-        private int CalculatePostureDamage()
+        private int CalculatePostureDamage(int statusModifier = 0)
         {
-            long damage = (long)BasePostureDamage + PostureModifier;
+            long damage = (long)BasePostureDamage + PostureModifier + statusModifier;
             if (damage <= 0L)
                 return 0;
 
