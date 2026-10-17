@@ -70,6 +70,7 @@ namespace Game.Combat.Effects
             _finalOrchestrator.OutcomePresentationRequested += HandleFinalOutcomeRequested;
             _finalOrchestrator.AllOutPresentationRequested += HandleAllOutPresentationRequested;
             _finalOrchestrator.OvercomePresentationRequested += HandleOvercomePresentationRequested;
+            _finalOrchestrator.FeintPresentationRequested += HandleFeintPresentationRequested;
             _finalOrchestrator.AttackDecisionRequested += HandleFinalAttackDecisionRequested;
             _finalOrchestrator.ChainDecisionRequested += HandleFinalChainDecisionRequested;
             _finalOrchestrator.ChainDecisionAccepted += RestoreChainDecisionSlowMotion;
@@ -101,6 +102,7 @@ namespace Game.Combat.Effects
                 _finalOrchestrator.OutcomePresentationRequested -= HandleFinalOutcomeRequested;
                 _finalOrchestrator.AllOutPresentationRequested -= HandleAllOutPresentationRequested;
                 _finalOrchestrator.OvercomePresentationRequested -= HandleOvercomePresentationRequested;
+                _finalOrchestrator.FeintPresentationRequested -= HandleFeintPresentationRequested;
                 _finalOrchestrator.AttackDecisionRequested -= HandleFinalAttackDecisionRequested;
                 _finalOrchestrator.ChainDecisionRequested -= HandleFinalChainDecisionRequested;
                 _finalOrchestrator.ChainDecisionAccepted -= RestoreChainDecisionSlowMotion;
@@ -302,6 +304,22 @@ namespace Game.Combat.Effects
             _lastOvercomePresentationVersion = result.ExchangeVersion;
             cameraController?.FocusPlanning();
             RaiseFinalCue(CombatFinalPresentationCueKind.Overcome, result.Actor, null, null);
+        }
+
+        private void HandleFeintPresentationRequested(CombatFeintPresentationRequest request)
+        {
+            if (request == null || request.Kind != CombatFinalPresentationCueKind.Feint ||
+                _finalSession == null || request.SessionId != _finalSession.CompletionId ||
+                request.ExchangeVersion != _finalSession.ExchangeState.Version)
+            {
+                return;
+            }
+
+            ICombatant enemy = FindFinalEnemy(request.EnemyCombatantId);
+            if (enemy == null)
+                return;
+
+            RaiseFinalCue(CombatFinalPresentationCueKind.Feint, enemy, null, null);
         }
 
         private static void PlayAllOutTargetReaction(
@@ -630,6 +648,21 @@ namespace Game.Combat.Effects
             }
 
             return false;
+        }
+
+        private ICombatant FindFinalEnemy(CombatantId enemyCombatantId)
+        {
+            if (_finalSession == null)
+                return null;
+
+            for (int i = 0; i < _finalSession.Enemies.Count; i++)
+            {
+                ICombatant enemy = _finalSession.Enemies[i];
+                if (enemy != null && enemy.Id.Equals(enemyCombatantId))
+                    return enemy;
+            }
+
+            return null;
         }
 
         private static ICombatant GetPrimaryFinalTarget(

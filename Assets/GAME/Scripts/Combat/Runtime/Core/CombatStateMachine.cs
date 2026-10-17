@@ -167,6 +167,40 @@ namespace Game.Combat.Core
             return TryDeclareAttack(declaration);
         }
 
+        /// <summary>
+        /// Replaces only an initial enemy declaration whose response is still pending.
+        /// All legality checks precede mutation; the existing commit remains the sole MP payer.
+        /// </summary>
+        public bool TryReplaceEnemyDeclaration(CombatDeclarationToken token, ISkill replacementSkill)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            CombatAttackDeclaration original = exchange?.CurrentDeclaration;
+            if (!HasExpectedExchangeVersion(token.ExchangeVersion) ||
+                token.SessionId != _session.CompletionId ||
+                token.DeclarationId != exchange.DeclarationId || token.Revision != exchange.DeclarationRevision ||
+                Phase != Phase.AttackDeclaration || exchange.IsCommitted || exchange.IsChainActive ||
+                exchange.HasReplacedDeclaration || exchange.ResponseState != CombatResponseState.Pending ||
+                original?.Attacker?.Side != Side.Enemies || original.Skill == null ||
+                original.Skill.Tag != SkillTag.Attack || replacementSkill == null ||
+                replacementSkill.Tag != SkillTag.Attack || original.Skill.Id.Value == replacementSkill.Id.Value ||
+                !_session.TryGetEnemyBehavior(original.Attacker, out EnemyCombatBehaviorSnapshot behavior) ||
+                !behavior.DeclarationFeintEnabled ||
+                !CombatDeclarationPolicy.CanDeclareAttack(_session, original))
+            {
+                return false;
+            }
+
+            CombatAttackDeclaration replacement = new(original.Attacker, original.Target, replacementSkill);
+            if (!CombatDeclarationPolicy.CanDeclareAttack(_session, replacement) ||
+                !_session.GetCombatState(original.Attacker).CanSpendMp(CombatMpCostResolver.Resolve(replacementSkill)))
+            {
+                return false;
+            }
+
+            exchange.ReplaceDeclaration(replacement);
+            return true;
+        }
+
         public bool TryDeclareResponse(ICombatant responder, ISkill skill)
         {
             return TryDeclareResponse(new CombatResponseDeclaration(responder, skill));

@@ -28,6 +28,12 @@ namespace Game.Player
         [SerializeField] private Side initiativeSide = Side.Allies;
         [SerializeField] private string enemyTag = "Enemy";
 
+        [Header("Optional Party Combat Roster")]
+        [SerializeField] private bool usePartyCombatRoster;
+        [SerializeField] private PartyRuntime partyRuntime;
+        [SerializeField] private CharacterProgressionService characterProgression;
+        [SerializeField] private List<PartyCombatantReference> partyCombatantBindings = new();
+
         private float _nextAttackTime;
         private bool _attackRunning;
         private bool _combatStarted;
@@ -130,23 +136,11 @@ namespace Game.Player
                     continue;
                 }
 
-                List<GameObject> allies = new List<GameObject>(1) { gameObject };
                 CombatFlowMode flowMode = encounterOwner != null
                     ? encounterOwner.ResolveCombatFlowMode(CombatFlowMode.LegacyPlanning)
                     : CombatFlowMode.LegacyPlanning;
 
-                CombatStartRequest request = new CombatStartRequest(
-                    startReason,
-                    initiativeSide,
-                    0,
-                    -1,
-                    openingEffectOrNull,
-                    flowMode
-                );
-                request.AllyFieldObjects.AddRange(allies);
-                request.EnemyFieldObjects.AddRange(enemies);
-                if (!new CharacterPartyCombatAdapter().TryBindSinglePlayerRequest(request, gameObject,
-                    PartyRuntime.Instance, CharacterProgressionService.Instance, out string partyMessage))
+                if (!TryCreateAttackRequest(enemies, flowMode, out CombatStartRequest request, out string partyMessage))
                 {
                     encounterOwner?.ReleaseReservation(this);
                     Debug.LogWarning($"[PlayerFieldAttackController] Party binding rejected: {partyMessage}", this);
@@ -180,6 +174,78 @@ namespace Game.Player
                 Debug.Log($"[PlayerFieldAttackController] Combat started by field attack. Reason={startReason}, Initiative={initiativeSide}", this);
                 return;
             }
+        }
+
+        // This owns only the field-to-request boundary. CombatEntryPoint remains the sole combat start owner.
+        private bool TryCreateAttackRequest(
+            IReadOnlyList<GameObject> enemies,
+            CombatFlowMode flowMode,
+            out CombatStartRequest request,
+            out string message)
+        {
+            request = null;
+            message = null;
+            if (usePartyCombatRoster)
+            {
+                if (partyRuntime == null || characterProgression == null)
+                {
+                    message = "Party combat roster requires explicit PartyRuntime and CharacterProgressionService references.";
+                    return false;
+                }
+
+                List<PartyCombatantBinding> bindings = new(partyCombatantBindings?.Count ?? 0);
+                if (partyCombatantBindings != null)
+                {
+                    for (int i = 0; i < partyCombatantBindings.Count; i++)
+                    {
+                        PartyCombatantReference binding = partyCombatantBindings[i];
+                        if (binding != null)
+                            bindings.Add(binding.ToBinding());
+                    }
+                }
+
+                PartyCombatBuildResult result = new CharacterPartyCombatAdapter().BuildRequest(
+                    partyRuntime,
+                    characterProgression,
+                    bindings,
+                    enemies,
+                    startReason,
+                    initiativeSide,
+                    0,
+                    -1,
+                    openingEffectOrNull,
+                    flowMode);
+                if (!result.Success)
+                {
+                    message = result.FailureReason;
+                    return false;
+                }
+
+                request = result.Request;
+                return true;
+            }
+
+            request = new CombatStartRequest(
+                startReason,
+                initiativeSide,
+                0,
+                -1,
+                openingEffectOrNull,
+                flowMode);
+            request.AllyFieldObjects.Add(gameObject);
+            if (enemies != null)
+                for (int i = 0; i < enemies.Count; i++)
+                    if (enemies[i] != null)
+                        request.EnemyFieldObjects.Add(enemies[i]);
+
+            if (!new CharacterPartyCombatAdapter().TryBindSinglePlayerRequest(request, gameObject,
+                PartyRuntime.Instance, CharacterProgressionService.Instance, out message))
+            {
+                request = null;
+                return false;
+            }
+
+            return true;
         }
 
         private static List<GameObject> CreateActiveUniqueSnapshot(List<GameObject> source)

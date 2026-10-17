@@ -472,11 +472,15 @@ namespace Game.Combat.UI
 
             if (viewState?.DecisionKind == CombatExchangeDecisionKind.Response)
             {
+                CombatAttackDeclaration attack = viewState.DeclaredAttack;
+                string declaration = viewState.DeclarationToken?.Revision > 0 && attack != null
+                    ? $"공격 변경: {attack.Skill.Name} → {attack.Target.Id}. 이전 대응 선택이 해제되었습니다.\n"
+                    : string.Empty;
                 if (viewState.SelectedSkill == null)
-                    return "대응 스킬을 선택하거나 대응하지 않기를 선택하세요.";
+                    return declaration + "대응 스킬을 선택하거나 대응하지 않기를 선택하세요.";
                 if (viewState.SelectedTarget == null)
-                    return "대응할 대상을 선택하세요.";
-                return "선택한 대응을 확정하세요.";
+                    return declaration + "대응할 대상을 선택하세요.";
+                return declaration + "선택한 대응을 확정하세요.";
             }
 
             if (viewState?.DecisionKind == CombatExchangeDecisionKind.Chain)

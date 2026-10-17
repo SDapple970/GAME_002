@@ -13,6 +13,7 @@ namespace Game.Combat.Adapters
         private readonly Dictionary<GameObject, string> _allyCharacterIds = new();
         private readonly Dictionary<GameObject, CombatSkillLoadoutSnapshot> _allyLoadouts = new();
         private readonly Dictionary<GameObject, EnemySourceSnapshot> _enemySources = new();
+        private readonly Dictionary<GameObject, EnemyCombatBehaviorSnapshot> _enemyBehaviors = new();
         public string SkillAcquisitionRecipientCharacterId { get; private set; }
         public bool IsPartySkillAcquisitionEligible { get; internal set; }
         public readonly StartReason Reason;
@@ -143,6 +144,22 @@ namespace Game.Combat.Adapters
         {
             if (fieldObject != null && _enemySources.TryGetValue(fieldObject, out snapshot))
                 return true;
+            snapshot = null;
+            return false;
+        }
+
+        /// <summary>Stores value-only enemy behavior data captured before combat construction.</summary>
+        public void SetEnemyBehaviorSnapshot(GameObject fieldObject, EnemyCombatBehaviorSnapshot snapshot)
+        {
+            if (fieldObject != null && snapshot?.HasBehavior == true)
+                _enemyBehaviors[fieldObject] = snapshot;
+        }
+
+        public bool TryGetEnemyBehaviorSnapshot(GameObject fieldObject, out EnemyCombatBehaviorSnapshot snapshot)
+        {
+            if (fieldObject != null && _enemyBehaviors.TryGetValue(fieldObject, out snapshot))
+                return true;
+
             snapshot = null;
             return false;
         }

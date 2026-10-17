@@ -18,18 +18,31 @@ namespace Game.Combat.Integration
             for (int i = 0; i < request.EnemyFieldObjects.Count; i++)
             {
                 GameObject enemy = request.EnemyFieldObjects[i];
-                if (enemy == null || request.TryGetEnemySourceSnapshot(enemy, out _)) continue;
+                if (enemy == null) continue;
                 EnemySourceComponent component = enemy.GetComponent<EnemySourceComponent>();
                 if (component == null) continue; // Existing un-authored enemies retain compatibility behavior.
                 EnemyDefinitionSO definition = component.Definition;
-                if (definition == null || string.IsNullOrWhiteSpace(definition.PersistentKey))
-                {
-                    Debug.LogWarning("[EnemyCombatProvenanceBridge] Enemy source has no definition or stable persistent key; acquisition provenance was omitted.", component);
+                if (definition == null)
                     continue;
+
+                if (!request.TryGetEnemySourceSnapshot(enemy, out _) &&
+                    string.IsNullOrWhiteSpace(definition.PersistentKey))
+                {
+                    Debug.LogWarning("[EnemyCombatProvenanceBridge] Enemy source has no stable persistent key; acquisition provenance was omitted.", component);
+                }
+                else if (!request.TryGetEnemySourceSnapshot(enemy, out _))
+                {
+                    request.SetEnemySourceSnapshot(enemy,
+                        new EnemySourceSnapshot(definition.PersistentKey, definition.AcquirableSkillPersistentKeys));
                 }
 
-                request.SetEnemySourceSnapshot(enemy,
-                    new EnemySourceSnapshot(definition.PersistentKey, definition.AcquirableSkillPersistentKeys));
+                if (!request.TryGetEnemyBehaviorSnapshot(enemy, out _))
+                {
+                    EnemyCombatBehaviorSnapshot behavior = EnemyCombatBehaviorSnapshot.FromProfile(
+                        definition.FinalCombatBehaviorProfile);
+                    if (behavior != null)
+                        request.SetEnemyBehaviorSnapshot(enemy, behavior);
+                }
             }
         }
 

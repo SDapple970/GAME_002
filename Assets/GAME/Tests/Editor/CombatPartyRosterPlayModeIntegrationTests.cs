@@ -461,6 +461,7 @@ namespace Game.Tests.Combat
 
         [UnityTest]
         [Category("CBT_PARTY_05")]
+        [Category("CBT_PARTY_05V")]
         public IEnumerator PartyExp_FinalExchangeEntryVictory_KoRewardQuestAndSaveReplay_InActualPlayMode()
         {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -486,11 +487,15 @@ namespace Game.Tests.Combat
                 }
                 Invoke(fixture.Progression, "ConfigureForTests", fixture.CharacterIds[0], definitions);
                 CurrencyWallet wallet = CurrencyWallet.Instance;
+                InventoryService inventory = InventoryService.Instance;
                 RewardService rewards = RewardService.Instance;
                 Assert.That(wallet, Is.Not.Null);
                 Assert.That(rewards, Is.Not.Null);
                 wallet.SetGold(0); rewards.ResetForNewGame();
+                inventory.ResetForNewGame();
+                SetPrivate(inventory, "itemCatalog", null);
                 SetPrivate(rewards, "currencyWallet", wallet);
+                SetPrivate(rewards, "inventoryService", inventory);
                 SetPrivate(rewards, "characterProgressionService", fixture.Progression);
                 CombatEncounterGroup encounter = Track(new GameObject("PARTY_05.Encounter")).AddComponent<CombatEncounterGroup>();
                 fixture.Enemy.transform.SetParent(encounter.transform);
@@ -509,7 +514,11 @@ namespace Game.Tests.Combat
                 SetPrivate(entry, "_book", CreateSkillBook());
                 CreateQuestPublisher(entry, encounter, quest.QuestId, quest.Objectives[0].ObjectiveId);
                 CombatResult published = null;
-                entry.OnCombatEnded += result => { published = result; rewards.GrantCombatResult(result); };
+                entry.OnCombatEnded += result =>
+                {
+                    published = result;
+                    rewards.GrantReward(Game.Tests.Integration.PartyRewardDiskSaveTests.WithTestItem(result));
+                };
                 Assert.That(entry.StartCombat(fixture.CreateEncounterRequest()), Is.True);
                 CombatSession session = entry.ActiveSession;
                 Assert.That(session.FlowMode, Is.EqualTo(CombatFlowMode.StandoffClashChain));
@@ -541,17 +550,9 @@ namespace Game.Tests.Combat
                 Invoke(entry, "RaiseCombatEnded", published);
                 Assert.That(wallet.Gold, Is.EqualTo(50));
                 Assert.That(quests.GetObjectiveProgress(quest.QuestId, quest.Objectives[0].ObjectiveId), Is.EqualTo(1));
-                GameSaveData saved = new();
-                fixture.Progression.CaptureSaveData(saved); rewards.CaptureSaveData(saved);
-                saved = JsonUtility.FromJson<GameSaveData>(JsonUtility.ToJson(saved));
-                fixture.Progression.RestoreSaveData(saved); rewards.RestoreSaveData(saved);
-                Assert.That(rewards.GrantCombatResult(published).DuplicateBlocked, Is.True);
-                Assert.That(rewards.CombatGrantLedgerCount, Is.EqualTo(1));
-                for (int i = 0; i < 3; i++)
-                {
-                    fixture.Progression.TryGetState(fixture.CharacterIds[i], out _, out int exp);
-                    Assert.That(exp, Is.EqualTo(150));
-                }
+                GameFlowController.Instance.EnterExploration();
+                Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Exploration));
+                Game.Tests.Integration.PartyRewardDiskSaveTests.VerifyCompletedCombatFromDisk(published);
                 Assert.That(_runtimeErrors, Is.Empty, string.Join("\n", _runtimeErrors));
             }
             finally { Application.logMessageReceived -= CaptureRuntimeError; }

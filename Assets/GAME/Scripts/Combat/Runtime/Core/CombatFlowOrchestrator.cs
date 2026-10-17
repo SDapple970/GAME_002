@@ -16,6 +16,7 @@ namespace Game.Combat.Core
             new DeterministicCycleEnemyCombatPolicy();
         private readonly FinalCombatPostureRule _postureRule = new FinalCombatPostureRule();
         private readonly FinalCombatTerminalPolicy _terminalPolicy = new FinalCombatTerminalPolicy();
+        private readonly HashSet<CombatFeintCueKey> _raisedFeintCues = new();
 
         private CombatSession _session;
         private CombatStateMachine _boundStateMachine;
@@ -31,6 +32,7 @@ namespace Game.Combat.Core
         private bool _isTicking;
         private bool _pumpRequested;
         private bool _terminalCompletionRaised;
+        private bool _isReplacingDeclaration;
 
         public event Action<CombatExchangeDecisionRequest> AttackDecisionRequested;
         public event Action<CombatExchangeDecisionRequest> ResponseDecisionRequested;
@@ -39,6 +41,7 @@ namespace Game.Combat.Core
         public event Action<CombatOutcomePresentationRequest> OutcomePresentationRequested;
         public event Action<CombatSkillExecutionResult> AllOutPresentationRequested;
         public event Action<CombatOvercomeResult> OvercomePresentationRequested;
+        public event Action<CombatFeintPresentationRequest> FeintPresentationRequested;
         public event Action ChainDecisionAccepted;
         public event Action<CombatSession> FinalExchangeUnbound;
         public event Action<CombatSession, CombatEndReason, int> TerminalCompleted;
@@ -47,6 +50,13 @@ namespace Game.Combat.Core
         public CombatApproachPresentationRequest PendingApproachRequest => _pendingApproachRequest;
         public CombatOutcomePresentationRequest PendingOutcomePresentationRequest =>
             _pendingOutcomePresentationRequest;
+
+        public CombatDeclarationToken? CurrentDeclarationToken =>
+            IsFinalExchangeBound() && _boundStateMachine.Phase == Phase.AttackDeclaration &&
+            _session.ExchangeState.CurrentDeclaration != null
+                ? new CombatDeclarationToken(_session.CompletionId, _session.ExchangeState.DeclarationId,
+                    _session.ExchangeState.DeclarationRevision, _session.ExchangeState.Version)
+                : null;
 
         private void Awake()
         {
@@ -206,12 +216,46 @@ namespace Game.Combat.Core
             AdvanceUntilBlocked();
         }
 
+        /// <summary>
+        /// Emits one non-blocking visual cue for an explicitly opted-in enemy. This method never
+        /// changes combat state, authority, input, pressure, or combatant runtime values.
+        /// Automatic feint scheduling remains disabled until its gameplay policy is specified.
+        /// </summary>
+        public bool TryRequestFeintCue(CombatantId enemyCombatantId, int expectedExchangeVersion)
+        {
+            if (!IsFinalExchangeBound() || _boundStateMachine.Phase != Phase.Standoff ||
+                _session.ExchangeState.Version != expectedExchangeVersion)
+            {
+                return false;
+            }
+
+            ICombatant enemy = FindEnemy(enemyCombatantId);
+            if (enemy == null || enemy.IsStunned ||
+                !_session.TryGetCombatState(enemy, out CombatantCombatState state) ||
+                !state.IsAlive || state.IsPanicked ||
+                !_session.TryGetEnemyBehavior(enemy, out EnemyCombatBehaviorSnapshot behavior) ||
+                !behavior.FeintCueEnabled)
+            {
+                return false;
+            }
+
+            CombatFeintCueKey key = new(_session.CompletionId, expectedExchangeVersion, enemyCombatantId);
+            if (!_raisedFeintCues.Add(key))
+                return false;
+
+            RaiseFeintPresentation(new CombatFeintPresentationRequest(
+                _session.CompletionId,
+                expectedExchangeVersion,
+                enemyCombatantId));
+            return true;
+        }
+
         public void AdvanceUntilBlocked()
         {
             if (!IsFinalExchangeBound())
                 return;
 
-            if (_isPumping || _isTicking)
+            if (_isPumping || _isTicking || _isReplacingDeclaration)
             {
                 _pumpRequested = true;
                 return;
@@ -273,7 +317,7 @@ namespace Game.Combat.Core
             CombatResponseDeclaration response,
             int expectedExchangeVersion)
         {
-            if (!IsFinalExchangeBound() ||
+            if (_isReplacingDeclaration || !IsFinalExchangeBound() ||
                 !_boundStateMachine.TryDeclareResponse(response, expectedExchangeVersion))
             {
                 return false;
@@ -286,7 +330,7 @@ namespace Game.Combat.Core
 
         public bool SubmitNoResponse(int expectedExchangeVersion)
         {
-            if (!IsFinalExchangeBound() ||
+            if (_isReplacingDeclaration || !IsFinalExchangeBound() ||
                 !_boundStateMachine.ConfirmNoResponse(expectedExchangeVersion))
             {
                 return false;
@@ -295,6 +339,53 @@ namespace Game.Combat.Core
             _pendingDecisionRequest = null;
             RequestPump();
             return true;
+        }
+
+        public bool SubmitResponse(CombatResponseDeclaration response, CombatExchangeDecisionRequest request)
+        {
+            return IsCurrentResponseRequest(request) && SubmitResponse(response, request.ExchangeVersion);
+        }
+
+        public bool SubmitNoResponse(CombatExchangeDecisionRequest request)
+        {
+            return IsCurrentResponseRequest(request) && SubmitNoResponse(request.ExchangeVersion);
+        }
+
+        /// <summary>Explicit opt-in request; no timer, automatic AI choice, or presentation callback schedules it.</summary>
+        public bool TryReplaceEnemyDeclaration(CombatDeclarationToken token, ISkill replacementSkill)
+        {
+            if (_isReplacingDeclaration || !IsFinalExchangeBound())
+                return false;
+
+            _isReplacingDeclaration = true;
+            bool accepted;
+            try
+            {
+                accepted = _boundStateMachine.TryReplaceEnemyDeclaration(token, replacementSkill);
+                if (accepted)
+                    _pendingDecisionRequest = null;
+            }
+            finally
+            {
+                _isReplacingDeclaration = false;
+            }
+
+            if (accepted)
+                RequestPump();
+            return accepted;
+        }
+
+        private bool IsCurrentResponseRequest(CombatExchangeDecisionRequest request)
+        {
+            CombatDeclarationToken? current = CurrentDeclarationToken;
+            CombatDeclarationToken? requested = request?.DeclarationToken;
+            return ReferenceEquals(request, _pendingDecisionRequest) &&
+                   request?.Kind == CombatExchangeDecisionKind.Response &&
+                   current.HasValue && requested.HasValue &&
+                   requested.Value.SessionId == current.Value.SessionId &&
+                   requested.Value.DeclarationId == current.Value.DeclarationId &&
+                   requested.Value.Revision == current.Value.Revision &&
+                   requested.Value.ExchangeVersion == current.Value.ExchangeVersion;
         }
 
         public bool ContinueChain(ISkill skill, int expectedExchangeVersion)
@@ -721,7 +812,9 @@ namespace Game.Combat.Core
                 version,
                 actingSide,
                 actingActor,
-                _boundStateMachine.Phase);
+                _boundStateMachine.Phase,
+                kind == CombatExchangeDecisionKind.Response ? CurrentDeclarationToken : null,
+                kind == CombatExchangeDecisionKind.Response ? _session.ExchangeState.CurrentDeclaration : null);
             _pendingDecisionRequest = request;
             InvokeDecisionHandlers(handlers, request);
         }
@@ -866,6 +959,26 @@ namespace Game.Combat.Core
             }
         }
 
+        private void RaiseFeintPresentation(CombatFeintPresentationRequest request)
+        {
+            Action<CombatFeintPresentationRequest> handlers = FeintPresentationRequested;
+            if (handlers == null)
+                return;
+
+            Delegate[] invocationList = handlers.GetInvocationList();
+            for (int i = 0; i < invocationList.Length; i++)
+            {
+                try
+                {
+                    ((Action<CombatFeintPresentationRequest>)invocationList[i]).Invoke(request);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception, this);
+                }
+            }
+        }
+
         private void RaiseChainDecisionAccepted()
         {
             Action handlers = ChainDecisionAccepted;
@@ -930,6 +1043,7 @@ namespace Game.Combat.Core
             _pendingDecisionRequest = null;
             _pendingApproachRequest = null;
             _pendingOutcomePresentationRequest = null;
+            _raisedFeintCues.Clear();
             _completedOutcomePresentationVersion = -1;
             _isPumping = false;
             _isTicking = false;
@@ -944,6 +1058,49 @@ namespace Game.Combat.Core
                    _boundStateMachine != null &&
                    _randomSource != null &&
                    _clashInputProvider != null;
+        }
+
+        private ICombatant FindEnemy(CombatantId enemyCombatantId)
+        {
+            for (int i = 0; i < _session.Enemies.Count; i++)
+            {
+                ICombatant enemy = _session.Enemies[i];
+                if (enemy != null && enemy.Id.Equals(enemyCombatantId))
+                    return enemy;
+            }
+
+            return null;
+        }
+
+        private readonly struct CombatFeintCueKey : IEquatable<CombatFeintCueKey>
+        {
+            private readonly string _sessionId;
+            private readonly int _exchangeVersion;
+            private readonly CombatantId _enemyCombatantId;
+
+            public CombatFeintCueKey(string sessionId, int exchangeVersion, CombatantId enemyCombatantId)
+            {
+                _sessionId = sessionId;
+                _exchangeVersion = exchangeVersion;
+                _enemyCombatantId = enemyCombatantId;
+            }
+
+            public bool Equals(CombatFeintCueKey other)
+            {
+                return _sessionId == other._sessionId &&
+                       _exchangeVersion == other._exchangeVersion &&
+                       _enemyCombatantId.Equals(other._enemyCombatantId);
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is CombatFeintCueKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                return HashCode.Combine(_sessionId, _exchangeVersion, _enemyCombatantId);
+            }
         }
 
         private bool CanAcceptCombatItemCommand(int expectedExchangeVersion)
@@ -970,7 +1127,7 @@ namespace Game.Combat.Core
             return side == Side.Allies ? Side.Enemies : Side.Allies;
         }
 
-        private static void InvokeDecisionHandlers(
+        private void InvokeDecisionHandlers(
             Action<CombatExchangeDecisionRequest> handlers,
             CombatExchangeDecisionRequest request)
         {
@@ -980,6 +1137,9 @@ namespace Game.Combat.Core
             Delegate[] invocationList = handlers.GetInvocationList();
             for (int i = 0; i < invocationList.Length; i++)
             {
+                // A synchronous response/feint may supersede this request before later UI subscribers run.
+                if (!ReferenceEquals(_pendingDecisionRequest, request))
+                    break;
                 try
                 {
                     ((Action<CombatExchangeDecisionRequest>)invocationList[i]).Invoke(request);

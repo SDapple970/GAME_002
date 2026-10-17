@@ -798,8 +798,12 @@ namespace Game.Combat.Core
                 request.EncounterOwnerOrNull = EncounterOwnerOrNull;
                 request.SetSkillAcquisitionRecipient(_sourceRequest.SkillAcquisitionRecipientCharacterId);
                 for (int i = 0; i < Enemies.Length; i++)
+                {
                     if (_sourceRequest.TryGetEnemySourceSnapshot(Enemies[i], out EnemySourceSnapshot source))
                         request.SetEnemySourceSnapshot(Enemies[i], source);
+                    if (_sourceRequest.TryGetEnemyBehaviorSnapshot(Enemies[i], out EnemyCombatBehaviorSnapshot behavior))
+                        request.SetEnemyBehaviorSnapshot(Enemies[i], behavior);
+                }
                 for (int i = 0; i < Allies.Length; i++)
                 {
                     GameObject ally = Allies[i];

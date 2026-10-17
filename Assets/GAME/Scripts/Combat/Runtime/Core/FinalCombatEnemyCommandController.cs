@@ -17,7 +17,7 @@ namespace Game.Combat.Core
 
         public FinalCombatEnemyCommandController(IFinalCombatEnemyDecisionPolicy policy = null)
         {
-            _policy = policy ?? new FirstValidFinalCombatEnemyDecisionPolicy();
+            _policy = policy ?? new ConditionalFinalCombatEnemyDecisionPolicy();
         }
 
         public bool Bind(CombatFlowOrchestrator orchestrator, CombatSession session)
@@ -55,6 +55,13 @@ namespace Game.Combat.Core
         private void HandleDecisionRequest(CombatExchangeDecisionRequest request)
         {
             ConsumeRequest(request);
+        }
+
+        public bool TryReplaceDeclaration(CombatDeclarationToken token, ISkill replacementSkill)
+        {
+            return _orchestrator != null && _session != null &&
+                   token.SessionId == _session.CompletionId &&
+                   _orchestrator.TryReplaceEnemyDeclaration(token, replacementSkill);
         }
 
         private void ConsumeRequest(CombatExchangeDecisionRequest request)

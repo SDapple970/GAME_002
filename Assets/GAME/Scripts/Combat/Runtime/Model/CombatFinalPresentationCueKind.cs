@@ -16,6 +16,7 @@ namespace Game.Combat.Model
         Defeat,
         OutcomeHold,
         ChainDecision,
-        Standoff
+        Standoff,
+        Feint
     }
 }

@@ -15,6 +15,8 @@ namespace Game.Combat.Model
             new Dictionary<ICombatant, CombatantCombatState>(CombatantReferenceComparer.Instance);
         private readonly Dictionary<ICombatant, EnemySourceSnapshot> _enemySources =
             new(CombatantReferenceComparer.Instance);
+        private readonly Dictionary<ICombatant, EnemyCombatBehaviorSnapshot> _enemyBehaviors =
+            new(CombatantReferenceComparer.Instance);
         private readonly Dictionary<ICombatant, string> _allyCharacterIds =
             new(CombatantReferenceComparer.Instance);
         private readonly HashSet<string> _registeredAllyCharacterIds = new(StringComparer.Ordinal);
@@ -58,6 +60,21 @@ namespace Game.Combat.Model
             if (enemy != null && _enemySources.TryGetValue(enemy, out source))
                 return true;
             source = null;
+            return false;
+        }
+
+        internal void RegisterEnemyBehavior(ICombatant enemy, EnemyCombatBehaviorSnapshot behavior)
+        {
+            if (enemy != null && enemy.Side == Side.Enemies && behavior?.HasBehavior == true)
+                _enemyBehaviors.TryAdd(enemy, behavior);
+        }
+
+        public bool TryGetEnemyBehavior(ICombatant enemy, out EnemyCombatBehaviorSnapshot behavior)
+        {
+            if (enemy != null && _enemyBehaviors.TryGetValue(enemy, out behavior))
+                return true;
+
+            behavior = null;
             return false;
         }
 

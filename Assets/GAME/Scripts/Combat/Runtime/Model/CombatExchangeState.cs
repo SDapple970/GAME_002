@@ -18,6 +18,9 @@ namespace Game.Combat.Model
         public bool AreStatusDurationsAdvanced { get; private set; }
         public bool IsAllOutCandidate { get; private set; }
         public CombatAttackDeclaration CurrentDeclaration { get; private set; }
+        public int DeclarationId { get; private set; }
+        public int DeclarationRevision { get; private set; }
+        public bool HasReplacedDeclaration { get; private set; }
         public CombatResponseState ResponseState { get; private set; }
         public CombatResponseDeclaration CurrentResponse { get; private set; }
         public bool IsCommitted { get; private set; }
@@ -73,6 +76,21 @@ namespace Game.Combat.Model
         }
 
         internal void CommitDeclaration(CombatAttackDeclaration declaration)
+        {
+            DeclarationId++;
+            DeclarationRevision = 0;
+            HasReplacedDeclaration = false;
+            StoreDeclaration(declaration);
+        }
+
+        internal void ReplaceDeclaration(CombatAttackDeclaration declaration)
+        {
+            DeclarationRevision++;
+            HasReplacedDeclaration = true;
+            StoreDeclaration(declaration);
+        }
+
+        private void StoreDeclaration(CombatAttackDeclaration declaration)
         {
             CurrentDeclaration = declaration;
             CurrentAttackSide = declaration.DeclaringSide;
@@ -379,6 +397,8 @@ namespace Game.Combat.Model
 
         private void ClearDeclarationCore()
         {
+            DeclarationRevision = 0;
+            HasReplacedDeclaration = false;
             CurrentDeclaration = null;
             CurrentResponse = null;
             ResponseState = CombatResponseState.Pending;

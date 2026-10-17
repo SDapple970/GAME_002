@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Game.Combat.Data;
 using UnityEngine;
 
 namespace Game.Enemies
@@ -10,9 +11,11 @@ namespace Game.Enemies
     {
         [SerializeField] private string persistentKey;
         [SerializeField] private string[] acquirableSkillPersistentKeys = Array.Empty<string>();
+        [SerializeField] private FinalCombatEnemyBehaviorProfileSO finalCombatBehaviorProfile;
 
         public string PersistentKey => persistentKey;
         public IReadOnlyList<string> AcquirableSkillPersistentKeys =>
             Array.AsReadOnly(acquirableSkillPersistentKeys ?? Array.Empty<string>());
+        public FinalCombatEnemyBehaviorProfileSO FinalCombatBehaviorProfile => finalCombatBehaviorProfile;
     }
 }

@@ -100,6 +100,8 @@ namespace Game.Combat.Adapters
                     session.Enemies.Add(combatant);
                     if (request.TryGetEnemySourceSnapshot(go, out EnemySourceSnapshot source))
                         session.RegisterEnemySource(combatant, source);
+                    if (request.TryGetEnemyBehaviorSnapshot(go, out EnemyCombatBehaviorSnapshot behavior))
+                        session.RegisterEnemyBehavior(combatant, behavior);
                 }
 
                 var kw = go.GetComponent<CombatKeywordComponent>();

@@ -62,6 +62,8 @@ namespace Game.Combat.UI
         public int MaxMental { get; }
         public bool IsPanicked { get; }
         public bool CanOvercome { get; }
+        public CombatDeclarationToken? DeclarationToken { get; }
+        public CombatAttackDeclaration DeclaredAttack { get; }
 
         internal PlayerCombatDecisionViewState(
             CombatExchangeDecisionKind? decisionKind,
@@ -88,7 +90,9 @@ namespace Game.Combat.UI
             int currentMental,
             int maxMental,
             bool isPanicked,
-            bool canOvercome)
+            bool canOvercome,
+            CombatDeclarationToken? declarationToken = null,
+            CombatAttackDeclaration declaredAttack = null)
         {
             DecisionKind = decisionKind;
             ExchangeVersion = exchangeVersion;
@@ -115,6 +119,8 @@ namespace Game.Combat.UI
             MaxMental = maxMental;
             IsPanicked = isPanicked;
             CanOvercome = canOvercome;
+            DeclarationToken = declarationToken;
+            DeclaredAttack = declaredAttack;
         }
     }
 }

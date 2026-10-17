@@ -14,19 +14,25 @@ namespace Game.Combat.Model
         public Side ActingSide { get; }
         public ICombatant ActingActor { get; }
         public Phase Phase { get; }
+        public CombatDeclarationToken? DeclarationToken { get; }
+        public CombatAttackDeclaration DeclaredAttack { get; }
 
         internal CombatExchangeDecisionRequest(
             CombatExchangeDecisionKind kind,
             int exchangeVersion,
             Side actingSide,
             ICombatant actingActor,
-            Phase phase)
+            Phase phase,
+            CombatDeclarationToken? declarationToken = null,
+            CombatAttackDeclaration declaredAttack = null)
         {
             Kind = kind;
             ExchangeVersion = exchangeVersion;
             ActingSide = actingSide;
             ActingActor = actingActor;
             Phase = phase;
+            DeclarationToken = declarationToken;
+            DeclaredAttack = declaredAttack;
         }
     }
 }

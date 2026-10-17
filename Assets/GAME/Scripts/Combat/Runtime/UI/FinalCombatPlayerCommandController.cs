@@ -189,9 +189,9 @@ namespace Game.Combat.UI
             if (!HasCurrentPlayerRequest(CombatExchangeDecisionKind.Response))
                 return false;
 
-            int version = _request.ExchangeVersion;
+            CombatExchangeDecisionRequest request = _request;
             ClearSelectionOnly(true);
-            return _orchestrator.SubmitNoResponse(version);
+            return _orchestrator.SubmitNoResponse(request);
         }
 
         public bool ConfirmContinue()
@@ -321,10 +321,10 @@ namespace Game.Combat.UI
                 return false;
             }
 
-            int version = _request.ExchangeVersion;
+            CombatExchangeDecisionRequest request = _request;
             CombatResponseDeclaration response = new CombatResponseDeclaration(responder, _selectedSkill);
             ClearSelectionOnly(true);
-            return _orchestrator.SubmitResponse(response, version);
+            return _orchestrator.SubmitResponse(response, request);
         }
 
         private void HandleAttackDecisionRequested(CombatExchangeDecisionRequest request)
@@ -687,7 +687,9 @@ namespace Game.Combat.UI
                     activeState?.CurrentMental ?? 0,
                     activeState?.MaxMental ?? 0,
                     activeState?.IsPanicked == true,
-                    CanOvercome(activeActor));
+                    CanOvercome(activeActor),
+                    _request.DeclarationToken,
+                    _request.DeclaredAttack);
             }
 
             ViewStateChanged?.Invoke(ViewState);
