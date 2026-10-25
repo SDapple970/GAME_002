@@ -12,6 +12,7 @@ namespace Game.Quest
     public sealed class EncounterQuestObjectivePublisher : MonoBehaviour
     {
         [SerializeField] private CombatEncounterGroup targetEncounter;
+        [SerializeField] private QuestRuntime questRuntime;
         [SerializeField] private string questId;
         [SerializeField] private string objectiveId;
 
@@ -56,6 +57,7 @@ namespace Game.Quest
                 return;
             }
 
+            if (questRuntime == null) questRuntime = FindFirstObjectByType<QuestRuntime>();
             GameplayOutcomeIdentity identity = new(
                 GameplayOutcomeSourceType.Combat,
                 completionId,
@@ -67,7 +69,8 @@ namespace Game.Quest
                 identity,
                 1,
                 targetEncounter.gameObject,
-                targetEncounter.EncounterId));
+                targetEncounter.EncounterId,
+                questRuntime?.GetQuestRunId(questId)));
         }
     }
 }

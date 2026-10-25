@@ -186,7 +186,8 @@ namespace Game.Story.Data
                     context.OutcomeId),
                 intValue,
                 context.Source,
-                questTargetId));
+                questTargetId,
+                Object.FindFirstObjectByType<QuestRuntime>()?.GetQuestRunId(missionId)));
         }
 
         private void StartQuest()

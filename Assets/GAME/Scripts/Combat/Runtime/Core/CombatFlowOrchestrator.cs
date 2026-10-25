@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Game.Combat.Integration;
 using Game.Combat.Model;
+using Game.Core;
 using UnityEngine;
 
 namespace Game.Combat.Core
@@ -33,10 +34,24 @@ namespace Game.Combat.Core
         private bool _pumpRequested;
         private bool _terminalCompletionRaised;
         private bool _isReplacingDeclaration;
+        private CombatClashSeriesConfig? _seriesValidationConfig;
+        private Func<CombatClashSeriesState, ISkill> _seriesFinalSkillSelector;
+        private Func<CombatExchangeDecisionRequest, ISkill> _seriesTimeoutAttackSelector;
+        private float _seriesDecisionDuration;
+        private float _seriesDecisionRemaining;
+        private ISkill _seriesAttackSkill;
+        private long? _seriesAttackCardRuntimeId;
+        private int _seriesAttackBpInvestment;
+        private bool _bpCurrentAttackCycleHadSuccessfulExchange;
+        private CombatClashRoundPresentationRequest _pendingRoundPresentationRequest;
+        private int _lastPresentedRound;
 
         public event Action<CombatExchangeDecisionRequest> AttackDecisionRequested;
         public event Action<CombatExchangeDecisionRequest> ResponseDecisionRequested;
         public event Action<CombatExchangeDecisionRequest> ChainDecisionRequested;
+        public event Action<CombatExchangeDecisionRequest> ClashSeriesDecisionRequested;
+        public event Action<CombatClashRoundPresentationRequest> ClashRoundPresentationRequested;
+        public event Action ClashSeriesValidationEnabled;
         public event Action<CombatApproachPresentationRequest> ApproachPresentationRequested;
         public event Action<CombatOutcomePresentationRequest> OutcomePresentationRequested;
         public event Action<CombatSkillExecutionResult> AllOutPresentationRequested;
@@ -50,6 +65,10 @@ namespace Game.Combat.Core
         public CombatApproachPresentationRequest PendingApproachRequest => _pendingApproachRequest;
         public CombatOutcomePresentationRequest PendingOutcomePresentationRequest =>
             _pendingOutcomePresentationRequest;
+        public CombatClashRoundPresentationRequest PendingClashRoundPresentationRequest =>
+            _pendingRoundPresentationRequest;
+        public float ClashSeriesDecisionTimeRemaining => _seriesDecisionRemaining;
+        public bool IsClashSeriesValidationEnabled => _seriesValidationConfig.HasValue;
 
         public CombatDeclarationToken? CurrentDeclarationToken =>
             IsFinalExchangeBound() && _boundStateMachine.Phase == Phase.AttackDeclaration &&
@@ -109,6 +128,145 @@ namespace Game.Combat.Core
             return ReferenceEquals(_session, session) &&
                    ReferenceEquals(_boundStateMachine, stateMachine) &&
                    IsFinalExchangeBound();
+        }
+
+        /// <summary>
+        /// Explicit per-session validation opt-in. No serialized or Production default is supplied.
+        /// Both skill policies and all numbers must come from the validation caller.
+        /// </summary>
+        public bool TryEnableClashSeriesValidation(
+            CombatClashSeriesConfig config,
+            float decisionDurationSeconds,
+            Func<CombatClashSeriesState, ISkill> finalSkillSelector,
+            Func<CombatExchangeDecisionRequest, ISkill> timeoutAttackSelector)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            bool beforeFirstCommit = _boundStateMachine?.Phase == Phase.Standoff ||
+                (_boundStateMachine?.Phase == Phase.AttackDeclaration &&
+                 exchange?.CurrentDeclaration != null && !exchange.IsCommitted &&
+                 exchange.ResponseState == CombatResponseState.Pending);
+            if (!IsFinalExchangeBound() || !beforeFirstCommit ||
+                _session.Allies.Count != 1 || _session.Enemies.Count != 1 ||
+                config.AttackerDurability <= 0 || config.ResponderDurability <= 0 ||
+                config.MaxComparisons <= 0 || decisionDurationSeconds <= 0f ||
+                float.IsNaN(decisionDurationSeconds) || float.IsInfinity(decisionDurationSeconds) ||
+                finalSkillSelector == null || timeoutAttackSelector == null ||
+                exchange.ClashSeries != null)
+                return false;
+
+            _seriesValidationConfig = config;
+            _seriesDecisionDuration = decisionDurationSeconds;
+            _seriesFinalSkillSelector = finalSkillSelector;
+            _seriesTimeoutAttackSelector = timeoutAttackSelector;
+            ClashSeriesValidationEnabled?.Invoke();
+            return true;
+        }
+
+        public IReadOnlyList<ISkill> GetAvailableClashSeriesSkills(CombatExchangeDecisionRequest request)
+        {
+            if (!IsCurrentSeriesDecision(request) || request.ActingActor?.Skills == null)
+                return Array.Empty<ISkill>();
+
+            List<ISkill> skills = new List<ISkill>();
+            foreach (ISkill skill in request.ActingActor.Skills)
+            {
+                if (CanUseClashSeriesSkill(request, skill))
+                    skills.Add(skill);
+            }
+            return skills;
+        }
+
+        public CombatSkillAvailability GetSkillAvailability(
+            CombatExchangeDecisionRequest request,
+            ICombatant actor,
+            ISkill skill)
+        {
+            return GetSkillAvailability(request, actor, skill, null);
+        }
+
+        public CombatSkillAvailability GetSkillAvailability(
+            CombatExchangeDecisionRequest request,
+            ICombatant actor,
+            ISkill skill,
+            long? cardRuntimeId)
+        {
+            if (request == null || !IsFinalExchangeBound() || !ReferenceEquals(_pendingDecisionRequest, request) ||
+                request.ExchangeVersion != _session.ExchangeState.Version ||
+                request.Phase != _boundStateMachine.Phase ||
+                ((request.Kind == CombatExchangeDecisionKind.ClashAttack ||
+                  request.Kind == CombatExchangeDecisionKind.ClashResponse) &&
+                 !IsCurrentSeriesDecision(request)))
+                return new CombatSkillAvailability(skill, CombatSkillUnavailableReason.InvalidPhase);
+
+            return CombatSkillAvailabilityPolicy.Evaluate(
+                _session, request, actor, skill, _seriesAttackSkill, cardRuntimeId);
+        }
+
+        public bool CanUseClashSeriesSkill(CombatExchangeDecisionRequest request, ISkill skill)
+        {
+            return IsCurrentSeriesDecision(request) &&
+                   GetSkillAvailability(request, request.ActingActor, skill).IsAvailable;
+        }
+
+        public bool SubmitClashSeriesSkill(CombatExchangeDecisionRequest request, ISkill skill)
+        {
+            return SubmitClashSeriesSkill(request, skill, null);
+        }
+
+        public bool SubmitClashSeriesSkill(CombatExchangeDecisionRequest request, ISkill skill,
+            long? cardRuntimeId)
+        {
+            return SubmitClashSeriesSkill(request, skill, cardRuntimeId, 0);
+        }
+
+        public bool SubmitClashSeriesSkill(CombatExchangeDecisionRequest request, ISkill skill,
+            long? cardRuntimeId, int bpInvestment)
+        {
+            if (!IsCurrentSeriesDecision(request) ||
+                !GetSkillAvailability(request, request.ActingActor, skill, cardRuntimeId).IsAvailable ||
+                !CanInvestBp(request.ActingActor, skill, bpInvestment))
+                return false;
+
+            if (request.Kind == CombatExchangeDecisionKind.ClashAttack)
+            {
+                _seriesAttackSkill = skill;
+                _seriesAttackCardRuntimeId = cardRuntimeId;
+                _seriesAttackBpInvestment = bpInvestment;
+                _pendingDecisionRequest = null;
+                RequestPump();
+                return true;
+            }
+
+            CombatClashSeriesState series = _session.ExchangeState.ClashSeries;
+            if (!series.TryCommitNextRound(request.ClashSeriesToken.Value,
+                    _seriesAttackSkill, skill, _seriesAttackCardRuntimeId,
+                    cardRuntimeId, _seriesAttackBpInvestment, bpInvestment, out _))
+                return false;
+
+            _seriesAttackSkill = null;
+            _seriesAttackCardRuntimeId = null;
+            _seriesAttackBpInvestment = 0;
+            _pendingDecisionRequest = null;
+            RequestPump();
+            return true;
+        }
+
+        public bool SubmitClashSeriesNoResponse(CombatExchangeDecisionRequest request)
+        {
+            if (!IsCurrentSeriesDecision(request) ||
+                request.Kind != CombatExchangeDecisionKind.ClashResponse ||
+                _seriesAttackSkill == null ||
+                !_session.ExchangeState.ClashSeries.TryCommitNextRound(
+                    request.ClashSeriesToken.Value, _seriesAttackSkill, null,
+                    _seriesAttackCardRuntimeId, null, _seriesAttackBpInvestment, 0, out _))
+                return false;
+
+            _seriesAttackSkill = null;
+            _seriesAttackCardRuntimeId = null;
+            _seriesAttackBpInvestment = 0;
+            _pendingDecisionRequest = null;
+            RequestPump();
+            return true;
         }
 
         public void RegisterCombatItemUseExecutor(ICombatItemUseExecutor executor)
@@ -199,6 +357,11 @@ namespace Game.Combat.Core
 
         public void Tick(float deltaSeconds)
         {
+            Tick(deltaSeconds, Time.unscaledDeltaTime);
+        }
+
+        public void Tick(float deltaSeconds, float unscaledDeltaSeconds)
+        {
             if (!IsFinalExchangeBound())
                 return;
 
@@ -207,6 +370,8 @@ namespace Game.Combat.Core
             {
                 if (_boundStateMachine.Phase == Phase.Standoff)
                     _boundStateMachine.Tick(deltaSeconds);
+                else if (_boundStateMachine.Phase == Phase.Clash)
+                    TickClashSeriesDecision(unscaledDeltaSeconds);
             }
             finally
             {
@@ -303,6 +468,10 @@ namespace Game.Combat.Core
             int expectedExchangeVersion)
         {
             if (!IsFinalExchangeBound() ||
+                !HasRequiredCard(declaration?.Attacker, declaration?.Skill,
+                    CombatCardKind.Normal, declaration?.CardRuntimeId) ||
+                !CanInvestBp(declaration?.Attacker, declaration?.Skill,
+                    declaration?.BpInvestment ?? 0) ||
                 !_boundStateMachine.TryDeclareAttack(declaration, expectedExchangeVersion))
             {
                 return false;
@@ -318,6 +487,10 @@ namespace Game.Combat.Core
             int expectedExchangeVersion)
         {
             if (_isReplacingDeclaration || !IsFinalExchangeBound() ||
+                !HasRequiredCard(response?.Responder, response?.Skill,
+                    CombatCardKind.Clash, response?.CardRuntimeId) ||
+                !CanInvestBp(response?.Responder, response?.Skill,
+                    response?.BpInvestment ?? 0) ||
                 !_boundStateMachine.TryDeclareResponse(response, expectedExchangeVersion))
             {
                 return false;
@@ -390,6 +563,9 @@ namespace Game.Combat.Core
 
         public bool ContinueChain(ISkill skill, int expectedExchangeVersion)
         {
+            ICombatant owner = _session?.ExchangeState?.CurrentAttackActor;
+            if (!HasRequiredCard(owner, skill, CombatCardKind.Normal, null))
+                return false;
             if (!IsFinalExchangeBound() ||
                 !_boundStateMachine.TryContinueChain(skill, expectedExchangeVersion))
             {
@@ -404,6 +580,8 @@ namespace Game.Combat.Core
 
         public bool ContinueChain(int expectedExchangeVersion)
         {
+            if (!HasAnyNormalCard(_session?.ExchangeState?.CurrentAttackActor))
+                return false;
             if (!IsFinalExchangeBound() ||
                 !_boundStateMachine.TryContinueChain(expectedExchangeVersion))
             {
@@ -437,7 +615,8 @@ namespace Game.Combat.Core
             bool isHandoffEligible,
             int expectedExchangeVersion)
         {
-            if (!IsFinalExchangeBound() ||
+            if (!HasRequiredCard(receivingActor, receivingSkill, CombatCardKind.Normal, null) ||
+                !IsFinalExchangeBound() ||
                 !_boundStateMachine.TryHandoffChain(
                     receivingActor,
                     receivingSkill,
@@ -453,14 +632,51 @@ namespace Game.Combat.Core
             return true;
         }
 
+        private bool HasRequiredCard(ICombatant actor, ISkill skill,
+            CombatCardKind kind, long? runtimeId)
+        {
+            return actor != null && skill != null && _session != null &&
+                (!_session.TryGetHand(actor, out CombatHandRuntime hand) ||
+                 hand.TryFindInHand(skill, kind, runtimeId, out _));
+        }
+
+        public bool CanInvestBp(ICombatant actor, ISkill skill, int amount)
+        {
+            if (amount == 0) return true;
+            return IsFinalExchangeBound() && _session.BpRuntime != null &&
+                CombatBpEnhancementPolicy.CanInvest(_session, skill, amount) &&
+                _session.BpRuntime.CanInvest(actor, amount);
+        }
+
+        private bool HasAnyNormalCard(ICombatant actor)
+        {
+            if (actor == null || _session == null || !_session.TryGetHand(actor, out CombatHandRuntime hand))
+                return actor != null;
+            IReadOnlyList<CombatHandCard> cards = hand.Hand;
+            for (int i = 0; i < cards.Count; i++)
+                if (cards[i].Kind == CombatCardKind.Normal &&
+                    CombatChainPolicy.CanContinue(_session, actor, cards[i].Skill))
+                    return true;
+            return false;
+        }
+
         public bool EndChain(int expectedExchangeVersion)
         {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            Side cycleSide = exchange?.CurrentAttackSide ?? Side.Allies;
+            int cycleId = exchange?.DeclarationId ?? 0;
+            bool latestExchangeSucceeded = exchange?.IsApplyOutcomeFinalized == true;
+            bool bpCycleSucceeded = _bpCurrentAttackCycleHadSuccessfulExchange ||
+                                    latestExchangeSucceeded;
             if (!IsFinalExchangeBound() ||
                 !_boundStateMachine.TryEndChain(expectedExchangeVersion))
             {
                 return false;
             }
 
+            _session.TryRecordCompletedAttackCycle(cycleSide, cycleId, latestExchangeSucceeded);
+            _session.TryRecordCompletedBpAttackCycle(cycleSide, cycleId, bpCycleSucceeded);
+            _bpCurrentAttackCycleHadSuccessfulExchange = false;
             _session.StandoffState.Reset();
             _pendingDecisionRequest = null;
             RaiseChainDecisionAccepted();
@@ -637,7 +853,9 @@ namespace Game.Combat.Core
                     return false;
 
                 case Phase.Clash:
-                    return TryResolveClash(exchange);
+                    return _seriesValidationConfig.HasValue
+                        ? TryAdvanceClashSeries(exchange)
+                        : TryResolveClash(exchange);
 
                 case Phase.ApplyOutcome:
                     return TryAdvanceApplyOutcome(exchange);
@@ -686,6 +904,180 @@ namespace Game.Combat.Core
             return _boundStateMachine.TryResolveClash(rule, exchange.Version);
         }
 
+        private bool TryAdvanceClashSeries(CombatExchangeState exchange)
+        {
+            CombatClashSeriesState series = exchange.ClashSeries;
+            if (series == null)
+            {
+                if (exchange.ResponseState != CombatResponseState.CounterDeclared)
+                    return TryResolveClash(exchange);
+
+                try
+                {
+                    _lastPresentedRound = 0;
+                    _seriesAttackSkill = null;
+                    _seriesAttackCardRuntimeId = null;
+                    _seriesAttackBpInvestment = 0;
+                    new CombatClashSeriesState(_session, _boundStateMachine,
+                        _seriesValidationConfig.Value);
+                    return true;
+                }
+                catch (InvalidOperationException exception)
+                {
+                    Debug.LogError($"[CombatFlowOrchestrator] Clash series could not start: {exception.Message}", this);
+                    return false;
+                }
+            }
+
+            if (_pendingRoundPresentationRequest != null ||
+                series.ComparisonCount > _lastPresentedRound)
+                return false;
+
+            if (series.IsComplete)
+            {
+                _pendingDecisionRequest = null;
+                _seriesDecisionRemaining = 0f;
+                if (series.FinalOutcome == CombatClashOutcome.Tie)
+                    return _boundStateMachine.TryEndClashSeriesDraw(series, exchange.Version);
+
+                ISkill finalSkill = _seriesFinalSkillSelector?.Invoke(series);
+                return finalSkill != null && _boundStateMachine.TryCompleteClashSeries(
+                    series, series.CommandToken, finalSkill, exchange.Version);
+            }
+
+            if (series.IsRoundCommitted)
+            {
+                CombatAttackDeclaration attack = exchange.CurrentDeclaration;
+                CombatResponseDeclaration response = exchange.CurrentResponse;
+                if (attack == null || response == null ||
+                    !_clashInputProvider.TryCreate(attack.Attacker, series.CurrentAttackSkill,
+                        true, out CombatClashSideInput attackerInput) ||
+                    !_clashInputProvider.TryCreate(response.Responder, series.CurrentResponseSkill,
+                        false, out CombatClashSideInput responderInput) ||
+                    !series.TryResolveRound(series.CommandToken, attackerInput,
+                        responderInput, out CombatClashRoundResult result))
+                    return false;
+
+                PublishClashRoundPresentation(series, result, attack.Attacker, response.Responder);
+                return false;
+            }
+
+            CombatExchangeDecisionKind kind = _seriesAttackSkill == null
+                ? CombatExchangeDecisionKind.ClashAttack
+                : CombatExchangeDecisionKind.ClashResponse;
+            ICombatant actor = kind == CombatExchangeDecisionKind.ClashAttack
+                ? exchange.CurrentDeclaration?.Attacker : exchange.CurrentResponse?.Responder;
+            PublishClashSeriesDecision(kind, actor, series.CommandToken);
+            return false;
+        }
+
+        private void PublishClashRoundPresentation(
+            CombatClashSeriesState series,
+            CombatClashRoundResult result,
+            ICombatant attacker,
+            ICombatant responder)
+        {
+            int bindingId = _bindingId;
+            int version = _session.ExchangeState.Version;
+            CombatClashRoundPresentationRequest request = new CombatClashRoundPresentationRequest(
+                version, series.CommandToken, result, attacker, responder,
+                series.CurrentAttackSkill, series.CurrentResponseSkill,
+                () => CompleteClashRoundPresentation(bindingId, series, result.ComparisonNumber, version));
+            _pendingRoundPresentationRequest = request;
+            Action<CombatClashRoundPresentationRequest> handlers = ClashRoundPresentationRequested;
+            if (handlers == null)
+            {
+                request.TryComplete();
+                return;
+            }
+
+            Delegate[] invocationList = handlers.GetInvocationList();
+            if (invocationList.Length > 1)
+                Debug.LogWarning(
+                    "[CombatFlowOrchestrator] Multiple clash round presenters are bound. Only the first will run.",
+                    this);
+
+            try
+            {
+                ((Action<CombatClashRoundPresentationRequest>)invocationList[0]).Invoke(request);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception, this);
+                request.TryComplete();
+            }
+        }
+
+        private bool CompleteClashRoundPresentation(
+            int bindingId,
+            CombatClashSeriesState series,
+            int comparisonNumber,
+            int version)
+        {
+            if (bindingId != _bindingId || !IsFinalExchangeBound() ||
+                _boundStateMachine.Phase != Phase.Clash ||
+                _session.ExchangeState.Version != version ||
+                !ReferenceEquals(_session.ExchangeState.ClashSeries, series) ||
+                _pendingRoundPresentationRequest?.Result.ComparisonNumber != comparisonNumber)
+                return false;
+
+            _lastPresentedRound = comparisonNumber;
+            _pendingRoundPresentationRequest = null;
+            RequestPump();
+            return true;
+        }
+
+        private void PublishClashSeriesDecision(
+            CombatExchangeDecisionKind kind,
+            ICombatant actor,
+            long token)
+        {
+            if (actor == null || (_pendingDecisionRequest != null &&
+                _pendingDecisionRequest.Kind == kind &&
+                _pendingDecisionRequest.ClashSeriesToken == token))
+                return;
+
+            CombatExchangeDecisionRequest request = new CombatExchangeDecisionRequest(
+                kind, _session.ExchangeState.Version, actor.Side, actor, Phase.Clash,
+                clashSeriesToken: token);
+            _seriesDecisionRemaining = _seriesDecisionDuration;
+            _pendingDecisionRequest = request;
+            InvokeDecisionHandlers(ClashSeriesDecisionRequested, request);
+        }
+
+        private bool IsCurrentSeriesDecision(CombatExchangeDecisionRequest request)
+        {
+            return IsFinalExchangeBound() && ReferenceEquals(_pendingDecisionRequest, request) &&
+                   request != null && request.Phase == Phase.Clash &&
+                   (request.Kind == CombatExchangeDecisionKind.ClashAttack ||
+                    request.Kind == CombatExchangeDecisionKind.ClashResponse) &&
+                   request.ExchangeVersion == _session.ExchangeState.Version &&
+                   request.ClashSeriesToken == _session.ExchangeState.ClashSeries?.CommandToken &&
+                   _boundStateMachine.Phase == Phase.Clash &&
+                   GameStateMachine.Instance?.Is(GameState.Paused) != true && Time.timeScale > 0f;
+        }
+
+        private void TickClashSeriesDecision(float unscaledSeconds)
+        {
+            CombatExchangeDecisionRequest request = _pendingDecisionRequest;
+            if (!IsCurrentSeriesDecision(request) || _seriesDecisionRemaining <= 0f ||
+                unscaledSeconds <= 0f)
+                return;
+
+            _seriesDecisionRemaining = Mathf.Max(0f, _seriesDecisionRemaining - unscaledSeconds);
+            if (_seriesDecisionRemaining > 0f)
+                return;
+
+            if (request.Kind == CombatExchangeDecisionKind.ClashResponse)
+                SubmitClashSeriesNoResponse(request);
+            else
+            {
+                ISkill timeoutSkill = _seriesTimeoutAttackSelector?.Invoke(request);
+                if (timeoutSkill != null)
+                    SubmitClashSeriesSkill(request, timeoutSkill);
+            }
+        }
+
         private bool TryAdvanceApplyOutcome(CombatExchangeState exchange)
         {
             int version = exchange.Version;
@@ -716,7 +1108,21 @@ namespace Game.Combat.Core
                 return false;
             }
 
-            return _boundStateMachine.TryFinalizeApplyOutcome(_terminalPolicy, version);
+            Side declaringSide = exchange.CurrentDeclaration?.DeclaringSide ?? Side.Allies;
+            int cycleId = exchange.DeclarationId;
+            if (!_boundStateMachine.TryFinalizeApplyOutcome(_terminalPolicy, version))
+                return false;
+            _bpCurrentAttackCycleHadSuccessfulExchange = true;
+            if (_boundStateMachine.Phase == Phase.ChainDecision &&
+                exchange.CurrentAttackSide != declaringSide)
+                _session.TryRecordCompletedAttackCycle(declaringSide, cycleId, true);
+            if (_boundStateMachine.Phase == Phase.ChainDecision &&
+                exchange.CurrentAttackSide != declaringSide)
+            {
+                _session.TryRecordCompletedBpAttackCycle(declaringSide, cycleId, true);
+                _bpCurrentAttackCycleHadSuccessfulExchange = false;
+            }
+            return true;
         }
 
         private void PublishOutcomePresentationRequest(
@@ -744,7 +1150,8 @@ namespace Game.Combat.Core
                 exchange.CurrentMentalResults,
                 exchange.CurrentAftermathSnapshot,
                 exchange.CurrentAftermathDecision,
-                () => CompleteOutcomePresentation(bindingId, version));
+                () => CompleteOutcomePresentation(bindingId, version),
+                exchange.ClashSeries != null);
             _pendingOutcomePresentationRequest = request;
 
             Action<CombatOutcomePresentationRequest> handlers = OutcomePresentationRequested;
@@ -1043,6 +1450,17 @@ namespace Game.Combat.Core
             _pendingDecisionRequest = null;
             _pendingApproachRequest = null;
             _pendingOutcomePresentationRequest = null;
+            _pendingRoundPresentationRequest = null;
+            _seriesValidationConfig = null;
+            _seriesFinalSkillSelector = null;
+            _seriesTimeoutAttackSelector = null;
+            _seriesDecisionDuration = 0f;
+            _seriesDecisionRemaining = 0f;
+            _seriesAttackSkill = null;
+            _seriesAttackCardRuntimeId = null;
+            _seriesAttackBpInvestment = 0;
+            _bpCurrentAttackCycleHadSuccessfulExchange = false;
+            _lastPresentedRound = 0;
             _raisedFeintCues.Clear();
             _completedOutcomePresentationVersion = -1;
             _isPumping = false;

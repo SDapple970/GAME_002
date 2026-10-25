@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Game.Quest
 {
-    public sealed class QuestRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
+    public sealed partial class QuestRuntime : MonoBehaviour, ISaveDataProvider, ISaveDataConsumer, INewGameRuntimeReset
     {
         [SerializeField] private MissionManager missionManager;
         [SerializeField] private QuestDefinitionSO[] questDefinitions;
@@ -16,6 +16,11 @@ namespace Game.Quest
         private readonly Dictionary<string, RuntimeQuestState> _runtimeByQuestId = new();
         private readonly HashSet<string> _ambiguousSerializedDefinitionIds = new(StringComparer.Ordinal);
         private bool _missingPersistentEventIdWarned;
+        private readonly List<QuestRunCompletion> _pendingRunCompletions = new();
+        private readonly HashSet<string> _publishingCompletions = new();
+
+        public event Action<string, string> OnQuestRunStarted;
+        public event Action<QuestRunCompletion> OnQuestRunCompleted;
 
         public event Action<string> OnQuestStarted;
         public event Action<string> OnQuestCompleted;
@@ -48,6 +53,11 @@ namespace Game.Quest
                 return;
             }
 
+            if (!CanBeginGeneralMission(definition, out string invalidMission))
+            {
+                Debug.LogWarning($"[QuestRuntime] General mission rejected: {invalidMission}", this);
+                return;
+            }
             string questId = NormalizeId(definition.QuestId);
             if (string.IsNullOrWhiteSpace(questId))
             {
@@ -64,11 +74,56 @@ namespace Game.Quest
                 return;
 
             state.BeginFirstAttempt();
-            OnQuestStarted?.Invoke(questId);
+            if (definition.Repeatable)
+                state.RunId = Guid.NewGuid().ToString("N");
+            BeginGeneralMission(state);
+            RaiseQuestStarted(state);
+        }
+
+        public string GetQuestRunId(string questId)
+        {
+            return !string.IsNullOrWhiteSpace(questId) && _runtimeByQuestId.TryGetValue(questId, out RuntimeQuestState state)
+                ? state.RunId : null;
+        }
+
+        // Reacceptance is explicit. StartQuest and legacy reset cannot reopen a completed quest.
+        public bool TryStartNextRun(string questId)
+        {
+            if (string.IsNullOrWhiteSpace(questId) || _publishingCompletions.Contains(questId) ||
+                !_runtimeByQuestId.TryGetValue(questId, out RuntimeQuestState state) ||
+                state.Status != QuestStatus.Completed || state.Definition == null || !state.Definition.Repeatable ||
+                _pendingRunCompletions.Exists(item => item.QuestId == questId))
+                return false;
+
+            if (!CanBeginGeneralMission(state.Definition, out _)) return false;
+            state.ResetProgress();
+            state.ApplyRetiredEventIds(null);
+            state.Attempt = 0;
+            state.RunId = Guid.NewGuid().ToString("N");
+            state.BeginFirstAttempt();
+            BeginGeneralMission(state);
+            RaiseQuestStarted(state);
+            return true;
+        }
+
+        public IReadOnlyList<QuestRunCompletion> GetPendingRunCompletions() =>
+            new List<QuestRunCompletion>(_pendingRunCompletions).AsReadOnly();
+
+        internal bool AcknowledgeRunCompletion(QuestRunCompletion completion) =>
+            _pendingRunCompletions.RemoveAll(item => item.Key == completion.Key) > 0;
+
+        private void RaiseQuestStarted(RuntimeQuestState state)
+        {
+            if (!string.IsNullOrWhiteSpace(state.RunId))
+                OnQuestRunStarted?.Invoke(state.QuestId, state.RunId);
+            OnQuestStarted?.Invoke(state.QuestId);
         }
 
         public bool ApplyEvent(QuestEvent questEvent)
         {
+            // General mission rules validate membership, scope and unique targets before
+            // advancing the same Quest state. Generic publishers cannot bypass them.
+            if (IsGeneralMission(questEvent.QuestId)) return false;
             if (questEvent.Type == QuestEventType.Unknown)
                 return false;
 
@@ -92,6 +147,10 @@ namespace Game.Quest
             {
                 return false;
             }
+
+            // A delayed event from a previous run must never advance the current run.
+            if (!string.IsNullOrWhiteSpace(state.RunId) && questEvent.RunId != state.RunId)
+                return false;
 
             QuestObjectiveDefinition objective = state.FindActiveObjective(questEvent);
             if (state.Definition != null && objective == null)
@@ -170,6 +229,7 @@ namespace Game.Quest
 
         public void CompleteObjective(string questId, string objectiveId)
         {
+            if (IsGeneralMission(questId)) return;
             if (!TryGetActiveState(questId, out RuntimeQuestState state) ||
                 string.IsNullOrWhiteSpace(objectiveId))
             {
@@ -188,18 +248,26 @@ namespace Game.Quest
 
         public void CompleteQuest(string questId)
         {
+            if (IsGeneralMission(questId)) return;
             if (!TryGetActiveState(questId, out RuntimeQuestState state))
                 return;
 
             CompleteState(state);
         }
 
+        public bool FailQuest(string questId, GameplayOutcomeIdentity identity, string reasonId = null) =>
+            FailQuest(questId, identity, reasonId, null);
+
         public bool FailQuest(
             string questId,
             GameplayOutcomeIdentity identity,
-            string reasonId = null)
+            string reasonId,
+            string runId)
         {
             if (!TryGetActiveState(questId, out RuntimeQuestState state) || !identity.IsValid)
+                return false;
+
+            if (!string.IsNullOrWhiteSpace(state.RunId) && runId != state.RunId)
                 return false;
 
             string canonicalId = identity.CanonicalId;
@@ -224,7 +292,9 @@ namespace Game.Quest
                 return false;
             }
 
+            if (!CanBeginGeneralMission(state.Definition, out _)) return false;
             state.RestartFromBeginning();
+            BeginGeneralMission(state);
             OnQuestRetried?.Invoke(state.QuestId, state.Attempt);
             return true;
         }
@@ -468,6 +538,13 @@ namespace Game.Quest
 
             saveData.quest ??= new QuestSaveData();
             saveData.quest.quests.Clear();
+            saveData.quest.pendingRunCompletions = new List<QuestRunCompletionSaveData>();
+            foreach (QuestRunCompletion pending in _pendingRunCompletions)
+                saveData.quest.pendingRunCompletions.Add(new QuestRunCompletionSaveData
+                {
+                    questId = pending.QuestId, runId = pending.RunId, title = pending.Title,
+                    gold = pending.Gold, exp = pending.Exp, missionDayCost = pending.MissionDayCost
+                });
             List<string> questIds = new(_runtimeByQuestId.Keys);
             questIds.Sort(StringComparer.Ordinal);
             for (int questIndex = 0; questIndex < questIds.Count; questIndex++)
@@ -483,7 +560,9 @@ namespace Game.Quest
                     status = state.Status.ToString(),
                     activeGroupIndex = state.ActiveGroupIndex,
                     failureReasonId = state.FailureReasonId,
-                    attempt = state.Attempt
+                    attempt = state.Attempt,
+                    runId = state.RunId,
+                    generalMission = CaptureGeneralMission(state.QuestId)
                 };
                 state.AppendObjectiveSaveData(questState.objectives);
                 state.AppendRememberedEventIds(questState.processedEventIds);
@@ -509,6 +588,17 @@ namespace Game.Quest
             // older or payload-less save cannot retain an active/completed quest from the
             // current session. Re-register authored definitions as inactive defaults.
             _runtimeByQuestId.Clear();
+            _generalMissions.Clear();
+            _pendingRunCompletions.Clear();
+            if (saveData?.quest?.pendingRunCompletions != null)
+                foreach (QuestRunCompletionSaveData pending in saveData.quest.pendingRunCompletions)
+                {
+                    if (pending == null) continue;
+                    QuestRunCompletion completion = new(pending.questId, pending.runId, pending.title,
+                        pending.gold, pending.exp, pending.missionDayCost);
+                    if (completion.IsValid && !_pendingRunCompletions.Exists(item => item.Key == completion.Key))
+                        _pendingRunCompletions.Add(completion);
+                }
             RegisterSerializedDefinitions();
 
             List<QuestStateSaveData> savedQuests = saveData?.quest?.quests;
@@ -547,6 +637,7 @@ namespace Game.Quest
                         : string.IsNullOrWhiteSpace(questState.status)
                             ? QuestStatus.Active
                             : QuestStatus.Inactive;
+                state.RunId = NormalizeId(questState.runId);
                 state.ActiveGroupIndex = Mathf.Max(0, questState.activeGroupIndex);
                 state.FailureReasonId = state.Status == QuestStatus.Failed
                     ? NormalizeId(questState.failureReasonId)
@@ -557,15 +648,21 @@ namespace Game.Quest
                 state.ApplyRetiredEventIds(questState.retiredEventIds);
                 state.ApplyRevealedObjectiveIds(questState.revealedObjectiveIds);
                 state.NormalizeRestoredGroup();
+                RestoreGeneralMission(state, questState.generalMission);
             }
 
+            _pendingRunCompletions.RemoveAll(item =>
+                !_runtimeByQuestId.TryGetValue(item.QuestId, out RuntimeQuestState owner) ||
+                owner.Status != QuestStatus.Completed || owner.RunId != item.RunId);
             OnStateRestored?.Invoke();
         }
 
         public void ResetForNewGame()
         {
             _runtimeByQuestId.Clear();
+            _generalMissions.Clear();
             _missingPersistentEventIdWarned = false;
+            _pendingRunCompletions.Clear();
             RegisterSerializedDefinitions();
             OnStateRestored?.Invoke();
         }
@@ -588,7 +685,20 @@ namespace Game.Quest
 
             state.Status = QuestStatus.Completed;
             Debug.Log($"[QuestRewardTrace] QuestRuntime.CompleteState before OnQuestCompleted. questId={state.QuestId}, questRuntimeInstanceId={GetInstanceID()}", this);
-            OnQuestCompleted?.Invoke(state.QuestId);
+            _publishingCompletions.Add(state.QuestId);
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(state.RunId))
+                {
+                    QuestRunCompletion completion = new(state.QuestId, state.RunId, state.Definition?.QuestTitle,
+                        state.Definition?.RewardGold ?? 0, state.Definition?.RewardExp ?? 0,
+                        state.Definition?.MissionDayCost ?? 0);
+                    _pendingRunCompletions.Add(completion);
+                    OnQuestRunCompleted?.Invoke(completion);
+                }
+                OnQuestCompleted?.Invoke(state.QuestId);
+            }
+            finally { _publishingCompletions.Remove(state.QuestId); }
             Debug.Log($"[QuestRewardTrace] QuestRuntime.CompleteState after OnQuestCompleted. questId={state.QuestId}, questRuntimeInstanceId={GetInstanceID()}", this);
         }
 
@@ -727,6 +837,7 @@ namespace Game.Quest
             public int ActiveGroupIndex { get; set; }
             public string FailureReasonId { get; set; }
             public int Attempt { get; set; }
+            public string RunId { get; set; }
 
             public void BeginFirstAttempt()
             {

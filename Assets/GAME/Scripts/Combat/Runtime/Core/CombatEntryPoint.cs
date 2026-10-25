@@ -396,7 +396,7 @@ namespace Game.Combat.Core
 
                     finalDirectorBound = true;
                     _finalEnemyCommandController = new FinalCombatEnemyCommandController();
-                    if (!_finalEnemyCommandController.Bind(flowOrchestrator, createdSession))
+                    if (!_finalEnemyCommandController.BindForStartup(flowOrchestrator, createdSession))
                         throw new InvalidOperationException("FinalExchange combat requires a bound enemy command controller.");
 
                     finalEnemyBound = true;
@@ -417,6 +417,9 @@ namespace Game.Combat.Core
                     this);
 
                 RaiseCombatStarted(createdSession);
+                // The opt-in event may construct validation-only hand and BP runtime state.
+                // Only after it completes may an enemy opening declaration consume the session.
+                _finalEnemyCommandController?.ActivateStartupRequests();
                 _duplicateStartWarned = false;
                 return true;
             }

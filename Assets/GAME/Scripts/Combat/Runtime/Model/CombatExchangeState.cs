@@ -27,6 +27,7 @@ namespace Game.Combat.Model
         public int CommittedAttackMpCost { get; private set; }
         public int CommittedResponseMpCost { get; private set; }
         public CombatClashResult CurrentClashResult { get; private set; }
+        public CombatClashSeriesState ClashSeries { get; private set; }
         public bool IsOutcomePrepared { get; private set; }
         public CombatOutcomeAction CurrentOutcomeAction { get; private set; }
         public bool IsExecutionPrepared { get; private set; }
@@ -92,6 +93,7 @@ namespace Game.Combat.Model
 
         private void StoreDeclaration(CombatAttackDeclaration declaration)
         {
+            ClashSeries = null;
             CurrentDeclaration = declaration;
             CurrentAttackSide = declaration.DeclaringSide;
             CurrentAttackActor = declaration.Attacker;
@@ -145,6 +147,35 @@ namespace Game.Combat.Model
             ClearPreparedOutcome();
             ClearPostureResolution();
             AdvanceVersion();
+        }
+
+        internal bool StoreClashSeriesResult(CombatClashSeriesState series, CombatClashResult result)
+        {
+            if (!ReferenceEquals(ClashSeries, series) || result == null ||
+                !series.IsComplete || result.Outcome == CombatClashOutcome.Tie ||
+                CurrentClashResult != null)
+                return false;
+
+            CurrentDeclaration = result.AttackDeclaration;
+            CurrentResponse = result.ResponseDeclaration;
+            ResponseState = result.Outcome == CombatClashOutcome.Unopposed
+                ? CombatResponseState.NoResponse : CombatResponseState.CounterDeclared;
+            StoreClashResult(result);
+            return true;
+        }
+
+        internal bool TryAttachClashSeries(CombatClashSeriesState series)
+        {
+            if (series == null || ClashSeries != null || !IsCommitted ||
+                CurrentClashResult != null || CurrentDeclaration == null ||
+                ResponseState != CombatResponseState.CounterDeclared || CurrentResponse == null)
+            {
+                return false;
+            }
+
+            ClashSeries = series;
+            AdvanceVersion();
+            return true;
         }
 
         internal void StorePreparedOutcome(CombatOutcomeAction action)
@@ -244,6 +275,7 @@ namespace Game.Combat.Model
 
         internal void ClearDeclaration()
         {
+            ClashSeries = null;
             CurrentDeclaration = null;
             CurrentResponse = null;
             ResponseState = CombatResponseState.Pending;
@@ -397,6 +429,7 @@ namespace Game.Combat.Model
 
         private void ClearDeclarationCore()
         {
+            ClashSeries = null;
             DeclarationRevision = 0;
             HasReplacedDeclaration = false;
             CurrentDeclaration = null;

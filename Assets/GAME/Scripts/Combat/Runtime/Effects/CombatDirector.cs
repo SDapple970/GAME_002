@@ -8,6 +8,7 @@ using Game.Combat.Core;
 using Game.Combat.Data;
 using Game.Combat.Integration;
 using Game.Combat.Model;
+using Game.Core;
 
 namespace Game.Combat.Effects
 {
@@ -38,6 +39,8 @@ namespace Game.Combat.Effects
         private CombatApproachPresentationRequest _activeFinalApproachRequest;
         private Coroutine _activeFinalOutcomeRoutine;
         private CombatOutcomePresentationRequest _activeFinalOutcomeRequest;
+        private Coroutine _activeClashRoundRoutine;
+        private CombatClashRoundPresentationRequest _activeClashRoundRequest;
         private int _finalBindingId;
         private int _lastOvercomePresentationVersion = -1;
         private bool _ownsChainDecisionSlowMotion;
@@ -68,6 +71,7 @@ namespace Game.Combat.Effects
             _finalBindingId++;
             _finalOrchestrator.ApproachPresentationRequested += HandleFinalApproachRequested;
             _finalOrchestrator.OutcomePresentationRequested += HandleFinalOutcomeRequested;
+            _finalOrchestrator.ClashRoundPresentationRequested += HandleClashRoundRequested;
             _finalOrchestrator.AllOutPresentationRequested += HandleAllOutPresentationRequested;
             _finalOrchestrator.OvercomePresentationRequested += HandleOvercomePresentationRequested;
             _finalOrchestrator.FeintPresentationRequested += HandleFeintPresentationRequested;
@@ -79,6 +83,8 @@ namespace Game.Combat.Effects
 
             if (_finalOrchestrator.PendingApproachRequest != null)
                 HandleFinalApproachRequested(_finalOrchestrator.PendingApproachRequest);
+            else if (_finalOrchestrator.PendingClashRoundPresentationRequest != null)
+                HandleClashRoundRequested(_finalOrchestrator.PendingClashRoundPresentationRequest);
             else if (_finalOrchestrator.PendingOutcomePresentationRequest != null)
                 HandleFinalOutcomeRequested(_finalOrchestrator.PendingOutcomePresentationRequest);
             else if (_finalOrchestrator.PendingDecisionRequest != null)
@@ -100,6 +106,7 @@ namespace Game.Combat.Effects
             {
                 _finalOrchestrator.ApproachPresentationRequested -= HandleFinalApproachRequested;
                 _finalOrchestrator.OutcomePresentationRequested -= HandleFinalOutcomeRequested;
+                _finalOrchestrator.ClashRoundPresentationRequested -= HandleClashRoundRequested;
                 _finalOrchestrator.AllOutPresentationRequested -= HandleAllOutPresentationRequested;
                 _finalOrchestrator.OvercomePresentationRequested -= HandleOvercomePresentationRequested;
                 _finalOrchestrator.FeintPresentationRequested -= HandleFeintPresentationRequested;
@@ -116,6 +123,10 @@ namespace Game.Combat.Effects
 
             _activeFinalOutcomeRoutine = null;
             _activeFinalOutcomeRequest = null;
+            if (_activeClashRoundRoutine != null)
+                StopCoroutine(_activeClashRoundRoutine);
+            _activeClashRoundRoutine = null;
+            _activeClashRoundRequest = null;
             if (_activeFinalApproachRequest != null)
                 CancelActiveApproachWithoutCompletion();
             _activeFinalApproachRequest = null;
@@ -361,6 +372,71 @@ namespace Game.Combat.Effects
                 _activeFinalOutcomeRoutine = routine;
         }
 
+        private void HandleClashRoundRequested(CombatClashRoundPresentationRequest request)
+        {
+            if (!IsCurrentFinalRequest(request?.ExchangeVersion ?? -1) ||
+                ReferenceEquals(_activeClashRoundRequest, request))
+                return;
+
+            if (_activeClashRoundRoutine != null)
+                StopCoroutine(_activeClashRoundRoutine);
+
+            _activeClashRoundRequest = request;
+            if (!isActiveAndEnabled)
+            {
+                CompleteClashRound(_finalBindingId, request);
+                return;
+            }
+
+            int bindingId = _finalBindingId;
+            _activeClashRoundRoutine = StartCoroutine(Co_PlayClashRound(bindingId, request));
+        }
+
+        private IEnumerator Co_PlayClashRound(int bindingId, CombatClashRoundPresentationRequest request)
+        {
+            CombatClashRoundResult result = request.Result;
+            bool attackerWon = result.AttackerPower > result.ResponderPower;
+            bool responderWon = result.ResponderPower > result.AttackerPower;
+            ICombatant winner = attackerWon ? request.Attacker : responderWon ? request.Responder : null;
+            ICombatant loser = attackerWon ? request.Responder : responderWon ? request.Attacker : null;
+            ISkill skill = attackerWon ? request.AttackSkill : responderWon ? request.ResponseSkill : null;
+
+            if (winner != null)
+            {
+                PlayFinalClashAction(attackerWon
+                        ? CombatFinalPresentationCueKind.AttackAction
+                        : CombatFinalPresentationCueKind.ResponseAction,
+                    winner, loser, skill);
+                GameObject loserObject = GetFieldObject(loser);
+                loserObject?.GetComponentInChildren<CombatantAnimationDriver>()?.PlayHit();
+                RaiseFinalCue(CombatFinalPresentationCueKind.HitReaction, winner, loser, skill);
+            }
+
+            RaiseFinalCue(CombatFinalPresentationCueKind.Clash,
+                request.Attacker, request.Responder, skill);
+            float elapsed = 0f;
+            float duration = Mathf.Max(0f, fallbackActionDelay);
+            while (elapsed < duration)
+            {
+                if (GameStateMachine.Instance?.Is(GameState.Paused) != true)
+                    elapsed += Time.deltaTime;
+                yield return null;
+            }
+            CompleteClashRound(bindingId, request);
+        }
+
+        private void CompleteClashRound(int bindingId, CombatClashRoundPresentationRequest request)
+        {
+            if (bindingId != _finalBindingId ||
+                !ReferenceEquals(_activeClashRoundRequest, request) ||
+                !IsCurrentFinalRequest(request?.ExchangeVersion ?? -1))
+                return;
+
+            _activeClashRoundRoutine = null;
+            _activeClashRoundRequest = null;
+            request.TryComplete();
+        }
+
         private IEnumerator Co_PlayFinalOutcome(
             int bindingId,
             CombatOutcomePresentationRequest request)
@@ -374,7 +450,7 @@ namespace Game.Combat.Effects
             ICombatant primaryTarget = GetPrimaryFinalTarget(request);
             GameObject actorObject = GetFieldObject(actor);
 
-            if (request.HasClash)
+            if (request.HasClash && !request.IsClashSeries)
             {
                 CombatAttackDeclaration attack = request.AttackDeclaration;
                 CombatResponseDeclaration response = request.ResponseDeclaration;
@@ -406,7 +482,7 @@ namespace Game.Combat.Effects
                     actor,
                     primaryTarget,
                     skill);
-                if (!request.HasClash && actorObject != null)
+                if ((!request.HasClash || request.IsClashSeries) && actorObject != null)
                 {
                     PlayCastPresentation(actorObject, skill);
                     PlayAttackTrigger(actorObject, skill);

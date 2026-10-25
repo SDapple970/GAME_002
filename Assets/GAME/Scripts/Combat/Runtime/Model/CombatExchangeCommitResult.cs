@@ -5,7 +5,9 @@ namespace Game.Combat.Model
         None,
         InvalidAttack,
         InsufficientAttackMp,
-        InvalidResponse
+        InvalidResponse,
+        InsufficientAttackBp,
+        InsufficientResponseBp
     }
 
     public sealed class CombatExchangeCommitResult
@@ -17,6 +19,8 @@ namespace Game.Combat.Model
         public int AttackMpSpent { get; }
         public int ResponseMpSpent { get; }
         public bool ResponseDowngradedForInsufficientMp { get; }
+        public int AttackBpSpent { get; }
+        public int ResponseBpSpent { get; }
 
         internal CombatExchangeCommitResult(
             bool succeeded,
@@ -25,7 +29,9 @@ namespace Game.Combat.Model
             CombatResponseDeclaration committedResponse,
             int attackMpSpent,
             int responseMpSpent,
-            bool responseDowngradedForInsufficientMp)
+            bool responseDowngradedForInsufficientMp,
+            int attackBpSpent,
+            int responseBpSpent)
         {
             Succeeded = succeeded;
             Failure = failure;
@@ -34,6 +40,8 @@ namespace Game.Combat.Model
             AttackMpSpent = attackMpSpent;
             ResponseMpSpent = responseMpSpent;
             ResponseDowngradedForInsufficientMp = responseDowngradedForInsufficientMp;
+            AttackBpSpent = attackBpSpent;
+            ResponseBpSpent = responseBpSpent;
         }
     }
 }

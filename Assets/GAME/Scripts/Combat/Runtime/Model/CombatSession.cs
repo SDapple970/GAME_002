@@ -20,6 +20,11 @@ namespace Game.Combat.Model
         private readonly Dictionary<ICombatant, string> _allyCharacterIds =
             new(CombatantReferenceComparer.Instance);
         private readonly HashSet<string> _registeredAllyCharacterIds = new(StringComparer.Ordinal);
+        private readonly Dictionary<ICombatant, CombatHandRuntime> _hands =
+            new(CombatantReferenceComparer.Instance);
+        private readonly int[] _lastCompletedAttackCycle = new int[2];
+        private int _completedCycleSides;
+        private long _nextCardRuntimeId = 1;
 
         public string SkillAcquisitionRecipientCharacterId { get; internal set; }
         public string ProgressionTargetCharacterId { get; internal set; }
@@ -92,6 +97,8 @@ namespace Game.Combat.Model
         public CombatRuntimeConfig RuntimeConfig { get; }
         public StandoffRuntimeState StandoffState { get; }
         public bool OpeningEffectApplied { get; private set; }
+        public bool HasHandValidation => _hands.Count > 0;
+        public CombatBpRuntime BpRuntime { get; private set; }
 
         public CombatSession(
             StartReason reason,
@@ -143,6 +150,98 @@ namespace Game.Combat.Model
         {
             RegisterCombatStates(Allies, config);
             RegisterCombatStates(Enemies, config);
+        }
+
+        /// <summary>Explicit validation opt-in. The caller supplies card classification, capacities, and seed.</summary>
+        public bool TryEnableHandValidation(
+            ICombatant actor,
+            IEnumerable<CombatHandEntry> entries,
+            int normalCapacity,
+            int clashCapacity,
+            int seed)
+        {
+            if (FlowMode != CombatFlowMode.StandoffClashChain ||
+                ExchangeState.DeclarationId != 0 || actor == null ||
+                !TryGetCombatState(actor, out _) || _hands.ContainsKey(actor) ||
+                entries == null || normalCapacity < 0 || clashCapacity < 0)
+                return false;
+
+            List<CombatHandEntry> snapshot = new();
+            foreach (CombatHandEntry entry in entries)
+            {
+                if (entry.Skill == null || !Enum.IsDefined(typeof(CombatCardKind), entry.Kind) ||
+                    !OwnsSkillReference(actor, entry.Skill) ||
+                    _nextCardRuntimeId > long.MaxValue - snapshot.Count - 1)
+                    return false;
+                snapshot.Add(entry);
+            }
+
+            CombatHandRuntime hand = new CombatHandRuntime(
+                snapshot, normalCapacity, clashCapacity, seed, _nextCardRuntimeId);
+            _nextCardRuntimeId += snapshot.Count;
+            _hands.Add(actor, hand);
+            return true;
+        }
+
+        public bool TryGetHand(ICombatant actor, out CombatHandRuntime hand)
+        {
+            hand = null;
+            return actor != null && _hands.TryGetValue(actor, out hand);
+        }
+
+        public bool TryEnableBpValidation(CombatBpValidationConfig config)
+        {
+            return TryEnableBpValidation(config, null);
+        }
+
+        public bool TryEnableBpValidation(CombatBpValidationConfig config,
+            IReadOnlyList<CombatBpEnhancementEntry> enhancements)
+        {
+            if (BpRuntime != null || FlowMode != CombatFlowMode.StandoffClashChain ||
+                ExchangeState.DeclarationId != 0 || Allies.Count != 1 || Enemies.Count != 1 ||
+                config.MaximumBp <= 0 || config.RoundCyclesPerGain <= 0 ||
+                config.MaximumInvestment <= 0)
+                return false;
+
+            BpRuntime = new CombatBpRuntime(config, this, enhancements);
+            return true;
+        }
+
+        public bool TryRecordCompletedBpAttackCycle(Side side, int cycleId, bool hadSuccessfulExchange)
+        {
+            return BpRuntime != null &&
+                CombatEndEvaluator.Evaluate(this) == CombatEndReason.None &&
+                BpRuntime.RecordAttackCycle(side, cycleId, hadSuccessfulExchange, this);
+        }
+
+        /// <summary>One refill only after both sides complete distinct, successful attack cycles.</summary>
+        public bool TryRecordCompletedAttackCycle(Side side, int cycleId, bool hadSuccessfulExchange)
+        {
+            if (!HasHandValidation || !Enum.IsDefined(typeof(Side), side) || cycleId <= 0 ||
+                !hadSuccessfulExchange || CombatEndEvaluator.Evaluate(this) != CombatEndReason.None)
+                return false;
+
+            int index = (int)side;
+            if (_lastCompletedAttackCycle[index] >= cycleId)
+                return false;
+
+            _lastCompletedAttackCycle[index] = cycleId;
+            _completedCycleSides |= 1 << index;
+            if (_completedCycleSides != 3)
+                return true;
+
+            _completedCycleSides = 0;
+            foreach (CombatHandRuntime hand in _hands.Values)
+                hand.Refill();
+            return true;
+        }
+
+        private static bool OwnsSkillReference(ICombatant actor, ISkill skill)
+        {
+            if (actor.Skills == null) return false;
+            for (int i = 0; i < actor.Skills.Count; i++)
+                if (ReferenceEquals(actor.Skills[i], skill)) return true;
+            return false;
         }
 
         public CombatantCombatState GetCombatState(ICombatant combatant)

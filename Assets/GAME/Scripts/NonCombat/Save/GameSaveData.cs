@@ -53,11 +53,25 @@ namespace Game.NonCombat.Save
     public sealed class QuestSaveData
     {
         public List<QuestStateSaveData> quests = new();
+        public List<QuestRunCompletionSaveData> pendingRunCompletions = new();
+    }
+
+    [Serializable]
+    public sealed class QuestRunCompletionSaveData
+    {
+        public string questId;
+        public string runId;
+        public string title;
+        public int gold;
+        public int exp;
+        public int missionDayCost;
     }
 
     [Serializable]
     public sealed class QuestStateSaveData
     {
+        public GeneralMissionStateSaveData generalMission;
+        public string runId;
         public string questId;
         public bool completed;
         public string status;
@@ -68,6 +82,20 @@ namespace Game.NonCombat.Save
         public List<string> processedEventIds = new();
         public List<string> retiredEventIds = new();
         public List<string> revealedObjectiveIds = new();
+    }
+
+    [Serializable]
+    public sealed class GeneralMissionStateSaveData
+    {
+        public List<string> selectedTargetIds = new();
+        public List<string> completedTargetIds = new();
+        public List<string> healthOutcomeIds = new();
+        public int rescueHp;
+        public bool following;
+        public bool escaped;
+        public bool hasEscortPosition;
+        public UnityEngine.Vector3 escortPosition;
+        public List<UnityEngine.Vector3> escortPath = new();
     }
 
     [Serializable]
@@ -163,6 +191,7 @@ namespace Game.NonCombat.Save
         public List<string> completedDailyActionIds = new();
         public List<string> completedSettlementIds = new();
         public List<string> appliedQuestDayCostIds = new();
+        public List<string> appliedQuestRunDayCostIds = new();
     }
 
     [Serializable]
@@ -175,7 +204,7 @@ namespace Game.NonCombat.Save
     public static class GameSaveDataFormat
     {
         public const string FormatId = "GAME_002";
-        public const int CurrentSchemaVersion = 12;
+        public const int CurrentSchemaVersion = 14;
     }
 
     [Serializable]

@@ -9,6 +9,7 @@ namespace Game.Daily
         public string settlementId;
         public DaySettlementSourceType sourceType = DaySettlementSourceType.Manual;
         public string questId;
+        public string questRunId;
         public string missionId;
         public string displayTitle;
         public int day;
@@ -36,6 +37,14 @@ namespace Game.Daily
             };
 
             request.ApplyRewardGrantResult(rewardResult);
+            return request;
+        }
+
+        public static DaySettlementRequest ForQuestRun(Game.Quest.QuestRunCompletion completion, RewardGrantResult reward)
+        {
+            DaySettlementRequest request = ForQuest(completion.QuestId, reward, completion.Title);
+            request.questRunId = completion.RunId;
+            request.settlementId = $"quest-run:{completion.Key}";
             return request;
         }
 

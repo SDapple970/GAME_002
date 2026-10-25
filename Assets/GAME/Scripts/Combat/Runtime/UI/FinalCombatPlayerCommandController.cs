@@ -18,6 +18,8 @@ namespace Game.Combat.UI
         private CombatExchangeDecisionRequest _request;
         private ICombatant _selectedActor;
         private ISkill _selectedSkill;
+        private long? _selectedCardRuntimeId;
+        private int _selectedBpInvestment;
         private CombatItemOption _selectedItem;
         private ICombatant _selectedTarget;
         private ICombatant _selectedHandoffTarget;
@@ -25,6 +27,25 @@ namespace Game.Combat.UI
         public event Action<PlayerCombatDecisionViewState> ViewStateChanged;
 
         public PlayerCombatDecisionViewState ViewState { get; private set; } = PlayerCombatDecisionViewState.Empty;
+        public int SelectedBpInvestment => _selectedBpInvestment;
+
+        public bool SelectBpInvestment(int amount)
+        {
+            if (_request == null || _selectedSkill == null ||
+                !HasCurrentPlayerRequest(_request.Kind) ||
+                _request.Kind != CombatExchangeDecisionKind.Attack &&
+                _request.Kind != CombatExchangeDecisionKind.Response &&
+                _request.Kind != CombatExchangeDecisionKind.ClashAttack &&
+                _request.Kind != CombatExchangeDecisionKind.ClashResponse)
+                return false;
+
+            ICombatant actor = _request.Kind == CombatExchangeDecisionKind.Attack
+                ? GetRequiredAttackActor() : _request.ActingActor;
+            if (!_orchestrator.CanInvestBp(actor, _selectedSkill, amount)) return false;
+            _selectedBpInvestment = amount;
+            PublishViewState();
+            return true;
+        }
 
         public FinalCombatPlayerCommandController(
             ICombatHandoffEligibilityProvider handoffEligibilityProvider = null)
@@ -46,6 +67,8 @@ namespace Game.Combat.UI
             _orchestrator.AttackDecisionRequested += HandleAttackDecisionRequested;
             _orchestrator.ResponseDecisionRequested += HandleResponseDecisionRequested;
             _orchestrator.ChainDecisionRequested += HandleChainDecisionRequested;
+            _orchestrator.ClashSeriesDecisionRequested += HandleClashSeriesDecisionRequested;
+            _orchestrator.ClashSeriesValidationEnabled += RefreshAvailability;
 
             ConsumeRequest(_orchestrator.PendingDecisionRequest);
             return true;
@@ -58,6 +81,8 @@ namespace Game.Combat.UI
                 _orchestrator.AttackDecisionRequested -= HandleAttackDecisionRequested;
                 _orchestrator.ResponseDecisionRequested -= HandleResponseDecisionRequested;
                 _orchestrator.ChainDecisionRequested -= HandleChainDecisionRequested;
+                _orchestrator.ClashSeriesDecisionRequested -= HandleClashSeriesDecisionRequested;
+                _orchestrator.ClashSeriesValidationEnabled -= RefreshAvailability;
             }
 
             _orchestrator = null;
@@ -75,6 +100,8 @@ namespace Game.Combat.UI
 
             _selectedActor = actor;
             _selectedSkill = null;
+            _selectedCardRuntimeId = null;
+            _selectedBpInvestment = 0;
             _selectedItem = null;
             _selectedTarget = null;
             PublishViewState();
@@ -85,7 +112,9 @@ namespace Game.Combat.UI
         {
             if (_request == null || !HasCurrentPlayerRequest(_request.Kind) || skill == null ||
                 (_request.Kind != CombatExchangeDecisionKind.Attack &&
-                 _request.Kind != CombatExchangeDecisionKind.Response))
+                 _request.Kind != CombatExchangeDecisionKind.Response &&
+                 _request.Kind != CombatExchangeDecisionKind.ClashAttack &&
+                 _request.Kind != CombatExchangeDecisionKind.ClashResponse))
             {
                 return false;
             }
@@ -101,11 +130,58 @@ namespace Game.Combat.UI
                 if (!Contains(BuildResponseSkills(), skill))
                     return false;
             }
+            else if (!Contains(_orchestrator.GetAvailableClashSeriesSkills(_request), skill))
+                return false;
+            ICombatant selectedActor = _request.Kind == CombatExchangeDecisionKind.Attack
+                ? GetRequiredAttackActor() : _request.ActingActor;
+            long? cardRuntimeId = null;
+            if (_session.TryGetHand(selectedActor, out CombatHandRuntime hand))
+            {
+                CombatCardKind kind = _request.Kind == CombatExchangeDecisionKind.Attack
+                    ? CombatCardKind.Normal : CombatCardKind.Clash;
+                if (!hand.TryFindInHand(skill, kind, null, out CombatHandCard card))
+                    return false;
+                cardRuntimeId = card.RuntimeId;
+            }
             _selectedSkill = skill;
+            _selectedCardRuntimeId = cardRuntimeId;
+            _selectedBpInvestment = 0;
             _selectedItem = null;
             _selectedTarget = null;
             PublishViewState();
             return true;
+        }
+
+        public bool SelectCard(long runtimeId)
+        {
+            if (_request == null || !HasCurrentPlayerRequest(_request.Kind) ||
+                _request.Kind == CombatExchangeDecisionKind.Chain)
+                return false;
+
+            ICombatant actor = _request.Kind == CombatExchangeDecisionKind.Attack
+                ? GetRequiredAttackActor() : _request.ActingActor;
+            if (!_session.TryGetHand(actor, out CombatHandRuntime hand))
+                return false;
+
+            IReadOnlyList<CombatHandCard> cards = hand.Hand;
+            for (int i = 0; i < cards.Count; i++)
+            {
+                CombatHandCard card = cards[i];
+                if (card.RuntimeId != runtimeId ||
+                    !_orchestrator.GetSkillAvailability(_request, actor, card.Skill,
+                        runtimeId).IsAvailable)
+                    continue;
+
+                _selectedSkill = card.Skill;
+                _selectedCardRuntimeId = runtimeId;
+                _selectedBpInvestment = 0;
+                _selectedItem = null;
+                _selectedTarget = null;
+                PublishViewState();
+                return true;
+            }
+
+            return false;
         }
 
         public bool SelectCombatItem(CombatItemOption item)
@@ -118,6 +194,8 @@ namespace Game.Combat.UI
 
             _selectedItem = item;
             _selectedSkill = null;
+            _selectedCardRuntimeId = null;
+            _selectedBpInvestment = 0;
             _selectedTarget = null;
             PublishViewState();
             return true;
@@ -148,6 +226,7 @@ namespace Game.Combat.UI
 
             _selectedHandoffTarget = target;
             _selectedSkill = null;
+            _selectedCardRuntimeId = null;
             _selectedTarget = null;
             PublishViewState();
             return true;
@@ -179,6 +258,9 @@ namespace Game.Combat.UI
                     return ConfirmAttack();
                 case CombatExchangeDecisionKind.Response:
                     return ConfirmResponse();
+                case CombatExchangeDecisionKind.ClashAttack:
+                case CombatExchangeDecisionKind.ClashResponse:
+                    return ConfirmClashSeriesSkill();
                 default:
                     return false;
             }
@@ -186,10 +268,20 @@ namespace Game.Combat.UI
 
         public bool ConfirmNoResponse()
         {
-            if (!HasCurrentPlayerRequest(CombatExchangeDecisionKind.Response))
+            if (!HasCurrentPlayerRequest(CombatExchangeDecisionKind.Response) &&
+                !HasCurrentPlayerRequest(CombatExchangeDecisionKind.ClashResponse))
                 return false;
 
             CombatExchangeDecisionRequest request = _request;
+            if (request.Kind == CombatExchangeDecisionKind.ClashResponse)
+            {
+                ClearRequestAndSelection(true);
+                bool accepted = _orchestrator.SubmitClashSeriesNoResponse(request);
+                if (!accepted && ReferenceEquals(_orchestrator.PendingDecisionRequest, request))
+                    ConsumeRequest(request);
+                return accepted;
+            }
+
             ClearSelectionOnly(true);
             return _orchestrator.SubmitNoResponse(request);
         }
@@ -198,7 +290,7 @@ namespace Game.Combat.UI
         {
             if (!HasCurrentPlayerRequest(CombatExchangeDecisionKind.Chain) ||
                 _selectedHandoffTarget != null ||
-                !CombatChainPolicy.CanContinueWithAnySkill(_session, _request.ActingActor))
+                !CanContinueWithCurrentHand(_request.ActingActor))
             {
                 return false;
             }
@@ -281,13 +373,15 @@ namespace Game.Combat.UI
                 return ConfirmCombatItem(actor);
 
             if (actor == null || _selectedSkill == null || _selectedTarget == null ||
-                !CanSubmitAttack(actor, _selectedSkill, _selectedTarget))
+                !CanSubmitAttack(actor, _selectedSkill, _selectedTarget, _selectedCardRuntimeId) ||
+                !_orchestrator.CanInvestBp(actor, _selectedSkill, _selectedBpInvestment))
             {
                 return false;
             }
 
             int version = _request.ExchangeVersion;
-            CombatAttackDeclaration declaration = new CombatAttackDeclaration(actor, _selectedTarget, _selectedSkill);
+            CombatAttackDeclaration declaration = new CombatAttackDeclaration(
+                actor, _selectedTarget, _selectedSkill, _selectedCardRuntimeId, _selectedBpInvestment);
             ClearSelectionOnly(true);
             return _orchestrator.SubmitAttackDeclaration(declaration, version);
         }
@@ -316,15 +410,35 @@ namespace Game.Combat.UI
             ICombatant responder = _request.ActingActor;
             if (attack == null || responder == null || _selectedSkill == null ||
                 _selectedTarget == null || !ReferenceEquals(_selectedTarget, attack.Attacker) ||
-                !CanSubmitResponse(attack, responder, _selectedSkill))
+                !CanSubmitResponse(attack, responder, _selectedSkill, _selectedCardRuntimeId) ||
+                !_orchestrator.CanInvestBp(responder, _selectedSkill, _selectedBpInvestment))
             {
                 return false;
             }
 
             CombatExchangeDecisionRequest request = _request;
-            CombatResponseDeclaration response = new CombatResponseDeclaration(responder, _selectedSkill);
+            CombatResponseDeclaration response = new CombatResponseDeclaration(
+                responder, _selectedSkill, _selectedCardRuntimeId, _selectedBpInvestment);
             ClearSelectionOnly(true);
             return _orchestrator.SubmitResponse(response, request);
+        }
+
+        private bool ConfirmClashSeriesSkill()
+        {
+            CombatExchangeDecisionRequest request = _request;
+            ISkill skill = _selectedSkill;
+            long? cardRuntimeId = _selectedCardRuntimeId;
+            int bpInvestment = _selectedBpInvestment;
+            if (skill == null || !_orchestrator.CanUseClashSeriesSkill(request, skill) ||
+                !_orchestrator.CanInvestBp(request.ActingActor, skill, bpInvestment))
+                return false;
+
+            ClearRequestAndSelection(true);
+            bool accepted = _orchestrator.SubmitClashSeriesSkill(request, skill,
+                cardRuntimeId, bpInvestment);
+            if (!accepted && ReferenceEquals(_orchestrator.PendingDecisionRequest, request))
+                ConsumeRequest(request);
+            return accepted;
         }
 
         private void HandleAttackDecisionRequested(CombatExchangeDecisionRequest request)
@@ -342,13 +456,20 @@ namespace Game.Combat.UI
             ConsumeRequest(request);
         }
 
+        private void HandleClashSeriesDecisionRequested(CombatExchangeDecisionRequest request)
+        {
+            ConsumeRequest(request);
+        }
+
         private void ConsumeRequest(CombatExchangeDecisionRequest request)
         {
             ClearRequestAndSelection(false);
             if (request == null || request.ActingSide != Side.Allies ||
                 (request.Kind != CombatExchangeDecisionKind.Attack &&
                  request.Kind != CombatExchangeDecisionKind.Response &&
-                 request.Kind != CombatExchangeDecisionKind.Chain))
+                 request.Kind != CombatExchangeDecisionKind.Chain &&
+                 request.Kind != CombatExchangeDecisionKind.ClashAttack &&
+                 request.Kind != CombatExchangeDecisionKind.ClashResponse))
             {
                 PublishViewState();
                 return;
@@ -374,6 +495,13 @@ namespace Game.Combat.UI
             return _request.Kind == kind;
         }
 
+        public void RefreshAvailability()
+        {
+            if (_request != null && _orchestrator != null &&
+                ReferenceEquals(_orchestrator.PendingDecisionRequest, _request))
+                PublishViewState();
+        }
+
         private ICombatant GetRequiredAttackActor()
         {
             if (_request?.Kind != CombatExchangeDecisionKind.Attack)
@@ -388,12 +516,22 @@ namespace Game.Combat.UI
                 return Array.Empty<ICombatant>();
 
             if (_request.ActingActor != null)
-                return HasSelectableAction(_request.ActingActor) || CanOvercome(_request.ActingActor)
+                return HasDisplayableSkills(_request.ActingActor) ||
+                       HasSelectableAction(_request.ActingActor) || CanOvercome(_request.ActingActor)
                     ? new[] { _request.ActingActor }
                     : Array.Empty<ICombatant>();
 
             return Filter(_session.GetSide(Side.Allies), actor =>
-                HasSelectableAction(actor) || CanOvercome(actor));
+                HasDisplayableSkills(actor) || HasSelectableAction(actor) || CanOvercome(actor));
+        }
+
+        private bool HasDisplayableSkills(ICombatant actor)
+        {
+            return (_orchestrator?.IsClashSeriesValidationEnabled == true ||
+                    _session?.HasHandValidation == true) &&
+                   actor?.Skills?.Count > 0 && !actor.IsStunned &&
+                   _session.TryGetCombatState(actor, out CombatantCombatState state) &&
+                   state.IsAlive && !state.IsPanicked;
         }
 
         private IReadOnlyList<ISkill> BuildSelectableSkills(ICombatant actor)
@@ -533,7 +671,9 @@ namespace Game.Combat.UI
                         skill,
                         handoffCount,
                         true,
-                        out _))
+                        out _) &&
+                    (!_session.TryGetHand(candidate, out CombatHandRuntime hand) ||
+                     hand.TryFindInHand(skill, CombatCardKind.Normal, null, out _)))
                 {
                     skills.Add(skill);
                 }
@@ -560,7 +700,23 @@ namespace Game.Combat.UI
             return BuildAttackTargets(actor, skill).Count > 0;
         }
 
-        private bool CanSubmitAttack(ICombatant actor, ISkill skill, ICombatant target)
+        private bool CanContinueWithCurrentHand(ICombatant actor)
+        {
+            if (!CombatChainPolicy.CanContinueWithAnySkill(_session, actor))
+                return false;
+            if (!_session.TryGetHand(actor, out CombatHandRuntime hand))
+                return true;
+
+            IReadOnlyList<CombatHandCard> cards = hand.Hand;
+            for (int i = 0; i < cards.Count; i++)
+                if (cards[i].Kind == CombatCardKind.Normal &&
+                    CombatChainPolicy.CanContinue(_session, actor, cards[i].Skill))
+                    return true;
+            return false;
+        }
+
+        private bool CanSubmitAttack(ICombatant actor, ISkill skill, ICombatant target,
+            long? cardRuntimeId = null)
         {
             if (_session == null || actor == null || skill == null || target == null ||
                 !_session.TryGetCombatState(actor, out CombatantCombatState actorState) ||
@@ -568,6 +724,10 @@ namespace Game.Combat.UI
             {
                 return false;
             }
+
+            if (_session.TryGetHand(actor, out CombatHandRuntime hand) &&
+                !hand.TryFindInHand(skill, CombatCardKind.Normal, cardRuntimeId, out _))
+                return false;
 
             return CombatDeclarationPolicy.CanDeclareAttack(
                 _session,
@@ -577,7 +737,8 @@ namespace Game.Combat.UI
         private bool CanSubmitResponse(
             CombatAttackDeclaration attack,
             ICombatant responder,
-            ISkill skill)
+            ISkill skill,
+            long? cardRuntimeId = null)
         {
             if (_session == null || attack == null || responder == null || skill == null ||
                 !_session.TryGetCombatState(responder, out CombatantCombatState responderState) ||
@@ -585,6 +746,10 @@ namespace Game.Combat.UI
             {
                 return false;
             }
+
+            if (_session.TryGetHand(responder, out CombatHandRuntime hand) &&
+                !hand.TryFindInHand(skill, CombatCardKind.Clash, cardRuntimeId, out _))
+                return false;
 
             return CombatDeclarationPolicy.CanDeclareResponse(
                 _session,
@@ -597,6 +762,8 @@ namespace Game.Combat.UI
             _request = null;
             _selectedActor = null;
             _selectedSkill = null;
+            _selectedCardRuntimeId = null;
+            _selectedBpInvestment = 0;
             _selectedItem = null;
             _selectedTarget = null;
             _selectedHandoffTarget = null;
@@ -607,6 +774,8 @@ namespace Game.Combat.UI
         private void ClearSelectionOnly(bool publish)
         {
             _selectedSkill = null;
+            _selectedCardRuntimeId = null;
+            _selectedBpInvestment = 0;
             _selectedItem = null;
             _selectedTarget = null;
             _selectedHandoffTarget = null;
@@ -634,9 +803,14 @@ namespace Game.Combat.UI
                     ? BuildHandoffSkills(_selectedHandoffTarget)
                     : _request.Kind == CombatExchangeDecisionKind.Chain
                         ? Array.Empty<ISkill>()
+                        : _request.Kind == CombatExchangeDecisionKind.ClashAttack ||
+                          _request.Kind == CombatExchangeDecisionKind.ClashResponse
+                            ? _orchestrator.GetAvailableClashSeriesSkills(_request)
                         : _request.Kind == CombatExchangeDecisionKind.Response
                             ? BuildResponseSkills()
                             : BuildSelectableSkills(activeActor);
+                IReadOnlyList<CombatSkillAvailability> skillAvailability =
+                    BuildSkillAvailability(activeActor);
                 IReadOnlyList<CombatItemOption> items = _request.Kind == CombatExchangeDecisionKind.Attack
                     ? BuildSelectableItems(activeActor)
                     : Array.Empty<CombatItemOption>();
@@ -646,17 +820,29 @@ namespace Game.Combat.UI
                     : Array.Empty<ICombatant>();
                 bool canConfirm = _request.Kind == CombatExchangeDecisionKind.Attack
                     ? activeActor != null && _selectedTarget != null &&
-                      ((_selectedSkill != null && CanSubmitAttack(activeActor, _selectedSkill, _selectedTarget)) ||
+                      ((_selectedSkill != null && CanSubmitAttack(activeActor, _selectedSkill, _selectedTarget,
+                          _selectedCardRuntimeId) &&
+                        _orchestrator.CanInvestBp(activeActor, _selectedSkill, _selectedBpInvestment)) ||
                        (_selectedItem != null && ContainsCombatItem(items, _selectedItem) &&
                         Contains(BuildCombatItemTargets(activeActor, _selectedItem), _selectedTarget)))
                     : _request.Kind == CombatExchangeDecisionKind.Response
                         ? _selectedSkill != null && _selectedTarget != null &&
-                          CanSubmitResponse(_session.ExchangeState.CurrentDeclaration, _request.ActingActor, _selectedSkill)
+                          CanSubmitResponse(_session.ExchangeState.CurrentDeclaration, _request.ActingActor,
+                              _selectedSkill, _selectedCardRuntimeId) &&
+                          _orchestrator.CanInvestBp(_request.ActingActor, _selectedSkill, _selectedBpInvestment)
+                        : _request.Kind == CombatExchangeDecisionKind.ClashAttack ||
+                          _request.Kind == CombatExchangeDecisionKind.ClashResponse
+                            ? _selectedSkill != null &&
+                              _orchestrator.CanUseClashSeriesSkill(_request, _selectedSkill) &&
+                              _orchestrator.CanInvestBp(activeActor, _selectedSkill, _selectedBpInvestment)
                         : false;
 
                 CombatantCombatState activeState = null;
                 if (activeActor != null)
                     _session.TryGetCombatState(activeActor, out activeState);
+                CombatHandRuntime activeHand = null;
+                bool hasHand = activeActor != null &&
+                    _session.TryGetHand(activeActor, out activeHand);
 
                 ViewState = new PlayerCombatDecisionViewState(
                     _request.Kind,
@@ -673,10 +859,11 @@ namespace Game.Combat.UI
                     _selectedTarget,
                     _selectedHandoffTarget,
                     canConfirm,
-                    _request.Kind == CombatExchangeDecisionKind.Response,
+                    _request.Kind == CombatExchangeDecisionKind.Response ||
+                    _request.Kind == CombatExchangeDecisionKind.ClashResponse,
                     _request.Kind == CombatExchangeDecisionKind.Chain &&
                     _selectedHandoffTarget == null &&
-                    CombatChainPolicy.CanContinueWithAnySkill(_session, _request.ActingActor),
+                    CanContinueWithCurrentHand(_request.ActingActor),
                     _request.Kind == CombatExchangeDecisionKind.Chain &&
                     _selectedHandoffTarget != null && _selectedSkill != null &&
                     Contains(BuildHandoffSkills(_selectedHandoffTarget), _selectedSkill),
@@ -689,10 +876,42 @@ namespace Game.Combat.UI
                     activeState?.IsPanicked == true,
                     CanOvercome(activeActor),
                     _request.DeclarationToken,
-                    _request.DeclaredAttack);
+                    _request.DeclaredAttack,
+                    skillAvailability,
+                    _request.ClashSeriesToken,
+                    hasHand,
+                    hasHand ? activeHand.Hand : null,
+                    _selectedCardRuntimeId,
+                    hasHand ? BuildCardAvailability(activeActor, activeHand.Hand) : null);
             }
 
             ViewStateChanged?.Invoke(ViewState);
+        }
+
+        private IReadOnlyList<CombatSkillAvailability> BuildSkillAvailability(ICombatant actor)
+        {
+            if (actor?.Skills == null || _request == null || _orchestrator == null ||
+                _request.Kind == CombatExchangeDecisionKind.Chain)
+                return Array.Empty<CombatSkillAvailability>();
+
+            List<CombatSkillAvailability> options = new List<CombatSkillAvailability>();
+            for (int i = 0; i < actor.Skills.Count; i++)
+            {
+                ISkill skill = actor.Skills[i];
+                if (skill != null)
+                    options.Add(_orchestrator.GetSkillAvailability(_request, actor, skill));
+            }
+            return options;
+        }
+
+        private IReadOnlyList<CombatSkillAvailability> BuildCardAvailability(
+            ICombatant actor, IReadOnlyList<CombatHandCard> cards)
+        {
+            List<CombatSkillAvailability> options = new List<CombatSkillAvailability>();
+            for (int i = 0; i < cards.Count; i++)
+                options.Add(_orchestrator.GetSkillAvailability(_request, actor,
+                    cards[i].Skill, cards[i].RuntimeId));
+            return options;
         }
 
         private bool HasRawRequest(CombatExchangeDecisionKind kind)

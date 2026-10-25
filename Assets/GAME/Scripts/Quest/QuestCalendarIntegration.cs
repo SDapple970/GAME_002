@@ -14,6 +14,7 @@ namespace Game.Quest
         [SerializeField] private CalendarService calendarService;
 
         private readonly HashSet<string> _appliedQuestIds = new();
+        private readonly HashSet<string> _appliedRunKeys = new();
         private QuestRuntime _subscribedRuntime;
         private bool _ownsRuntime;
         private bool _missingCalendarWarned;
@@ -40,6 +41,8 @@ namespace Game.Quest
         public bool TryApplyMissionDayCost(string questId)
         {
             questId = string.IsNullOrWhiteSpace(questId) ? null : questId.Trim();
+            if (questRuntime != null && !string.IsNullOrWhiteSpace(questRuntime.GetQuestRunId(questId)))
+                return false;
             if (questId == null || _appliedQuestIds.Contains(questId))
                 return false;
 
@@ -65,6 +68,25 @@ namespace Game.Quest
             return true;
         }
 
+        // CompletionFlow supplies the immutable accepted-run snapshot. The legacy
+        // quest-ID ledger remains separate so old saves cannot alias a new run.
+        public bool TryApplyRunDayCost(QuestRunCompletion completion)
+        {
+            if (!completion.IsValid) return false;
+            if (completion.MissionDayCost == 0 || _appliedRunKeys.Contains(completion.Key)) return true;
+            ResolveReferences();
+            bool pending = false;
+            if (questRuntime != null)
+                foreach (QuestRunCompletion candidate in questRuntime.GetPendingRunCompletions())
+                    if (candidate.Key == completion.Key) { pending = true; break; }
+            if (!pending) return false;
+            if ((!_ownsRuntime && !TryClaimRuntime()) || calendarService == null) return false;
+            _appliedRunKeys.Add(completion.Key);
+            if (calendarService.TryAdvanceDays(completion.MissionDayCost)) return true;
+            _appliedRunKeys.Remove(completion.Key);
+            return false;
+        }
+
         public void CaptureSaveData(GameSaveData saveData)
         {
             if (saveData == null)
@@ -76,11 +98,17 @@ namespace Game.Quest
             List<string> questIds = new(_appliedQuestIds);
             questIds.Sort(System.StringComparer.Ordinal);
             saveData.futureDaily.appliedQuestDayCostIds.AddRange(questIds);
+            saveData.futureDaily.appliedQuestRunDayCostIds = new List<string>(_appliedRunKeys);
+            saveData.futureDaily.appliedQuestRunDayCostIds.Sort(System.StringComparer.Ordinal);
         }
 
         public void RestoreSaveData(GameSaveData saveData)
         {
             _appliedQuestIds.Clear();
+            _appliedRunKeys.Clear();
+            if (saveData?.futureDaily?.appliedQuestRunDayCostIds != null)
+                foreach (string key in saveData.futureDaily.appliedQuestRunDayCostIds)
+                    if (!string.IsNullOrWhiteSpace(key)) _appliedRunKeys.Add(key);
             List<string> questIds = saveData?.futureDaily?.appliedQuestDayCostIds;
             if (questIds == null)
                 return;
@@ -93,7 +121,7 @@ namespace Game.Quest
             }
         }
 
-        public void ResetForNewGame() => _appliedQuestIds.Clear();
+        public void ResetForNewGame() { _appliedQuestIds.Clear(); _appliedRunKeys.Clear(); }
 
         private void ResolveReferences()
         {
@@ -169,6 +197,8 @@ namespace Game.Quest
 
         private void HandleQuestCompleted(string questId)
         {
+            if (questRuntime != null && !string.IsNullOrWhiteSpace(questRuntime.GetQuestRunId(questId)))
+                return; // Repeatable runs are coordinated by QuestCompletionFlow.
             TryApplyMissionDayCost(questId);
         }
 

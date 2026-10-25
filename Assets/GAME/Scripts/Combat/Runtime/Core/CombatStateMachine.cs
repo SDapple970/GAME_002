@@ -456,6 +456,7 @@ namespace Game.Combat.Core
             CombatAttackDeclaration declaration = exchange?.CurrentDeclaration;
             if (_exited || _session == null || _session.FlowMode != CombatFlowMode.StandoffClashChain ||
                 Phase != Phase.Clash || exchange == null || !exchange.IsCommitted ||
+                exchange.ClashSeries != null ||
                 exchange.CurrentClashResult != null || exchange.ResponseState == CombatResponseState.Pending ||
                 CombatEndEvaluator.Evaluate(_session) != CombatEndReason.None ||
                 !CanUseDeclaration(declaration))
@@ -490,6 +491,7 @@ namespace Game.Combat.Core
             CombatResponseDeclaration response = exchange?.CurrentResponse;
             if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
                 Phase != Phase.Clash || exchange == null || !exchange.IsCommitted ||
+                exchange.ClashSeries != null ||
                 exchange.CurrentClashResult != null || clashRule == null ||
                 exchange.ResponseState != CombatResponseState.CounterDeclared ||
                 !CombatDeclarationPolicy.CanDeclareAttack(_session, declaration) ||
@@ -507,6 +509,40 @@ namespace Game.Combat.Core
 
             exchange.StoreClashResult(result);
             SetPhase(Phase.ApplyOutcome);
+            return true;
+        }
+
+        public bool TryCompleteClashSeries(
+            CombatClashSeriesState series,
+            long expectedToken,
+            ISkill finalSkill,
+            int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) || Phase != Phase.Clash ||
+                exchange == null || !ReferenceEquals(exchange.ClashSeries, series) ||
+                !series.CanClaimFinalAttack || CombatEndEvaluator.Evaluate(_session) != CombatEndReason.None ||
+                !series.TryClaimFinalOutcome(expectedToken, finalSkill, out CombatClashResult result) ||
+                !exchange.StoreClashSeriesResult(series, result))
+                return false;
+
+            SetPhase(Phase.ApplyOutcome);
+            return true;
+        }
+
+        public bool TryEndClashSeriesDraw(
+            CombatClashSeriesState series,
+            int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) || Phase != Phase.Clash ||
+                exchange == null || !ReferenceEquals(exchange.ClashSeries, series) ||
+                !series.IsComplete || series.FinalOutcome != CombatClashOutcome.Tie)
+                return false;
+
+            exchange.ResetForStandoff();
+            _session.StandoffState.Reset();
+            SetPhase(Phase.Standoff);
             return true;
         }
 

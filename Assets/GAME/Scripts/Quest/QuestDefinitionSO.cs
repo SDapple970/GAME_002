@@ -18,6 +18,12 @@ namespace Game.Quest
         [SerializeField] private int rewardExp;
         [SerializeField] private QuestRetryPolicy retryPolicy = QuestRetryPolicy.NotRetryable;
 
+        [Tooltip("Allows explicit acceptance of a new run after completion. Existing quests remain one-shot.")]
+        [SerializeField] private bool repeatable;
+
+        [SerializeField] private GeneralMissionDefinition generalMission;
+        public GeneralMissionDefinition GeneralMission => generalMission;
+        public bool Repeatable => repeatable;
         public string QuestId => questId;
         public string QuestTitle => questTitle;
         public string Description => description;

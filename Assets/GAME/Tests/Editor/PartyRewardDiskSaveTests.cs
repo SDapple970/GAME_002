@@ -105,7 +105,7 @@ namespace Game.Tests.Integration
             runtime.AssertDuplicate(PartyRequest(completion));
             runtime.Save();
             GameSaveData migrated = runtime.Read();
-            Assert.That(migrated.header.schemaVersion, Is.EqualTo(12));
+            Assert.That(migrated.header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion));
             Assert.That(migrated.reward.ledger.Single().sourceId, Is.EqualTo(completion));
             Assert.That(migrated.reward.ledger.Single().hasExplicitExperienceRecipients, Is.False);
             Assert.That(migrated.reward.ledger.Single().expSettled, Is.True);
@@ -123,13 +123,13 @@ namespace Game.Tests.Integration
             using DiskRuntime runtime = new("future");
             runtime.Wallet.SetGold(9);
             GameSaveData future = new();
-            future.header.schemaVersion = 13;
+            future.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion + 1;
             future.currency.gold = 999;
             string json = JsonUtility.ToJson(future);
             File.WriteAllText(runtime.Path, json);
-            LogAssert.Expect(LogType.Warning, new Regex("Unsupported future schema version 13"));
+            LogAssert.Expect(LogType.Warning, new Regex($"Unsupported future schema version {future.header.schemaVersion}"));
             Assert.That(runtime.SaveLoad.TryLoad(out string message), Is.False);
-            Assert.That(message, Does.Contain("Unsupported future schema version 13"));
+            Assert.That(message, Does.Contain($"Unsupported future schema version {future.header.schemaVersion}"));
             Assert.That(runtime.Wallet.Gold, Is.EqualTo(9));
             Assert.That(File.ReadAllText(runtime.Path), Is.EqualTo(json));
             Assert.That(runtime.SaveLoad.CurrentOperationState, Is.EqualTo(SaveLoadService.OperationState.Idle));
@@ -214,7 +214,7 @@ namespace Game.Tests.Integration
 
         private static void AssertPartyLedger(GameSaveData data, string completion, bool settled)
         {
-            Assert.That(data.header.schemaVersion, Is.EqualTo(12));
+            Assert.That(data.header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion));
             RewardLedgerSaveData entry = data.reward.ledger.Single();
             Assert.That(entry.sourceId, Is.EqualTo(completion));
             Assert.That(entry.gold, Is.EqualTo(50));

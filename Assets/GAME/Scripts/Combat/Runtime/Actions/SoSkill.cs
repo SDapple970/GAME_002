@@ -3,7 +3,8 @@ using Game.Combat.Model;
 
 namespace Game.Combat.Actions
 {
-    public sealed class SoSkill : ISkill, ICombatMpCostProvider, IFinalCombatSkillStats, ICombatStatusEffectProvider
+    public sealed class SoSkill : ISkill, ICombatMpCostProvider, IFinalCombatSkillStats,
+        ICombatStatusEffectProvider, ICombatBpEnhancementProvider
     {
         private readonly SkillDefinitionSO _so;
 
@@ -17,6 +18,8 @@ namespace Game.Combat.Actions
         public int MpCost => _so.MpCost;
         public int FinalMpCost => _so.FinalMpCost;
         public int ClashPower => _so.ClashPower;
+        public CombatBpEnhancementKind BpEnhancementKind => _so.BpEnhancementKind;
+        public int BpEnhancementPerPoint => _so.BpEnhancementPerPoint;
         public System.Collections.Generic.IReadOnlyList<CombatStatusDefinitionSO> AppliedStatusEffects =>
             _so.AppliedStatusEffects;
         public KeywordMask Keywords => _so.keywords;

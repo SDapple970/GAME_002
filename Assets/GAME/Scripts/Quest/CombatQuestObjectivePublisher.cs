@@ -14,6 +14,7 @@ namespace Game.Quest
     {
         [SerializeField] private CombatEntryPoint combatEntryPoint;
         [SerializeField] private CombatEncounterGroup targetEncounter;
+        [SerializeField] private QuestRuntime questRuntime;
         [SerializeField] private string questId;
         [SerializeField] private string objectiveId;
         [SerializeField] private QuestEventType eventType = QuestEventType.Kill;
@@ -66,6 +67,7 @@ namespace Game.Quest
                 return;
             }
 
+            if (questRuntime == null) questRuntime = FindFirstObjectByType<QuestRuntime>();
             GameplayOutcomeIdentity identity = new(
                 GameplayOutcomeSourceType.Combat,
                 result.CompletionId,
@@ -76,7 +78,9 @@ namespace Game.Quest
                 objectiveId,
                 identity,
                 1,
-                targetEncounter.gameObject));
+                targetEncounter.gameObject,
+                null,
+                runId: questRuntime?.GetQuestRunId(questId)));
         }
 
         private static bool IsVictory(CombatResult result)

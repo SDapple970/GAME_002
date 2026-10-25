@@ -9,6 +9,7 @@ namespace Game.Daily
         public string settlementId;
         public DaySettlementSourceType sourceType;
         public string questId;
+        public string questRunId;
         public string missionId;
         public string completedQuestOrMissionId;
         public string displayTitle;

@@ -20,7 +20,8 @@ namespace Game.Combat.Core
                         attack.Attacker,
                         attack.Skill,
                         attack.Target,
-                        result.Outcome);
+                        result.Outcome,
+                        attack.BpInvestment);
                     return true;
 
                 case CombatClashOutcome.ResponderWin:
@@ -35,7 +36,8 @@ namespace Game.Combat.Core
                         response.Responder,
                         response.Skill,
                         attack.Attacker,
-                        result.Outcome);
+                        result.Outcome,
+                        response.BpInvestment);
                     return true;
 
                 case CombatClashOutcome.Tie:

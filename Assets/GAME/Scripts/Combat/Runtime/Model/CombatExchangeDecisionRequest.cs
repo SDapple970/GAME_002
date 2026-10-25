@@ -4,7 +4,9 @@ namespace Game.Combat.Model
     {
         Attack = 0,
         Response = 1,
-        Chain = 2
+        Chain = 2,
+        ClashAttack = 3,
+        ClashResponse = 4
     }
 
     public sealed class CombatExchangeDecisionRequest
@@ -16,6 +18,7 @@ namespace Game.Combat.Model
         public Phase Phase { get; }
         public CombatDeclarationToken? DeclarationToken { get; }
         public CombatAttackDeclaration DeclaredAttack { get; }
+        public long? ClashSeriesToken { get; }
 
         internal CombatExchangeDecisionRequest(
             CombatExchangeDecisionKind kind,
@@ -24,7 +27,8 @@ namespace Game.Combat.Model
             ICombatant actingActor,
             Phase phase,
             CombatDeclarationToken? declarationToken = null,
-            CombatAttackDeclaration declaredAttack = null)
+            CombatAttackDeclaration declaredAttack = null,
+            long? clashSeriesToken = null)
         {
             Kind = kind;
             ExchangeVersion = exchangeVersion;
@@ -33,6 +37,7 @@ namespace Game.Combat.Model
             Phase = phase;
             DeclarationToken = declarationToken;
             DeclaredAttack = declaredAttack;
+            ClashSeriesToken = clashSeriesToken;
         }
     }
 }

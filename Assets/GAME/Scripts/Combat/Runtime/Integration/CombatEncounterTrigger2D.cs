@@ -120,6 +120,17 @@ namespace Game.Combat.Integration
 
             RuntimeOwner.RegisterPlayerCollider(other);
 
+            // The contact volume can legitimately overlap before the smaller field
+            // attack hit box.  Let an attack already in its short windup resolve
+            // first; OnTriggerStay will still start the normal enemy-initiated
+            // encounter if that attack misses.
+            PlayerFieldAttackController fieldAttack = playerRoot.GetComponent<PlayerFieldAttackController>();
+            if (fieldAttack != null && fieldAttack.IsAttackWindupPending)
+            {
+                LogDebug("Contact start deferred for the player's pending field attack.");
+                return;
+            }
+
             if (!CanAttemptContactStart())
             {
                 return;

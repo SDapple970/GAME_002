@@ -27,6 +27,7 @@ namespace Game.Combat.Model
         public CombatAftermathDecision AftermathDecision { get; }
         public bool HasResponse => ResponseState == CombatResponseState.CounterDeclared;
         public bool HasClash => HasResponse && ClashResult?.Outcome != CombatClashOutcome.Unopposed;
+        public bool IsClashSeries { get; }
         public ICombatant Winner => ClashResult?.Winner;
         public ICombatant Loser { get; }
         public Side NextAttackSide { get; }
@@ -49,7 +50,8 @@ namespace Game.Combat.Model
             IReadOnlyList<CombatMentalMutationResult> mentalMutationResults,
             CombatAftermathSnapshot aftermath,
             CombatAftermathDecision aftermathDecision,
-            Func<bool> completion)
+            Func<bool> completion,
+            bool isClashSeries = false)
         {
             ExchangeVersion = exchangeVersion;
             ChainSequenceId = chainSequenceId;
@@ -68,6 +70,7 @@ namespace Game.Combat.Model
             MentalMutationResults = Array.AsReadOnly(mentalSnapshot);
             Aftermath = aftermath;
             AftermathDecision = aftermathDecision;
+            IsClashSeries = isClashSeries;
             Loser = ResolveLoser(attackDeclaration, responseDeclaration, Winner);
             NextAttackSide = Winner != null
                 ? Winner.Side

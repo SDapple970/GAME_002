@@ -38,7 +38,28 @@ namespace Game.Combat.Integration
         internal string ActiveCompletionId => _activeCompletionId;
         internal bool HasPlayerPresence => _playerColliderIds.Count > 0;
 
+        private Object _missionScopeOwner;
         public string EncounterId => encounterId;
+
+        // A run-scoped adapter owns this group's restore boundary. Permanent encounter
+        // clears stay in WorldSaveData; repeatable clears stay under the quest run.
+        public bool TryBindMissionOwner(Object owner)
+        {
+            if (owner == null || (_missionScopeOwner != null && _missionScopeOwner != owner)) return false;
+            if (_missionScopeOwner == null) CaptureAvailableMemberStates(replaceExisting: true);
+            _missionScopeOwner = owner;
+            return true;
+        }
+
+        public bool TryApplyMissionSnapshot(Object owner, bool cleared)
+        {
+            if (owner == null || owner != _missionScopeOwner ||
+                _lifecycle == EncounterRuntimeLifecycle.ActiveCombat ||
+                _lifecycle == EncounterRuntimeLifecycle.StartReserved ||
+                _lifecycle == EncounterRuntimeLifecycle.AwaitingPostCombat) return false;
+            RestoreFromSnapshot(cleared);
+            return true;
+        }
 
         internal CombatFlowMode ResolveCombatFlowMode(CombatFlowMode compatibilityFlowMode)
         {
@@ -47,6 +68,7 @@ namespace Game.Combat.Integration
 
         public void CaptureSaveData(GameSaveData saveData)
         {
+            if (_missionScopeOwner != null) return;
             if (saveData == null || _lifecycle != EncounterRuntimeLifecycle.Cleared || string.IsNullOrWhiteSpace(encounterId)) return;
             saveData.world ??= new WorldSaveData();
             if (!saveData.world.clearedEncounterIds.Contains(encounterId)) saveData.world.clearedEncounterIds.Add(encounterId);
@@ -54,7 +76,7 @@ namespace Game.Combat.Integration
 
         public void RestoreSaveData(GameSaveData saveData)
         {
-            if (string.IsNullOrWhiteSpace(encounterId))
+            if (_missionScopeOwner != null || string.IsNullOrWhiteSpace(encounterId))
                 return;
 
             bool savedCleared = saveData?.world?.clearedEncounterIds != null &&

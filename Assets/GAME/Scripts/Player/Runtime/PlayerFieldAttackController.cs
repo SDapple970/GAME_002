@@ -40,6 +40,10 @@ namespace Game.Player
         private int _attackGeneration;
         private GameStateMachine _subscribedStateMachine;
 
+        // Contact encounters use this only to let an already-approved field attack
+        // resolve its hit before they reserve the shared encounter.
+        internal bool IsAttackWindupPending => _attackRunning && !_combatStarted;
+
         private void Awake()
         {
             AutoBindReferences();

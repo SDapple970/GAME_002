@@ -2328,6 +2328,342 @@ namespace Game.Tests.Integration
             Assert.That(runtime.GetQuestStatus("completed"), Is.EqualTo(QuestStatus.Completed));
         }
 
+        [Test]
+        public void RepeatRun_DefaultQuest_RemainsOneShot()
+        {
+            QuestDefinitionSO definition = CreateQuestDefinition("one-shot", QuestEventType.Interact, "use", 1);
+            QuestRuntime runtime = CreateRuntimeWithDefinition("Runtime", definition);
+            runtime.StartQuest(definition);
+            Assert.That(runtime.GetQuestRunId("one-shot"), Is.Null);
+            Assert.That(runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Interact, "one-shot", "use", "device")), Is.True);
+            Assert.That(runtime.TryStartNextRun("one-shot"), Is.False);
+            runtime.StartQuest(definition);
+            runtime.ResetQuestProgress("one-shot");
+            Assert.That(runtime.IsQuestComplete("one-shot"), Is.True);
+        }
+
+        [Test]
+        public void RepeatRun_TwoCompletions_GrantAndChargeOncePerRun_RejectStaleEvents()
+        {
+            var setup = CreateRepeatRunSetup();
+            setup.runtime.StartQuest(setup.definition);
+            string first = setup.runtime.GetQuestRunId("repeatable");
+            Assert.That(setup.runtime.TryStartNextRun("repeatable"), Is.False);
+            Assert.That(setup.runtime.ApplyEvent(RunEvent(first)), Is.True);
+            Assert.That(setup.runtime.ApplyEvent(RunEvent(first)), Is.False);
+            Assert.That(setup.wallet.Gold, Is.EqualTo(10));
+            Assert.That(setup.calendar.CurrentDay, Is.EqualTo(2));
+            Assert.That(setup.runtime.GetPendingRunCompletions(), Is.Empty);
+            setup.runtime.StartQuest(setup.definition);
+            Assert.That(setup.runtime.IsQuestComplete("repeatable"), Is.True, "Reacceptance must be explicit.");
+            Assert.That(setup.runtime.TryStartNextRun("repeatable"), Is.True);
+            string second = setup.runtime.GetQuestRunId("repeatable");
+            Assert.That(second, Is.Not.EqualTo(first));
+            Assert.That(setup.runtime.GetQuestAttempt("repeatable"), Is.EqualTo(1));
+            Assert.That(setup.runtime.GetObjectiveProgress("repeatable", "use"), Is.Zero);
+            Assert.That(setup.runtime.ApplyEvent(RunEvent(first)), Is.False);
+            Assert.That(setup.runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Interact, "repeatable", "use", "device")), Is.False,
+                "Repeatable runs require explicit run scope.");
+            Assert.That(setup.runtime.ApplyEvent(RunEvent(second)), Is.True);
+            Assert.That(setup.wallet.Gold, Is.EqualTo(20));
+            Assert.That(setup.calendar.CurrentDay, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void RepeatRun_FailureRetry_PreservesAcceptedRunAndChargesOnlyCompletion()
+        {
+            var setup = CreateRepeatRunSetup();
+            SetField(setup.definition, "retryPolicy", QuestRetryPolicy.RestartFromBeginning);
+            setup.runtime.StartQuest(setup.definition);
+            string run = setup.runtime.GetQuestRunId("repeatable");
+            GameplayOutcomeIdentity failure = new(GameplayOutcomeSourceType.Story, "failure");
+            Assert.That(setup.runtime.FailQuest("repeatable", failure, "failed", "stale-run"), Is.False);
+            Assert.That(setup.runtime.FailQuest("repeatable", failure, "failed", run), Is.True);
+            Assert.That(setup.runtime.TryStartNextRun("repeatable"), Is.False);
+            Assert.That(setup.runtime.RetryQuest("repeatable"), Is.True);
+            Assert.That(setup.runtime.GetQuestRunId("repeatable"), Is.EqualTo(run));
+            Assert.That(setup.runtime.GetQuestAttempt("repeatable"), Is.EqualTo(2));
+            Assert.That(setup.wallet.Gold, Is.Zero);
+            Assert.That(setup.calendar.CurrentDay, Is.EqualTo(1));
+            Assert.That(setup.runtime.ApplyEvent(RunEvent(run)), Is.True);
+            Assert.That(setup.wallet.Gold, Is.EqualTo(10));
+            Assert.That(setup.calendar.CurrentDay, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void RepeatRun_ActiveJsonRestore_PreservesScopeAndDuplicateProgress()
+        {
+            QuestDefinitionSO definition = CreateQuestDefinition("repeatable", QuestEventType.Interact, "use", 2);
+            SetField(definition, "repeatable", true);
+            QuestRuntime runtime = CreateRuntimeWithDefinition("Runtime", definition);
+            runtime.StartQuest(definition);
+            string run = runtime.GetQuestRunId("repeatable");
+            Assert.That(runtime.ApplyEvent(RunEvent(run)), Is.True);
+            GameSaveData save = new();
+            runtime.CaptureSaveData(save);
+            GameSaveData restored = SaveSerializer.FromGameSaveJson(SaveSerializer.ToJson(save));
+            int started = 0, completed = 0;
+            runtime.OnQuestStarted += _ => started++;
+            runtime.OnQuestCompleted += _ => completed++;
+            runtime.RestoreSaveData(restored);
+            Assert.That(runtime.GetQuestRunId("repeatable"), Is.EqualTo(run));
+            Assert.That(runtime.GetObjectiveProgress("repeatable", "use"), Is.EqualTo(1));
+            Assert.That(runtime.ApplyEvent(RunEvent(run)), Is.False);
+            Assert.That(started, Is.Zero);
+            Assert.That(completed, Is.Zero);
+        }
+
+        [Test]
+        public void RepeatRun_CombatDeferredCompletion_SurvivesJsonRestoreAndSettlesOnce()
+        {
+            var setup = CreateRepeatRunSetup();
+            (GameStateMachine state, _) = CreateFlowState();
+            InvokeIfPresent(setup.flow, "Start");
+            ForceState(state, GameState.Combat);
+            setup.runtime.StartQuest(setup.definition);
+            string run = setup.runtime.GetQuestRunId("repeatable");
+            Assert.That(setup.runtime.ApplyEvent(RunEvent(run)), Is.True);
+            Assert.That(setup.wallet.Gold, Is.Zero);
+            Assert.That(setup.calendar.CurrentDay, Is.EqualTo(1));
+            Assert.That(setup.runtime.TryStartNextRun("repeatable"), Is.False);
+            GameSaveData save = CaptureRepeatRun(setup.runtime, setup.wallet, setup.rewards, setup.calendar, setup.integration);
+            save = SaveSerializer.FromGameSaveJson(SaveSerializer.ToJson(save));
+            setup.runtime.RestoreSaveData(save);
+            setup.wallet.RestoreSaveData(save);
+            setup.rewards.RestoreSaveData(save);
+            setup.calendar.RestoreSaveData(save);
+            setup.integration.RestoreSaveData(save);
+            setup.flow.RestoreSaveData(save);
+            Assert.That(setup.wallet.Gold, Is.Zero, "Restore itself must not publish gameplay completion.");
+            ForceState(state, GameState.Exploration);
+            InvokeIfPresent(setup.flow, "Update");
+            Assert.That(setup.wallet.Gold, Is.EqualTo(10));
+            Assert.That(setup.calendar.CurrentDay, Is.EqualTo(2));
+            Assert.That(setup.runtime.GetPendingRunCompletions(), Is.Empty);
+            GameSaveData paid = CaptureRepeatRun(setup.runtime, setup.wallet, setup.rewards, setup.calendar, setup.integration);
+            setup.runtime.RestoreSaveData(paid);
+            setup.wallet.RestoreSaveData(paid);
+            setup.rewards.RestoreSaveData(paid);
+            setup.calendar.RestoreSaveData(paid);
+            setup.integration.RestoreSaveData(paid);
+            setup.flow.RestoreSaveData(paid);
+            InvokeIfPresent(setup.flow, "Update");
+            Assert.That(setup.wallet.Gold, Is.EqualTo(10));
+            Assert.That(setup.calendar.CurrentDay, Is.EqualTo(2));
+            Assert.That(setup.runtime.TryStartNextRun("repeatable"), Is.True);
+        }
+
+        [Test]
+        public void RepeatRun_SaveBetweenRewardAndSettlement_RestoresWithoutDoublePayment()
+        {
+            var setup = CreateRepeatRunSetup();
+            DaySettlementFlow settlement = CreateComponent<DaySettlementFlow>("Settlement");
+            SetField(setup.flow, "daySettlementFlow", settlement);
+            SetField(setup.flow, "notifyDaySettlementOnQuestCompletion", true);
+            InvokeIfPresent(setup.flow, "OnEnable");
+            setup.runtime.StartQuest(setup.definition);
+            setup.runtime.ApplyEvent(RunEvent(setup.runtime.GetQuestRunId("repeatable")));
+            Assert.That(setup.wallet.Gold, Is.EqualTo(10));
+            Assert.That(setup.runtime.GetPendingRunCompletions(), Has.Count.EqualTo(1));
+            Assert.That(setup.runtime.TryStartNextRun("repeatable"), Is.False);
+            GameSaveData save = CaptureRepeatRun(setup.runtime, setup.wallet, setup.rewards, setup.calendar, setup.integration);
+            settlement.CaptureSaveData(save);
+            save = SaveSerializer.FromGameSaveJson(SaveSerializer.ToJson(save));
+            setup.runtime.RestoreSaveData(save);
+            setup.wallet.RestoreSaveData(save);
+            setup.rewards.RestoreSaveData(save);
+            setup.calendar.RestoreSaveData(save);
+            setup.integration.RestoreSaveData(save);
+            settlement.RestoreSaveData(save);
+            setup.flow.RestoreSaveData(save);
+            InvokeIfPresent(setup.flow, "Update");
+            Assert.That(setup.wallet.Gold, Is.EqualTo(10));
+            Assert.That(setup.calendar.CurrentDay, Is.EqualTo(2));
+            Assert.That(settlement.CompleteSettlement(), Is.True);
+            Assert.That(setup.runtime.GetPendingRunCompletions(), Is.Empty);
+            Assert.That(setup.runtime.TryStartNextRun("repeatable"), Is.True);
+            setup.runtime.ApplyEvent(RunEvent(setup.runtime.GetQuestRunId("repeatable")));
+            Assert.That(settlement.CompleteSettlement(), Is.True);
+            Assert.That(setup.wallet.Gold, Is.EqualTo(20));
+            Assert.That(setup.calendar.CurrentDay, Is.EqualTo(3));
+            Assert.That(setup.runtime.GetPendingRunCompletions(), Is.Empty);
+        }
+
+        [Test]
+        public void RepeatRun_LegacyCompletedSave_KeepsOldLedgerThenAcceptsFreshRun()
+        {
+            var setup = CreateRepeatRunSetup();
+            SetField(setup.definition, "repeatable", false);
+            setup.runtime.StartQuest(setup.definition);
+            setup.runtime.ApplyEvent(CanonicalQuestEvent(QuestEventType.Interact, "repeatable", "use", "device"));
+            Assert.That(setup.wallet.Gold, Is.EqualTo(10));
+            GameSaveData save = CaptureRepeatRun(setup.runtime, setup.wallet, setup.rewards, setup.calendar, setup.integration);
+            save.header.schemaVersion = 12;
+            Type migrator = typeof(GameSaveData).Assembly.GetType("Game.NonCombat.Save.GameSaveDataMigrator");
+            object[] arguments = { SaveSerializer.ToJson(save), null, false, null };
+            Assert.That((bool)migrator.GetMethod("TryMigrate", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, arguments), Is.True);
+            GameSaveData migrated = (GameSaveData)arguments[1];
+            Assert.That(migrated.header.schemaVersion, Is.EqualTo(GameSaveDataFormat.CurrentSchemaVersion));
+            Assert.That(migrated.quest.quests.Single().runId, Is.Null);
+            SetField(setup.definition, "repeatable", true);
+            setup.runtime.RestoreSaveData(migrated);
+            setup.wallet.RestoreSaveData(migrated);
+            setup.rewards.RestoreSaveData(migrated);
+            setup.calendar.RestoreSaveData(migrated);
+            setup.integration.RestoreSaveData(migrated);
+            setup.flow.RestoreSaveData(migrated);
+            Assert.That(setup.runtime.TryStartNextRun("repeatable"), Is.True);
+            setup.runtime.ApplyEvent(RunEvent(setup.runtime.GetQuestRunId("repeatable")));
+            Assert.That(setup.wallet.Gold, Is.EqualTo(20));
+            Assert.That(setup.calendar.CurrentDay, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void RepeatRun_CompletionCallbackCannotReacceptMidNotification()
+        {
+            var setup = CreateRepeatRunSetup();
+            setup.runtime.StartQuest(setup.definition);
+            bool reaccepted = true;
+            setup.runtime.OnQuestCompleted += id => reaccepted = setup.runtime.TryStartNextRun(id);
+            setup.runtime.ApplyEvent(RunEvent(setup.runtime.GetQuestRunId("repeatable")));
+            Assert.That(reaccepted, Is.False);
+            Assert.That(setup.runtime.TryStartNextRun("repeatable"), Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator RepeatRun_IsolatedPlayMode_TwoRunsKeepProgressAndPaymentSeparate()
+        {
+            yield return new EnterPlayMode();
+            var setup = CreateRepeatRunSetup();
+            setup.runtime.StartQuest(setup.definition);
+            setup.runtime.ApplyEvent(RunEvent(setup.runtime.GetQuestRunId("repeatable")));
+            yield return null;
+            Assert.That(setup.runtime.TryStartNextRun("repeatable"), Is.True);
+            setup.runtime.ApplyEvent(RunEvent(setup.runtime.GetQuestRunId("repeatable")));
+            yield return null;
+            Assert.That(setup.wallet.Gold, Is.EqualTo(20));
+            Assert.That(setup.calendar.CurrentDay, Is.EqualTo(3));
+            for (int i = _objects.Count - 1; i >= 0; i--)
+                if (_objects[i] != null) UnityEngine.Object.DestroyImmediate(_objects[i]);
+            _objects.Clear();
+            yield return new ExitPlayMode();
+        }
+
+        private (QuestRuntime runtime, QuestDefinitionSO definition, CurrencyWallet wallet,
+            RewardService rewards, CalendarService calendar, QuestCalendarIntegration integration,
+            QuestCompletionFlow flow) CreateRepeatRunSetup()
+        {
+            QuestDefinitionSO definition = CreateQuestDefinition("repeatable", QuestEventType.Interact, "use", 1);
+            SetField(definition, "repeatable", true);
+            SetField(definition, "rewardGold", 10);
+            SetField(definition, "missionDayCost", 1);
+            QuestRuntime runtime = CreateRuntimeWithDefinition("RepeatRuntime", definition);
+            CurrencyWallet wallet = CreateWallet();
+            RewardService rewards = CreateRewardService(wallet);
+            CalendarService calendar = CreateComponent<CalendarService>("Calendar");
+            QuestCalendarIntegration integration = CreateCalendarIntegration(runtime, calendar, "CalendarIntegration");
+            QuestCompletionFlow flow = CreateCompletionFlow(runtime, rewards, 0, false);
+            SetField(flow, "questCalendarIntegration", integration);
+            return (runtime, definition, wallet, rewards, calendar, integration, flow);
+        }
+
+        private static QuestEvent RunEvent(string runId) => new(QuestEventType.Interact, "repeatable", "use",
+            new GameplayOutcomeIdentity(GameplayOutcomeSourceType.Interaction, "device", "activate"), 1, null, null, runId);
+
+        private static GameSaveData CaptureRepeatRun(QuestRuntime runtime, CurrencyWallet wallet,
+            RewardService rewards, CalendarService calendar, QuestCalendarIntegration integration)
+        {
+            GameSaveData save = new();
+            runtime.CaptureSaveData(save);
+            wallet.CaptureSaveData(save);
+            rewards.CaptureSaveData(save);
+            calendar.CaptureSaveData(save);
+            integration.CaptureSaveData(save);
+            return save;
+        }
+
+        [Test]
+        public void RepeatRun_SynchronousSettlementAcknowledgesWithoutAnotherFrame()
+        {
+            var setup = CreateRepeatRunSetup();
+            DaySettlementFlow settlement = CreateComponent<DaySettlementFlow>("Settlement");
+            SetField(setup.flow, "daySettlementFlow", settlement);
+            SetField(setup.flow, "notifyDaySettlementOnQuestCompletion", true);
+            settlement.OnSettlementReady += _ => settlement.CompleteSettlement();
+            InvokeIfPresent(setup.flow, "OnEnable");
+            setup.runtime.StartQuest(setup.definition);
+            setup.runtime.ApplyEvent(RunEvent(setup.runtime.GetQuestRunId("repeatable")));
+            Assert.That(setup.runtime.GetPendingRunCompletions(), Is.Empty);
+            Assert.That(setup.runtime.TryStartNextRun("repeatable"), Is.True);
+            Assert.That(setup.wallet.Gold, Is.EqualTo(10));
+        }
+
+        [Test]
+        public void RepeatRun_DungeonCompletionIntegration_CanRaiseAgainForNextRun()
+        {
+            var setup = CreateRepeatRunSetup();
+            Game.World.DungeonCompletionFlow dungeon = CreateComponent<Game.World.DungeonCompletionFlow>("DungeonCompletion");
+            SetField(dungeon, "questRuntime", setup.runtime);
+            SetField(dungeon, "completionQuestId", "repeatable");
+            InvokeIfPresent(dungeon, "OnEnable");
+            int ready = 0;
+            dungeon.OnCompletionReady += _ => ready++;
+            setup.runtime.StartQuest(setup.definition);
+            setup.runtime.ApplyEvent(RunEvent(setup.runtime.GetQuestRunId("repeatable")));
+            Assert.That(ready, Is.EqualTo(1));
+            Assert.That(dungeon.IsCompletionReady, Is.True);
+            Assert.That(setup.runtime.TryStartNextRun("repeatable"), Is.True);
+            Assert.That(dungeon.IsCompletionReady, Is.False);
+            setup.runtime.ApplyEvent(RunEvent(setup.runtime.GetQuestRunId("repeatable")));
+            Assert.That(ready, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void RepeatRun_CanonicalSaveLoadParticipants_RestorePendingCompletion()
+        {
+            var setup = CreateRepeatRunSetup();
+            (GameStateMachine state, _) = CreateFlowState();
+            InvokeIfPresent(setup.flow, "Start");
+            SaveLoadService saveLoad = CreateComponent<SaveLoadService>("SaveLoad");
+            ForceState(state, GameState.Combat);
+            setup.runtime.StartQuest(setup.definition);
+            string run = setup.runtime.GetQuestRunId("repeatable");
+            setup.runtime.ApplyEvent(RunEvent(run));
+            GameSaveData snapshot = saveLoad.CaptureGameSaveDataSnapshot();
+            Assert.That(snapshot.quest.pendingRunCompletions, Has.Count.EqualTo(1));
+            saveLoad.RestoreGameSaveDataSnapshot(SaveSerializer.FromGameSaveJson(SaveSerializer.ToJson(snapshot)));
+            Assert.That(setup.runtime.GetQuestRunId("repeatable"), Is.EqualTo(run));
+            Assert.That(setup.wallet.Gold, Is.Zero);
+            ForceState(state, GameState.Exploration);
+            InvokeIfPresent(setup.flow, "Update");
+            Assert.That(setup.wallet.Gold, Is.EqualTo(10));
+            Assert.That(setup.calendar.CurrentDay, Is.EqualTo(2));
+            Assert.That(setup.runtime.GetPendingRunCompletions(), Is.Empty);
+        }
+
+        [Test]
+        public void RepeatRun_RewardOverlayAndSettlement_ReleaseWithoutReopeningReward()
+        {
+            var setup = CreateRepeatRunSetup();
+            (GameStateMachine state, _) = CreateFlowState();
+            DaySettlementFlow settlement = CreateComponent<DaySettlementFlow>("Settlement");
+            SetField(setup.flow, "daySettlementFlow", settlement);
+            SetField(setup.flow, "notifyDaySettlementOnQuestCompletion", true);
+            SetField(setup.flow, "enterRewardStateOnCompletion", true);
+            InvokeIfPresent(setup.flow, "OnEnable");
+            setup.runtime.StartQuest(setup.definition);
+            setup.runtime.ApplyEvent(RunEvent(setup.runtime.GetQuestRunId("repeatable")));
+            Assert.That(state.Current, Is.EqualTo(GameState.Reward));
+            Assert.That(setup.runtime.GetPendingRunCompletions(), Has.Count.EqualTo(1));
+            Assert.That(settlement.CompleteSettlement(), Is.True);
+            ForceState(state, GameState.Exploration, true);
+            Assert.That(state.Current, Is.EqualTo(GameState.Exploration));
+            Assert.That(setup.runtime.GetPendingRunCompletions(), Is.Empty);
+            Assert.That(setup.runtime.TryStartNextRun("repeatable"), Is.True);
+            Assert.That(setup.wallet.Gold, Is.EqualTo(10));
+            Assert.That(setup.calendar.CurrentDay, Is.EqualTo(2));
+        }
+
         private (GameStateMachine, GameFlowController) CreateFlowState()
         {
             GameStateMachine state = CreateComponent<GameStateMachine>("GameStateMachine");

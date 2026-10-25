@@ -22,6 +22,10 @@ namespace Game.Combat.Actions
             bool appliesCombatantDamage = request.Skill.Tag != SkillTag.Inspect &&
                                           request.Skill.Tag != SkillTag.ScanEnv &&
                                           request.Skill.Tag != SkillTag.Utility;
+            int extraHits = System.Math.Min(31, CombatBpEnhancementPolicy.Magnitude(
+                session, request.Skill, request.BpInvestment, CombatBpEnhancementKind.ExtraHits));
+            int healing = CombatBpEnhancementPolicy.Magnitude(
+                session, request.Skill, request.BpInvestment, CombatBpEnhancementKind.Healing);
 
             for (int i = 0; i < request.Targets.Count; i++)
             {
@@ -38,8 +42,12 @@ namespace Game.Combat.Actions
                             request.Actor,
                             request.Skill.BaseDamage)
                         : request.Skill.BaseDamage;
-                    target.ApplyDamage(damage);
+                    for (int hit = 0; hit <= extraHits && target.HP > 0; hit++)
+                        target.ApplyDamage(damage);
                 }
+
+                if (healing > 0 && session.TryGetCombatState(target, out CombatantCombatState targetState))
+                    targetState.RestoreHp(healing);
 
                 targetResults.Add(new CombatSkillTargetResult(target, hpBefore, target.HP));
             }
@@ -72,12 +80,19 @@ namespace Game.Combat.Actions
                 if (!session.TryGetCombatState(target, out CombatantCombatState state))
                     continue;
 
+                int extraApplications = System.Math.Min(31, CombatBpEnhancementPolicy.Magnitude(
+                    session, request.Skill, request.BpInvestment,
+                    CombatBpEnhancementKind.StatusApplications));
+
                 for (int statusIndex = 0; statusIndex < provider.AppliedStatusEffects.Count; statusIndex++)
                 {
-                    CombatStatusApplicationResult statusResult = state.ApplyStatus(
-                        provider.AppliedStatusEffects[statusIndex]);
-                    if (statusResult != null && statusResult.Changed)
-                        destination.Add(statusResult);
+                    for (int application = 0; application <= extraApplications; application++)
+                    {
+                        CombatStatusApplicationResult statusResult = state.ApplyStatus(
+                            provider.AppliedStatusEffects[statusIndex]);
+                        if (statusResult != null && statusResult.Changed)
+                            destination.Add(statusResult);
+                    }
                 }
             }
         }

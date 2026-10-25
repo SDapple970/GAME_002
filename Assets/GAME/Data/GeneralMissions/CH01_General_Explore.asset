@@ -1,0 +1,141 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e8cbe163b0d2e6488fcee5ff4cd3cbc, type: 3}
+  m_Name: CH01_General_Explore
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.QuestDefinitionSO
+  questId: CH01_General_Explore
+  questTitle: "\uAD6C\uC5ED \uD0D0\uC0AC"
+  description: "\uCC55\uD1301 \uBC18\uBCF5 \uC77C\uBC18\uC784\uBB34. \uBC30\uCE58\uD560
+    \uC624\uBE0C\uC81D\uD2B8\uC758 \uACE0\uC815 ID\uB97C \uB300\uC0C1 \uBAA9\uB85D\uACFC
+    \uC77C\uCE58\uC2DC\uD0A4\uC138\uC694."
+  category: 20
+  missionDayCost: 1
+  objectives:
+  - objectiveId: mission
+    eventType: 100
+    targetId: 
+    requiredCount: 90
+    optional: 0
+    groupIndex: 0
+    visibility: 0
+    description: "\uC9C0\uC815 \uAD6C\uC5ED 90% \uC774\uC0C1 \uD0D0\uC0AC"
+  rewardGold: 0
+  rewardExp: 0
+  retryPolicy: 1
+  repeatable: 1
+  generalMission:
+    kind: 1
+    objectiveId: mission
+    targetIds:
+    - survey_001
+    - survey_002
+    - survey_003
+    - survey_004
+    - survey_005
+    - survey_006
+    - survey_007
+    - survey_008
+    - survey_009
+    - survey_010
+    - survey_011
+    - survey_012
+    - survey_013
+    - survey_014
+    - survey_015
+    - survey_016
+    - survey_017
+    - survey_018
+    - survey_019
+    - survey_020
+    - survey_021
+    - survey_022
+    - survey_023
+    - survey_024
+    - survey_025
+    - survey_026
+    - survey_027
+    - survey_028
+    - survey_029
+    - survey_030
+    - survey_031
+    - survey_032
+    - survey_033
+    - survey_034
+    - survey_035
+    - survey_036
+    - survey_037
+    - survey_038
+    - survey_039
+    - survey_040
+    - survey_041
+    - survey_042
+    - survey_043
+    - survey_044
+    - survey_045
+    - survey_046
+    - survey_047
+    - survey_048
+    - survey_049
+    - survey_050
+    - survey_051
+    - survey_052
+    - survey_053
+    - survey_054
+    - survey_055
+    - survey_056
+    - survey_057
+    - survey_058
+    - survey_059
+    - survey_060
+    - survey_061
+    - survey_062
+    - survey_063
+    - survey_064
+    - survey_065
+    - survey_066
+    - survey_067
+    - survey_068
+    - survey_069
+    - survey_070
+    - survey_071
+    - survey_072
+    - survey_073
+    - survey_074
+    - survey_075
+    - survey_076
+    - survey_077
+    - survey_078
+    - survey_079
+    - survey_080
+    - survey_081
+    - survey_082
+    - survey_083
+    - survey_084
+    - survey_085
+    - survey_086
+    - survey_087
+    - survey_088
+    - survey_089
+    - survey_090
+    - survey_091
+    - survey_092
+    - survey_093
+    - survey_094
+    - survey_095
+    - survey_096
+    - survey_097
+    - survey_098
+    - survey_099
+    - survey_100
+    rescueTargetId: rescue_target
+    exitId: rescue_exit
+    rescueMaxHp: 100

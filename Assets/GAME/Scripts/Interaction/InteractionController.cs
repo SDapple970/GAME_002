@@ -13,8 +13,8 @@ namespace Game.Interaction
         [Header("UI")]
         [SerializeField] private InteractionPromptUI promptUI;
 
-        private readonly List<InteractableObject> _candidates = new();
-        private InteractableObject _current;
+        private readonly List<IInteractable> _candidates = new();
+        private IInteractable _current;
         private GameInputInstaller _inputInstaller;
         private InputService _inputService;
         private bool _subscribedToInput;
@@ -68,7 +68,9 @@ namespace Game.Interaction
             RefreshCurrentTarget();
         }
 
-        public void Register(InteractableObject interactable)
+        public void Register(InteractableObject interactable) => Register((IInteractable)interactable);
+
+        public void Register(IInteractable interactable)
         {
             if (interactable == null || _candidates.Contains(interactable))
                 return;
@@ -77,7 +79,9 @@ namespace Game.Interaction
             RefreshCurrentTarget();
         }
 
-        public void Unregister(InteractableObject interactable)
+        public void Unregister(InteractableObject interactable) => Unregister((IInteractable)interactable);
+
+        public void Unregister(IInteractable interactable)
         {
             if (interactable == null)
                 return;
@@ -113,7 +117,9 @@ namespace Game.Interaction
                 return false;
 
             RefreshCurrentTarget();
-            if (_current == null || !_current.CanInteract)
+            // Interface references do not use Unity's destroyed-object null check.
+            if (_current is not MonoBehaviour currentBehaviour || currentBehaviour == null ||
+                !currentBehaviour.isActiveAndEnabled || !_current.CanInteract)
                 return false;
 
             _interactionResolving = true;
@@ -212,25 +218,25 @@ namespace Game.Interaction
             TryInteractCurrent();
         }
 
-        private InteractableObject FindNearestInteractable()
+        private IInteractable FindNearestInteractable()
         {
-            InteractableObject nearest = null;
+            IInteractable nearest = null;
             float nearestDistance = float.MaxValue;
 
             for (int i = _candidates.Count - 1; i >= 0; i--)
             {
-                InteractableObject candidate = _candidates[i];
-                if (candidate == null || !candidate.isActiveAndEnabled)
+                IInteractable candidate = _candidates[i];
+                if (candidate is not MonoBehaviour behaviour || behaviour == null || !behaviour.isActiveAndEnabled)
                     _candidates.RemoveAt(i);
             }
 
             for (int i = 0; i < _candidates.Count; i++)
             {
-                InteractableObject candidate = _candidates[i];
+                IInteractable candidate = _candidates[i];
                 if (!candidate.CanInteract)
                     continue;
 
-                float distance = ((Vector2)candidate.transform.position - (Vector2)transform.position).sqrMagnitude;
+                float distance = ((Vector2)((Component)candidate).transform.position - (Vector2)transform.position).sqrMagnitude;
                 if (distance < nearestDistance ||
                     (Mathf.Approximately(distance, nearestDistance) && IsPreferredTie(candidate, nearest)))
                 {
@@ -242,13 +248,13 @@ namespace Game.Interaction
             return nearest;
         }
 
-        private static bool IsPreferredTie(InteractableObject candidate, InteractableObject current)
+        private static bool IsPreferredTie(IInteractable candidate, IInteractable current)
         {
             if (current == null)
                 return true;
 
-            string candidateId = candidate.InteractionId;
-            string currentId = current.InteractionId;
+            string candidateId = (candidate as InteractableObject)?.InteractionId;
+            string currentId = (current as InteractableObject)?.InteractionId;
             if (candidateId == null || currentId == null)
                 return false;
 

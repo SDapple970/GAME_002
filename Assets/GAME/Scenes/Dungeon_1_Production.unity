@@ -2381,7 +2381,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8aa6ee7bc7d22604b99cc7bfb68663f8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.CharacterSkillPanelView
 --- !u!1 &253156126 stripped
 GameObject:
@@ -3836,6 +3836,10 @@ MonoBehaviour:
   startReason: 1
   initiativeSide: 1
   flowMode: 1
+  usePartyCombatRoster: 0
+  partyRuntime: {fileID: 0}
+  characterProgression: {fileID: 0}
+  partyCombatantBindings: []
   playerTag: Player
   debugLog: 0
 --- !u!61 &395110558
@@ -6464,6 +6468,10 @@ MonoBehaviour:
   startReason: 1
   initiativeSide: 1
   flowMode: 1
+  usePartyCombatRoster: 0
+  partyRuntime: {fileID: 0}
+  characterProgression: {fileID: 0}
+  partyCombatantBindings: []
   playerTag: Player
   debugLog: 0
 --- !u!61 &548368411
@@ -6565,6 +6573,10 @@ MonoBehaviour:
   startReason: 1
   initiativeSide: 1
   flowMode: 1
+  usePartyCombatRoster: 0
+  partyRuntime: {fileID: 0}
+  characterProgression: {fileID: 0}
+  partyCombatantBindings: []
   playerTag: Player
   debugLog: 0
 --- !u!61 &553739116
@@ -7019,7 +7031,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5b277751722a95f45883da229094a2ce, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.UIScreenRouter
 --- !u!1 &606843845 stripped
 GameObject:
@@ -8261,6 +8273,7 @@ MonoBehaviour:
   applyInitialStateOnStart: 1
   createMissingCoreServices: 1
   logWarnings: 1
+  characterStartDefinition: {fileID: 0}
 --- !u!1 &727240670
 GameObject:
   m_ObjectHideFlags: 0
@@ -10663,13 +10676,21 @@ PrefabInstance:
       propertyPath: m_Name
       value: CharacterSkillEntryButton
       objectReference: {fileID: 0}
+    - target: {fileID: 4230661993532121134, guid: e31dae58c365ca644bb200a57db3b0d6, type: 3}
+      propertyPath: m_fontColor32.rgba
+      value: 4294307302
+      objectReference: {fileID: 0}
+    - target: {fileID: 4230661993532121134, guid: e31dae58c365ca644bb200a57db3b0d6, type: 3}
+      propertyPath: m_TextStyleHashCode
+      value: -1183493901
+      objectReference: {fileID: 0}
     - target: {fileID: 5004301158049300763, guid: e31dae58c365ca644bb200a57db3b0d6, type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.size
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 5004301158049300763, guid: e31dae58c365ca644bb200a57db3b0d6, type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_Target
-      value:
+      value: 
       objectReference: {fileID: 606843844}
     - target: {fileID: 5004301158049300763, guid: e31dae58c365ca644bb200a57db3b0d6, type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_CallState
@@ -10777,7 +10798,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Button
 --- !u!224 &907981233 stripped
 RectTransform:
@@ -19589,7 +19610,7 @@ PrefabInstance:
       objectReference: {fileID: 1742702640}
     - target: {fileID: 2231473697581713873, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
       propertyPath: characterSkillRoot
-      value:
+      value: 
       objectReference: {fileID: 253156126}
     - target: {fileID: 2597956352864555297, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
       propertyPath: m_SizeDelta.x
@@ -19691,6 +19712,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: ProductionDungeonUI
       objectReference: {fileID: 0}
+    - target: {fileID: 9104210424083986820, guid: 571c2cb0cd6c2ee42ae8300d8aaf8154, type: 3}
+      propertyPath: m_AdditionalShaderChannelsFlag
+      value: 25
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
@@ -19755,7 +19780,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7459963c15a94e04d89541b3b0943c61, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.UI.CharacterSkillUIHost
   router: {fileID: 606843844}
   view: {fileID: 253156125}
@@ -19771,7 +19796,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dc42784cf147c0c48a680349fa168899, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.GraphicRaycaster
   m_IgnoreReversedGraphics: 1
   m_BlockingObjects: 0
@@ -24050,6 +24075,7 @@ MonoBehaviour:
   questRuntime: {fileID: 7100000001}
   rewardService: {fileID: 7100000014}
   daySettlementFlow: {fileID: 0}
+  questCalendarIntegration: {fileID: 0}
   enterRewardStateOnCompletion: 0
   grantRewardOnCompletion: 1
   notifyDaySettlementOnQuestCompletion: 0
@@ -24294,6 +24320,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.EncounterQuestObjectivePublisher
   targetEncounter: {fileID: 406163156}
+  questRuntime: {fileID: 0}
   questId: ch01.find-first-npc
   objectiveId: clear_encounter_01
 --- !u!114 &7100000204
@@ -24309,6 +24336,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.EncounterQuestObjectivePublisher
   targetEncounter: {fileID: 1315519544}
+  questRuntime: {fileID: 0}
   questId: ch01.find-first-npc
   objectiveId: clear_encounter_02
 --- !u!114 &7100000205
@@ -24324,6 +24352,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Game.Quest.EncounterQuestObjectivePublisher
   targetEncounter: {fileID: 798755492}
+  questRuntime: {fileID: 0}
   questId: ch01.find-first-npc
   objectiveId: clear_encounter_03
 --- !u!1001 &1645636291499357858
@@ -24584,6 +24613,12 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1665839071176935757}
+    - targetCorrespondingSourceObject: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1665839071176935759}
+    - targetCorrespondingSourceObject: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1665839071176935761}
   m_SourcePrefab: {fileID: 100100000, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
 --- !u!114 &1665839071176935754 stripped
 MonoBehaviour:
@@ -24632,6 +24667,55 @@ MonoBehaviour:
   minOrthoSize: 4
   maxOrthoSize: 8
   combatOffset: {x: 0, y: 0.8, z: 0}
+--- !u!114 &1665839071176935759
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1665839071176935756}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bce1360c580248db935ccf2b6f845871, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Debugging.CombatHandValidationOptIn
+  entryPoint: {fileID: 1665839071176935754}
+  orchestrator: {fileID: 1665839071176935755}
+  enableValidation: 1
+  playerCardSource: 0
+  clashSkillDefinitions:
+  - {fileID: 11400000, guid: 762d0613f18cd424eba3e68f2b4e1bf5, type: 2}
+  - {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}
+  fixtureCards: []
+  normalHandCapacity: 2
+  clashHandCapacity: 3
+  seed: 2303
+  enableEnemyHand: 0
+  enemyCardSource: 0
+  enemyClashSkillDefinitions:
+  - {fileID: 11400000, guid: 3f33bab0ec4af6c4db0b827917ba147d, type: 2}
+  - {fileID: 11400000, guid: 1f9d7ebdbd0b7fd48ace84c03839d87e, type: 2}
+  enemyFixtureCards: []
+  enemySeed: 2304
+--- !u!114 &1665839071176935761
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1665839071176935756}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 040a0e4f14ef4872ac50661f4ee830da, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Debugging.CombatClashSeriesValidationOptIn
+  entryPoint: {fileID: 1665839071176935754}
+  orchestrator: {fileID: 1665839071176935755}
+  enableValidation: 1
+  attackerDurability: 3
+  responderDurability: 3
+  maxComparisons: 3
+  decisionDurationSeconds: 5
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

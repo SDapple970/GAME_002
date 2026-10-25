@@ -6,17 +6,20 @@ namespace Game.Combat.Model
         public ISkill Skill { get; }
         public ICombatant Opponent { get; }
         public CombatClashOutcome SourceOutcome { get; }
+        public int BpInvestment { get; }
 
         internal CombatOutcomeAction(
             ICombatant actor,
             ISkill skill,
             ICombatant opponent,
-            CombatClashOutcome sourceOutcome)
+            CombatClashOutcome sourceOutcome,
+            int bpInvestment = 0)
         {
             Actor = actor;
             Skill = skill;
             Opponent = opponent;
             SourceOutcome = sourceOutcome;
+            BpInvestment = bpInvestment;
         }
     }
 }

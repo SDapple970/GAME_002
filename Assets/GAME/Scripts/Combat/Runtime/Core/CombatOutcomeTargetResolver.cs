@@ -21,7 +21,8 @@ namespace Game.Combat.Core
                 action.Skill,
                 targets,
                 action.Opponent,
-                action.SourceOutcome);
+                action.SourceOutcome,
+                action.BpInvestment);
             return true;
         }
 

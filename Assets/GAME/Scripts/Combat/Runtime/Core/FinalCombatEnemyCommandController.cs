@@ -14,6 +14,7 @@ namespace Game.Combat.Core
         private CombatFlowOrchestrator _orchestrator;
         private CombatSession _session;
         private CombatExchangeDecisionRequest _request;
+        private bool _acceptsRequests;
 
         public FinalCombatEnemyCommandController(IFinalCombatEnemyDecisionPolicy policy = null)
         {
@@ -21,6 +22,34 @@ namespace Game.Combat.Core
         }
 
         public bool Bind(CombatFlowOrchestrator orchestrator, CombatSession session)
+        {
+            return BindInternal(orchestrator, session, consumePendingRequest: true);
+        }
+
+        /// <summary>
+        /// Establishes the normal enemy-command subscriptions without consuming the initial
+        /// declaration request. CombatEntryPoint uses this only while its per-session opt-ins
+        /// are being configured.
+        /// </summary>
+        internal bool BindForStartup(CombatFlowOrchestrator orchestrator, CombatSession session)
+        {
+            return BindInternal(orchestrator, session, consumePendingRequest: false);
+        }
+
+        /// <summary>Opens an already bound startup controller to its pending request.</summary>
+        internal void ActivateStartupRequests()
+        {
+            if (_orchestrator == null || _session == null || _acceptsRequests)
+                return;
+
+            _acceptsRequests = true;
+            ConsumeRequest(_orchestrator.PendingDecisionRequest);
+        }
+
+        private bool BindInternal(
+            CombatFlowOrchestrator orchestrator,
+            CombatSession session,
+            bool consumePendingRequest)
         {
             Unbind();
             if (orchestrator == null || session == null ||
@@ -34,7 +63,10 @@ namespace Game.Combat.Core
             _orchestrator.AttackDecisionRequested += HandleDecisionRequest;
             _orchestrator.ResponseDecisionRequested += HandleDecisionRequest;
             _orchestrator.ChainDecisionRequested += HandleDecisionRequest;
-            ConsumeRequest(_orchestrator.PendingDecisionRequest);
+            _orchestrator.ClashSeriesDecisionRequested += HandleDecisionRequest;
+            _acceptsRequests = consumePendingRequest;
+            if (_acceptsRequests)
+                ConsumeRequest(_orchestrator.PendingDecisionRequest);
             return true;
         }
 
@@ -45,15 +77,20 @@ namespace Game.Combat.Core
                 _orchestrator.AttackDecisionRequested -= HandleDecisionRequest;
                 _orchestrator.ResponseDecisionRequested -= HandleDecisionRequest;
                 _orchestrator.ChainDecisionRequested -= HandleDecisionRequest;
+                _orchestrator.ClashSeriesDecisionRequested -= HandleDecisionRequest;
             }
 
             _orchestrator = null;
             _session = null;
             _request = null;
+            _acceptsRequests = false;
         }
 
         private void HandleDecisionRequest(CombatExchangeDecisionRequest request)
         {
+            if (!_acceptsRequests)
+                return;
+
             ConsumeRequest(request);
         }
 
@@ -85,7 +122,46 @@ namespace Game.Combat.Core
                 case CombatExchangeDecisionKind.Chain:
                     ContinueOrEnd(request);
                     break;
+                case CombatExchangeDecisionKind.ClashAttack:
+                case CombatExchangeDecisionKind.ClashResponse:
+                    SubmitClashSeriesDecision(request);
+                    break;
             }
+        }
+
+        private void SubmitClashSeriesDecision(CombatExchangeDecisionRequest request)
+        {
+            if (!IsCurrent(request))
+                return;
+
+            System.Collections.Generic.IReadOnlyList<ISkill> available =
+                _orchestrator.GetAvailableClashSeriesSkills(request);
+            if (available.Count == 0)
+            {
+                if (request.Kind == CombatExchangeDecisionKind.ClashResponse)
+                    _orchestrator.SubmitClashSeriesNoResponse(request);
+                return;
+            }
+
+            ISkill preferred = null;
+            if (request.Kind == CombatExchangeDecisionKind.ClashAttack &&
+                _policy.TryCreateAttack(_session, request.ActingActor, out CombatAttackDeclaration attack))
+                preferred = attack?.Skill;
+            else if (request.Kind == CombatExchangeDecisionKind.ClashResponse &&
+                     _policy.TryCreateResponse(_session, request.ActingActor, out CombatResponseDeclaration response))
+                preferred = response?.Skill;
+
+            ISkill selected = available[0];
+            for (int i = 0; i < available.Count; i++)
+            {
+                if (ReferenceEquals(available[i], preferred))
+                {
+                    selected = preferred;
+                    break;
+                }
+            }
+
+            _orchestrator.SubmitClashSeriesSkill(request, selected);
         }
 
         private void SubmitAttackOrYield(CombatExchangeDecisionRequest request)
@@ -95,6 +171,13 @@ namespace Game.Combat.Core
 
             if (_policy.TryCreateAttack(_session, request.ActingActor, out CombatAttackDeclaration declaration))
             {
+                if (declaration != null && !_orchestrator.GetSkillAvailability(
+                        request, declaration.Attacker, declaration.Skill).IsAvailable &&
+                    _session.TryGetHand(declaration.Attacker, out _))
+                {
+                    declaration = FindHandAttack(request, declaration);
+                }
+
                 if (CombatOvercomePolicy.TryAuthorize(
                         _session,
                         request.Phase,
@@ -149,7 +232,19 @@ namespace Game.Combat.Core
             if (!IsCurrent(request))
                 return;
 
-            if (_policy.TryCreateResponse(_session, request.ActingActor, out CombatResponseDeclaration response) &&
+            if (_policy.TryCreateResponse(_session, request.ActingActor, out CombatResponseDeclaration response))
+            {
+                if (response != null && _session.TryGetHand(response.Responder, out _) &&
+                    !_orchestrator.GetSkillAvailability(request, response.Responder,
+                        response.Skill).IsAvailable)
+                    response = FindHandResponse(request);
+            }
+            else
+            {
+                response = null;
+            }
+
+            if (response != null &&
                 _orchestrator.SubmitResponse(response, request.ExchangeVersion))
             {
                 return;
@@ -157,6 +252,37 @@ namespace Game.Combat.Core
 
             if (IsCurrent(request))
                 _orchestrator.SubmitNoResponse(request.ExchangeVersion);
+        }
+
+        private CombatResponseDeclaration FindHandResponse(CombatExchangeDecisionRequest request)
+        {
+            ICombatant actor = request.ActingActor;
+            CombatAttackDeclaration attack = _session.ExchangeState.CurrentDeclaration;
+            if (actor?.Skills == null || attack == null) return null;
+            for (int i = 0; i < actor.Skills.Count; i++)
+            {
+                ISkill skill = actor.Skills[i];
+                if (_orchestrator.GetSkillAvailability(request, actor, skill).IsAvailable &&
+                    CombatDeclarationPolicy.CanDeclareResponse(_session, attack,
+                        new CombatResponseDeclaration(actor, skill)))
+                    return new CombatResponseDeclaration(actor, skill);
+            }
+            return null;
+        }
+
+        private CombatAttackDeclaration FindHandAttack(
+            CombatExchangeDecisionRequest request, CombatAttackDeclaration preferred)
+        {
+            if (preferred?.Attacker?.Skills == null) return null;
+            for (int i = 0; i < preferred.Attacker.Skills.Count; i++)
+            {
+                ISkill skill = preferred.Attacker.Skills[i];
+                if (_orchestrator.GetSkillAvailability(request, preferred.Attacker, skill).IsAvailable &&
+                    CombatDeclarationPolicy.CanDeclareAttack(_session,
+                        new CombatAttackDeclaration(preferred.Attacker, preferred.Target, skill)))
+                    return new CombatAttackDeclaration(preferred.Attacker, preferred.Target, skill);
+            }
+            return null;
         }
 
         private void ContinueOrEnd(CombatExchangeDecisionRequest request)

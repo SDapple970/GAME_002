@@ -53,6 +53,13 @@ namespace Game.Combat.Data
         public int FinalMpCost => finalMpCost;
         public int ClashPower => clashPower;
 
+        [Header("BP Validation Enhancement (opt-in only)")]
+        [SerializeField] private CombatBpEnhancementKind bpEnhancementKind;
+        [SerializeField] private int bpEnhancementPerPoint;
+
+        public CombatBpEnhancementKind BpEnhancementKind => bpEnhancementKind;
+        public int BpEnhancementPerPoint => bpEnhancementPerPoint;
+
         [Header("Combat Status Effects")]
         [SerializeField] private CombatStatusDefinitionSO[] appliedStatusEffects = System.Array.Empty<CombatStatusDefinitionSO>();
         public IReadOnlyList<CombatStatusDefinitionSO> AppliedStatusEffects => appliedStatusEffects ?? System.Array.Empty<CombatStatusDefinitionSO>();
@@ -98,6 +105,7 @@ namespace Game.Combat.Data
         {
             finalMpCost = Mathf.Max(0, finalMpCost);
             clashPower = Mathf.Max(0, clashPower);
+            bpEnhancementPerPoint = Mathf.Max(0, bpEnhancementPerPoint);
             fieldCooldown = Mathf.Max(0f, fieldCooldown);
             fieldHitDelay = Mathf.Max(0f, fieldHitDelay);
             fieldHitBoxSize.x = Mathf.Max(0f, fieldHitBoxSize.x);

@@ -64,6 +64,12 @@ namespace Game.Combat.UI
         public bool CanOvercome { get; }
         public CombatDeclarationToken? DeclarationToken { get; }
         public CombatAttackDeclaration DeclaredAttack { get; }
+        public IReadOnlyList<CombatSkillAvailability> SkillAvailability { get; }
+        public long? ClashSeriesToken { get; }
+        public bool HasHand { get; }
+        public IReadOnlyList<CombatHandCard> HandCards { get; }
+        public long? SelectedCardRuntimeId { get; }
+        public IReadOnlyList<CombatSkillAvailability> CardAvailability { get; }
 
         internal PlayerCombatDecisionViewState(
             CombatExchangeDecisionKind? decisionKind,
@@ -92,7 +98,13 @@ namespace Game.Combat.UI
             bool isPanicked,
             bool canOvercome,
             CombatDeclarationToken? declarationToken = null,
-            CombatAttackDeclaration declaredAttack = null)
+            CombatAttackDeclaration declaredAttack = null,
+            IReadOnlyList<CombatSkillAvailability> skillAvailability = null,
+            long? clashSeriesToken = null,
+            bool hasHand = false,
+            IReadOnlyList<CombatHandCard> handCards = null,
+            long? selectedCardRuntimeId = null,
+            IReadOnlyList<CombatSkillAvailability> cardAvailability = null)
         {
             DecisionKind = decisionKind;
             ExchangeVersion = exchangeVersion;
@@ -121,6 +133,12 @@ namespace Game.Combat.UI
             CanOvercome = canOvercome;
             DeclarationToken = declarationToken;
             DeclaredAttack = declaredAttack;
+            SkillAvailability = skillAvailability ?? Array.Empty<CombatSkillAvailability>();
+            ClashSeriesToken = clashSeriesToken;
+            HasHand = hasHand;
+            HandCards = handCards ?? Array.Empty<CombatHandCard>();
+            SelectedCardRuntimeId = selectedCardRuntimeId;
+            CardAvailability = cardAvailability ?? Array.Empty<CombatSkillAvailability>();
         }
     }
 }

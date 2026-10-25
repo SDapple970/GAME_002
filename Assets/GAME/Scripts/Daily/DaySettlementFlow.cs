@@ -35,6 +35,12 @@ namespace Game.Daily
             ResolveReferences();
         }
 
+        public bool IsSettlementCompleted(string settlementId) =>
+            !string.IsNullOrWhiteSpace(settlementId) && _completedSettlementIds.Contains(settlementId);
+
+        public bool IsSettlementActive(string settlementId) =>
+            _activeRequest != null && _activeRequest.settlementId == settlementId;
+
         public bool PrepareSettlement(DaySettlementRequest request)
         {
             if (!IsValidRequest(request))
@@ -79,6 +85,7 @@ namespace Game.Daily
                 settlementId = _activeRequest.settlementId,
                 sourceType = _activeRequest.sourceType,
                 questId = _activeRequest.questId,
+                questRunId = _activeRequest.questRunId,
                 missionId = _activeRequest.missionId,
                 completedQuestOrMissionId = ResolveCompletedQuestOrMissionId(_activeRequest),
                 displayTitle = _activeRequest.displayTitle,
@@ -128,6 +135,8 @@ namespace Game.Daily
         {
             _completedSettlementIds.Clear();
             _completedSettlementKeys.Clear();
+            _activeRequest = null;
+            _activeSettlementKey = null;
             if (saveData?.futureDaily?.completedSettlementIds == null)
                 return;
 
@@ -184,6 +193,8 @@ namespace Game.Daily
 
         private static string ResolveSettlementKey(DaySettlementRequest request, string settlementId)
         {
+            if (!string.IsNullOrWhiteSpace(request.questRunId))
+                return $"settlement:{settlementId}";
             string completedId = ResolveCompletedQuestOrMissionId(request);
             if (!string.IsNullOrWhiteSpace(completedId))
                 return $"completion:{completedId}";
@@ -195,6 +206,9 @@ namespace Game.Daily
         {
             if (string.IsNullOrWhiteSpace(settlementId))
                 return string.Empty;
+
+            if (settlementId.StartsWith("quest-run:", StringComparison.Ordinal))
+                return $"settlement:{settlementId}";
 
             int separatorIndex = settlementId.IndexOf(':');
             if (separatorIndex >= 0 && separatorIndex + 1 < settlementId.Length)

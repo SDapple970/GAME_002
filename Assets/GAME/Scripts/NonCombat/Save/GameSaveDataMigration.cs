@@ -58,6 +58,10 @@ namespace Game.NonCombat.Save
                     MigrateVersion10(data);
                 if (version <= 11)
                     MigrateVersion11(data);
+                if (version <= 12)
+                    MigrateVersion12(data);
+                if (version <= 13)
+                    MigrateVersion13(data);
             }
             else
             {
@@ -79,6 +83,30 @@ namespace Game.NonCombat.Save
 
             GameSaveDataValidator.Normalize(data);
             return GameSaveDataValidator.TryValidate(data, out error);
+        }
+
+        private static void MigrateVersion13(GameSaveData data)
+        {
+            if (data.quest?.quests != null)
+                foreach (QuestStateSaveData quest in data.quest.quests)
+                    if (quest != null) quest.generalMission = null;
+            data.header ??= new SaveHeaderData();
+            data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
+        }
+
+        private static void MigrateVersion12(GameSaveData data)
+        {
+            // Old quests keep their unscoped completion/payment identities. Only an
+            // explicitly accepted new repeatable run receives a new identity.
+            if (data.quest?.quests != null)
+                foreach (QuestStateSaveData quest in data.quest.quests)
+                    if (quest != null) quest.runId = null;
+            data.quest ??= new QuestSaveData();
+            data.quest.pendingRunCompletions = new();
+            data.futureDaily ??= new FutureDailySaveData();
+            data.futureDaily.appliedQuestRunDayCostIds = new();
+            data.header ??= new SaveHeaderData();
+            data.header.schemaVersion = GameSaveDataFormat.CurrentSchemaVersion;
         }
 
         private static void MigrateVersion11(GameSaveData data)
@@ -279,9 +307,16 @@ namespace Game.NonCombat.Save
                 {
                     identityRecords += data.quest.quests[i]?.processedEventIds?.Count ?? 0;
                     identityRecords += data.quest.quests[i]?.retiredEventIds?.Count ?? 0;
+                    GeneralMissionStateSaveData mission = data.quest.quests[i]?.generalMission;
+                    identityRecords += mission?.selectedTargetIds?.Count ?? 0;
+                    identityRecords += mission?.completedTargetIds?.Count ?? 0;
+                    identityRecords += mission?.healthOutcomeIds?.Count ?? 0;
+                    identityRecords += mission?.escortPath?.Count ?? 0;
                 }
             }
 
+            identityRecords += data?.quest?.pendingRunCompletions?.Count ?? 0;
+            identityRecords += data?.futureDaily?.appliedQuestRunDayCostIds?.Count ?? 0;
             identityRecords += data?.world?.interactions?.Count ?? 0;
             identityRecords += data?.progression?.characters?.Count ?? 0;
             identityRecords += data?.characterSkills?.sharedFilmSkillKeys?.Count ?? 0;
@@ -337,6 +372,9 @@ namespace Game.NonCombat.Save
             NormalizeStrings(data.world.clearedEncounterIds, MaxGeneralIdEntries);
             data.futureDaily.appliedQuestDayCostIds ??= new List<string>();
             NormalizeStrings(data.futureDaily.appliedQuestDayCostIds, MaxGeneralIdEntries);
+            data.futureDaily.appliedQuestRunDayCostIds ??= new List<string>();
+            NormalizeStrings(data.futureDaily.appliedQuestRunDayCostIds);
+            data.quest.pendingRunCompletions ??= new List<QuestRunCompletionSaveData>();
             NormalizeInteractionStates(data.world);
             NormalizeRewardLedger(data.reward);
             if (data.quest.quests != null)
@@ -517,6 +555,18 @@ namespace Game.NonCombat.Save
             quest.activeGroupIndex = Mathf.Max(0, quest.activeGroupIndex);
             quest.attempt = Mathf.Max(0, quest.attempt);
             quest.failureReasonId = NormalizeId(quest.failureReasonId);
+            quest.runId = NormalizeId(quest.runId);
+            if (quest.generalMission != null)
+            {
+                quest.generalMission.selectedTargetIds ??= new();
+                quest.generalMission.completedTargetIds ??= new();
+                quest.generalMission.healthOutcomeIds ??= new();
+                quest.generalMission.escortPath ??= new();
+                NormalizeStrings(quest.generalMission.selectedTargetIds);
+                NormalizeStrings(quest.generalMission.completedTargetIds);
+                NormalizeStrings(quest.generalMission.healthOutcomeIds);
+                quest.generalMission.rescueHp = Mathf.Max(0, quest.generalMission.rescueHp);
+            }
 
             if (!Enum.TryParse(quest.status, out QuestStatus status) ||
                 !Enum.IsDefined(typeof(QuestStatus), status))
@@ -698,6 +748,25 @@ namespace Game.NonCombat.Save
             if (data.header.schemaVersion != GameSaveDataFormat.CurrentSchemaVersion) { error = $"Unsupported schema {data.header.schemaVersion}."; return false; }
             if (data.location != null && (!float.IsFinite(data.location.positionX) || !float.IsFinite(data.location.positionY) || !float.IsFinite(data.location.positionZ)))
             { error = "Player location contains a non-finite value."; return false; }
+            if (data.quest?.quests != null)
+                foreach (QuestStateSaveData quest in data.quest.quests)
+                {
+                    GeneralMissionStateSaveData mission = quest?.generalMission;
+                    if (mission == null) continue;
+                    if (mission.escortPath?.Count > 4096)
+                    { error = "Escort path exceeds the supported length."; return false; }
+                    Vector3 p = mission.escortPosition;
+                    if (mission.hasEscortPosition && (!float.IsFinite(p.x) || !float.IsFinite(p.y) || !float.IsFinite(p.z)))
+                    { error = "Escort position contains a non-finite value."; return false; }
+                    foreach (Vector3 point in mission.escortPath ?? new())
+                        if (!float.IsFinite(point.x) || !float.IsFinite(point.y) || !float.IsFinite(point.z))
+                        { error = "Escort path contains a non-finite value."; return false; }
+                }
+            if (data.quest?.pendingRunCompletions != null)
+                foreach (QuestRunCompletionSaveData pending in data.quest.pendingRunCompletions)
+                    if (pending == null || string.IsNullOrWhiteSpace(pending.questId) ||
+                        string.IsNullOrWhiteSpace(pending.runId) || pending.gold < 0 || pending.exp < 0 || pending.missionDayCost < 0)
+                    { error = "Invalid pending quest run completion."; return false; }
             return true;
         }
 

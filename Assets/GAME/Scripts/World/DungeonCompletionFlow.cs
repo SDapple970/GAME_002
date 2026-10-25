@@ -118,6 +118,13 @@ namespace Game.World
             return true;
         }
 
+        private void HandleQuestStarted(string questId)
+        {
+            if (!string.Equals(questId, CompletionQuestId, StringComparison.Ordinal)) return;
+            _completionRaised = false;
+            _travelRequested = false;
+        }
+
         private void HandleQuestCompleted(string questId)
         {
             if (!string.Equals(questId, CompletionQuestId, StringComparison.Ordinal))
@@ -172,6 +179,7 @@ namespace Game.World
                 if (_subscribedQuestRuntime != null)
                 {
                     _subscribedQuestRuntime.OnQuestCompleted -= HandleQuestCompleted;
+                    _subscribedQuestRuntime.OnQuestStarted -= HandleQuestStarted;
                     _subscribedQuestRuntime.OnStateRestored -= HandleQuestStateRestored;
                 }
 
@@ -179,6 +187,7 @@ namespace Game.World
                 if (_subscribedQuestRuntime != null)
                 {
                     _subscribedQuestRuntime.OnQuestCompleted += HandleQuestCompleted;
+                    _subscribedQuestRuntime.OnQuestStarted += HandleQuestStarted;
                     _subscribedQuestRuntime.OnStateRestored += HandleQuestStateRestored;
                 }
             }
@@ -200,6 +209,7 @@ namespace Game.World
             if (_subscribedQuestRuntime != null)
             {
                 _subscribedQuestRuntime.OnQuestCompleted -= HandleQuestCompleted;
+                _subscribedQuestRuntime.OnQuestStarted -= HandleQuestStarted;
                 _subscribedQuestRuntime.OnStateRestored -= HandleQuestStateRestored;
             }
 

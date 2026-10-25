@@ -10,18 +10,21 @@ namespace Game.Combat.Model
         public IReadOnlyList<ICombatant> Targets { get; }
         public ICombatant Opponent { get; }
         public CombatClashOutcome SourceOutcome { get; }
+        public int BpInvestment { get; }
 
         internal CombatSkillExecutionRequest(
             ICombatant actor,
             ISkill skill,
             IReadOnlyList<ICombatant> targets,
             ICombatant opponent,
-            CombatClashOutcome sourceOutcome)
+            CombatClashOutcome sourceOutcome,
+            int bpInvestment = 0)
         {
             Actor = actor;
             Skill = skill;
             Opponent = opponent;
             SourceOutcome = sourceOutcome;
+            BpInvestment = bpInvestment;
 
             ICombatant[] snapshot = new ICombatant[targets?.Count ?? 0];
             for (int i = 0; i < snapshot.Length; i++)

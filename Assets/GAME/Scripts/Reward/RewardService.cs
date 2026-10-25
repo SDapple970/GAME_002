@@ -74,6 +74,14 @@ namespace Game.Reward
             return result;
         }
 
+        public RewardGrantResult GrantQuestRunCompletion(Game.Quest.QuestRunCompletion completion)
+        {
+            if (!completion.IsValid) return RewardGrantResult.Empty;
+            return GrantReward(new RewardGrantRequest(RewardSourceType.QuestCompletion,
+                $"quest:{completion.QuestId}", completion.Gold, completion.Exp,
+                actionId: completion.ActionId));
+        }
+
         public RewardResult GrantMissionCompletion(string missionId, int gold, int exp)
         {
             return Grant(new RewardGrantRequest(

@@ -11,6 +11,7 @@ namespace Game.Quest
     public sealed class InteractionQuestObjectivePublisher : MonoBehaviour
     {
         [SerializeField] private InteractionRunner interactionRunner;
+        [SerializeField] private QuestRuntime questRuntime;
         [SerializeField] private string questId;
         [SerializeField] private string objectiveId;
         [SerializeField] private string targetInteractionId;
@@ -74,6 +75,7 @@ namespace Game.Quest
                 return;
             }
 
+            if (questRuntime == null) questRuntime = FindFirstObjectByType<QuestRuntime>();
             GameplayOutcomeIdentity identity = new(
                 GameplayOutcomeSourceType.Interaction,
                 targetId,
@@ -85,7 +87,8 @@ namespace Game.Quest
                 identity,
                 1,
                 gameObject,
-                targetId));
+                targetId,
+                questRuntime?.GetQuestRunId(questId)));
         }
     }
 }

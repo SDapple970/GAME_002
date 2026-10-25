@@ -166,6 +166,52 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void ContactEncounter_DefersToPendingFieldAttack_ThenUsesPlayerInitiative()
+        {
+            GameStateMachine state = Track(new GameObject("State")).AddComponent<GameStateMachine>();
+            Invoke(state, "Awake");
+            GameFlowController flow = Track(new GameObject("Flow")).AddComponent<GameFlowController>();
+            Invoke(flow, "Awake");
+            CombatEntryPoint entry = Track(new GameObject("Entry")).AddComponent<CombatEntryPoint>();
+            Invoke(entry, "Awake");
+            Fixture fixture = CreateFixture(1, entry);
+            CombatEncounterGroup group = Track(new GameObject("Encounter")).AddComponent<CombatEncounterGroup>();
+            GameObject enemy = fixture.EnemyObjects.Single();
+            enemy.transform.SetParent(group.transform);
+            enemy.layer = 11;
+            enemy.AddComponent<BoxCollider2D>();
+            fixture.Attack.transform.position = Vector3.zero;
+            enemy.transform.position = new Vector3(0.5f, 0f);
+            SetField(fixture.Attack, "attackOrigin", fixture.Attack.transform);
+            SetField(fixture.Attack, "targetMask", (LayerMask)(1 << enemy.layer));
+            SetField(fixture.Attack, "hitBoxSize", new Vector2(2f, 2f));
+
+            GameObject contactObject = Track(new GameObject("Contact"));
+            contactObject.AddComponent<BoxCollider2D>();
+            CombatEncounterTrigger2D contact = contactObject.AddComponent<CombatEncounterTrigger2D>();
+            SetField(contact, "entryPoint", entry);
+            SetField(contact, "encounterGroup", group);
+            Invoke(contact, "Awake");
+
+            BoxCollider2D playerCollider = fixture.Attack.gameObject.AddComponent<BoxCollider2D>();
+            SetField(fixture.Attack, "_attackRunning", true);
+            Physics2D.SyncTransforms();
+
+            Invoke(contact, "TryStartContact", playerCollider, true);
+
+            Assert.That(entry.ActiveSession, Is.Null,
+                "A contact trigger must not reserve the encounter while the player's attack windup is pending.");
+
+            Invoke(fixture.Attack, "TryResolveHit", 0);
+
+            Assert.That(entry.ActiveSession, Is.Not.Null);
+            Assert.That(entry.ActiveSession.StartReason, Is.EqualTo(StartReason.PlayerFirstHit));
+            Assert.That(entry.ActiveSession.InitiativeSide, Is.EqualTo(Side.Allies));
+            Assert.That(Invoke<bool>(group, "TryReserve", contact), Is.False,
+                "The player-initiated session must continue to block a duplicate contact start.");
+        }
+
+        [Test]
         public void InvalidPartyRequest_ReleasesEncounterReservation()
         {
             GameStateMachine state = Track(new GameObject("State")).AddComponent<GameStateMachine>();

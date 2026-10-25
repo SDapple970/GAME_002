@@ -12,6 +12,11 @@ namespace Game.Quest
         [SerializeField] private QuestRuntime questRuntime;
         [SerializeField] private RewardService rewardService;
         [SerializeField] private DaySettlementFlow daySettlementFlow;
+        [SerializeField] private QuestCalendarIntegration questCalendarIntegration;
+        private readonly HashSet<string> _presentedRunKeys = new();
+        private bool _processingRunCompletions;
+        private bool _resumeRunCompletions;
+        private DaySettlementFlow _subscribedSettlementFlow;
         [SerializeField] private bool enterRewardStateOnCompletion;
         [SerializeField] private bool grantRewardOnCompletion = true;
         [SerializeField] private bool notifyDaySettlementOnQuestCompletion;
@@ -55,6 +60,13 @@ namespace Game.Quest
             TryProcessPending();
         }
 
+        private void Update()
+        {
+            if (!_resumeRunCompletions) return;
+            _resumeRunCompletions = false;
+            TryProcessPending();
+        }
+
         private void OnDisable()
         {
             Unsubscribe();
@@ -74,12 +86,18 @@ namespace Game.Quest
             _claimedQuestIds.Clear();
             _rewardedQuestIds.Clear();
             _pendingQuestIds.Clear();
+            _presentedRunKeys.Clear();
+            // Processing waits until the complete restore pass (including rewards,
+            // calendar and settlement) has finished.
+            _resumeRunCompletions = true;
         }
 
         public void ResetForNewGame() => RestoreSaveData(null);
 
         private void HandleQuestCompleted(string questId)
         {
+            if (questRuntime != null && !string.IsNullOrWhiteSpace(questRuntime.GetQuestRunId(questId)))
+                return;
             Debug.Log(
                 $"[QuestRewardTrace] QuestCompletionFlow.HandleQuestCompleted received. questId={questId}, currentGameState={GetCurrentGameState()}, pendingQueueCount={_pendingQuestIds.Count}, questCompletionFlowInstanceId={GetInstanceID()}",
                 this);
@@ -109,6 +127,8 @@ namespace Game.Quest
                 $"[QuestRewardTrace] QuestCompletionFlow.TryProcessPending. pendingQueueCount={_pendingQuestIds.Count}, isSafeToProcessCompletion={safeToProcess}, currentGameState={GetCurrentGameState()}, gameStateMachineInstanceId={GetInstanceId(GameStateMachine.Instance)}, questCompletionFlowInstanceId={GetInstanceID()}",
                 this);
 
+            TryProcessRunCompletions();
+            safeToProcess = IsSafeToProcessCompletion();
             while (_pendingQuestIds.Count > 0 && safeToProcess)
             {
                 string questId = _pendingQuestIds.Dequeue();
@@ -126,6 +146,53 @@ namespace Game.Quest
                 // until the authoritative flow returns to Exploration.
                 break;
             }
+        }
+
+        private void HandleRunCompleted(QuestRunCompletion completion) => TryProcessPending();
+
+        private void TryProcessRunCompletions()
+        {
+            if (_processingRunCompletions || questRuntime == null || !IsSafeToProcessCompletion()) return;
+            _processingRunCompletions = true;
+            try
+            {
+                foreach (QuestRunCompletion completion in questRuntime.GetPendingRunCompletions())
+                {
+                    if (!IsSafeToProcessCompletion()) break;
+                    ResolveReferences();
+                    Subscribe();
+                    if (completion.MissionDayCost > 0 &&
+                        (questCalendarIntegration == null || !questCalendarIntegration.TryApplyRunDayCost(completion)))
+                        break;
+                    RewardGrantResult result = RewardGrantResult.Empty;
+                    if (grantRewardOnCompletion && (completion.Gold > 0 || completion.Exp > 0))
+                    {
+                        if (rewardService == null) { WarnMissingRewardService(completion.QuestId); break; }
+                        result = rewardService.GrantQuestRunCompletion(completion);
+                        if (result.PartialFailure) break;
+                    }
+                    if (notifyDaySettlementOnQuestCompletion)
+                    {
+                        if (daySettlementFlow == null) { WarnMissingDaySettlementFlow(completion.QuestId); break; }
+                        DaySettlementRequest request = DaySettlementRequest.ForQuestRun(completion, result);
+                        if (!daySettlementFlow.IsSettlementCompleted(request.settlementId))
+                        {
+                            if (!daySettlementFlow.IsSettlementActive(request.settlementId))
+                                daySettlementFlow.PrepareSettlement(request);
+                            if (!daySettlementFlow.IsSettlementCompleted(request.settlementId))
+                            {
+                                if (enterRewardStateOnCompletion && !_presentedRunKeys.Contains(completion.Key) && TryEnterRewardState())
+                                    _presentedRunKeys.Add(completion.Key);
+                                break; // Retain the completion until settlement actually finishes.
+                            }
+                        }
+                    }
+                    bool alreadyPresented = _presentedRunKeys.Remove(completion.Key);
+                    questRuntime.AcknowledgeRunCompletion(completion);
+                    if (enterRewardStateOnCompletion && !alreadyPresented && TryEnterRewardState()) break;
+                }
+            }
+            finally { _processingRunCompletions = false; }
         }
 
         private static bool IsSafeToProcessCompletion()
@@ -158,6 +225,9 @@ namespace Game.Quest
                     ? RewardService.Instance
                     : FindFirstObjectByType<RewardService>();
 
+            if (questCalendarIntegration == null)
+                questCalendarIntegration = FindFirstObjectByType<QuestCalendarIntegration>();
+
             if (daySettlementFlow == null)
                 daySettlementFlow = DaySettlementFlow.Instance != null
                     ? DaySettlementFlow.Instance
@@ -166,14 +236,28 @@ namespace Game.Quest
 
         private void Subscribe()
         {
+            if (_subscribedSettlementFlow != daySettlementFlow)
+            {
+                if (_subscribedSettlementFlow != null)
+                    _subscribedSettlementFlow.OnSettlementCompleted -= HandleSettlementCompleted;
+                _subscribedSettlementFlow = daySettlementFlow;
+                if (_subscribedSettlementFlow != null)
+                    _subscribedSettlementFlow.OnSettlementCompleted += HandleSettlementCompleted;
+            }
             if (_subscribedRuntime != questRuntime)
             {
                 if (_subscribedRuntime != null)
+                {
                     _subscribedRuntime.OnQuestCompleted -= HandleQuestCompleted;
+                    _subscribedRuntime.OnQuestRunCompleted -= HandleRunCompleted;
+                }
 
                 _subscribedRuntime = questRuntime;
                 if (_subscribedRuntime != null)
+                {
                     _subscribedRuntime.OnQuestCompleted += HandleQuestCompleted;
+                    _subscribedRuntime.OnQuestRunCompleted += HandleRunCompleted;
+                }
             }
 
             GameStateMachine stateMachine = GameStateMachine.Instance;
@@ -193,10 +277,18 @@ namespace Game.Quest
             }
         }
 
+        private void HandleSettlementCompleted(DaySettlementResult result) => TryProcessPending();
+
         private void Unsubscribe()
         {
+            if (_subscribedSettlementFlow != null)
+                _subscribedSettlementFlow.OnSettlementCompleted -= HandleSettlementCompleted;
+            _subscribedSettlementFlow = null;
             if (_subscribedRuntime != null)
+            {
                 _subscribedRuntime.OnQuestCompleted -= HandleQuestCompleted;
+                _subscribedRuntime.OnQuestRunCompleted -= HandleRunCompleted;
+            }
             if (_subscribedStateMachine != null)
                 _subscribedStateMachine.OnStateChanged -= HandleStateChanged;
 
