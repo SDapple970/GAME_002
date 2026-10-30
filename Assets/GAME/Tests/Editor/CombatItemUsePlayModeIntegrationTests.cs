@@ -27,6 +27,53 @@ namespace Game.Tests.Combat
         private readonly List<string> _runtimeErrors = new List<string>();
 
         [UnityTest]
+        public IEnumerator ItemAtCurrentCommandRoot_ReflectsInventoryAndUsesOneItem()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            yield return new EnterPlayMode();
+            Assert.That(Application.isPlaying, Is.True);
+            _runtimeErrors.Clear();
+            Application.logMessageReceived += CaptureRuntimeError;
+            try
+            {
+                RuntimeFixture fixture = CreateFixture();
+                BindWithSynchronousPresentation(fixture);
+                fixture.Binder.Bind(fixture.Session, fixture.Machine, fixture.Orchestrator);
+                yield return null;
+                GameObject currentRoot = GetPrivateField<GameObject>(fixture.Binder, "handoffListRoot");
+                Click(FindButton(fixture.ActorListRoot, "1"));
+                Button item = FindButton(currentRoot, "ITEM Test Ally Heal x2");
+                Assert.That(item, Is.Not.Null);
+                Assert.That(item.gameObject.activeInHierarchy, Is.True);
+                Assert.That(item.interactable, Is.True);
+                Click(item);
+                Click(FindButton(fixture.TargetListRoot, "2"));
+                Click(fixture.ConfirmButton);
+                yield return null;
+                Assert.That(fixture.AllyTwoState.CurrentHp, Is.EqualTo(8));
+                Assert.That(fixture.Inventory.GetCount(fixture.HealItem.ItemId), Is.EqualTo(1));
+                Assert.That(fixture.Orchestrator.YieldStandoffAttackAuthority(
+                    Side.Enemies, fixture.Session.ExchangeState.Version), Is.True);
+                yield return null;
+                Click(FindButton(fixture.ActorListRoot, "1"));
+                Assert.That(FindButton(currentRoot, "ITEM Test Ally Heal x1"), Is.Not.Null);
+                Assert.That(FindButton(currentRoot, "ITEM Test Empty x0"), Is.Null);
+                Assert.That(fixture.Inventory.TryAddItem(fixture.HealItem.ItemId, 1).Status,
+                    Is.EqualTo(InventoryMutationStatus.Success));
+                Assert.That(FindActiveButton(currentRoot, "ITEM Test Ally Heal x2"), Is.Not.Null);
+                Assert.That(fixture.Inventory.TryRemoveItemDetailed(fixture.HealItem.ItemId, 1).Status,
+                    Is.EqualTo(InventoryMutationStatus.Success));
+                Assert.That(FindActiveButton(currentRoot, "ITEM Test Ally Heal x1"), Is.Not.Null);
+                fixture.Inventory.ImportItems(new Dictionary<string, int> { { fixture.HealItem.ItemId, 3 } });
+                Assert.That(FindActiveButton(currentRoot, "ITEM Test Ally Heal x3"), Is.Not.Null);
+                Assert.That(_runtimeErrors, Is.Empty, string.Join("\n", _runtimeErrors));
+                fixture.Binder.Unbind();
+            }
+            finally { Application.logMessageReceived -= CaptureRuntimeError; }
+            yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
         [Category("CBT_ITEM_01")]
         public IEnumerator IsolatedFinalExchange_ItemAdapterInventoryAndBinderRunInActualPlayMode()
         {
@@ -65,8 +112,13 @@ namespace Game.Tests.Combat
                 Assert.That(fixture.Session.ExchangeState.CurrentAttackSide, Is.EqualTo(Side.Allies));
                 Assert.That(fixture.Orchestrator.GetUsableCombatItems(fixture.Ally), Is.Not.Empty);
                 Click(FindButton(fixture.ActorListRoot, "1"));
-                Assert.That(FindButton(fixture.SkillListRoot, "ITEM Test Ally Heal x2"), Is.Not.Null);
-                Click(FindButton(fixture.SkillListRoot, "ITEM Test Ally Heal x2"));
+                // Binder uses the shared command root for items, BP and Overcome; cards use the skill root.
+                GameObject commandRoot = GetPrivateField<GameObject>(fixture.Binder, "handoffListRoot");
+                Assert.That(FindButton(fixture.SkillListRoot, "ITEM Test Ally Heal x2"), Is.Null);
+                Button itemButton = FindActiveButton(commandRoot, "ITEM Test Ally Heal x2");
+                Assert.That(itemButton, Is.Not.Null);
+                Assert.That(itemButton.interactable, Is.True);
+                Click(itemButton);
                 Assert.That(FindButton(fixture.TargetListRoot, "2"), Is.Not.Null);
                 Click(FindButton(fixture.TargetListRoot, "2"));
                 Assert.That(fixture.ConfirmButton.gameObject.activeSelf, Is.True);
@@ -93,8 +145,8 @@ namespace Game.Tests.Combat
                     fixture.Session.ExchangeState.Version), Is.True);
                 yield return null;
                 Click(FindButton(fixture.ActorListRoot, "1"));
-                Assert.That(FindButton(fixture.SkillListRoot, "ITEM Test Ally Heal x1"), Is.Not.Null);
-                Assert.That(FindButton(fixture.SkillListRoot, "ITEM Test Empty x0"), Is.Null);
+                Assert.That(FindActiveButton(commandRoot, "ITEM Test Ally Heal x1"), Is.Not.Null);
+                Assert.That(FindButton(commandRoot, "ITEM Test Empty x0"), Is.Null);
 
                 int activeVersion = fixture.Session.ExchangeState.Version;
                 CombatItemUseRequest insufficient = new CombatItemUseRequest(
@@ -313,6 +365,17 @@ namespace Game.Tests.Combat
             Text text = new GameObject("Text").AddComponent<Text>();
             text.transform.SetParent(root.transform);
             return button;
+        }
+
+        private static Button FindActiveButton(GameObject root, string expectedText)
+        {
+            foreach (Button button in root.GetComponentsInChildren<Button>(false))
+            {
+                Text label = button.GetComponentInChildren<Text>();
+                if (label != null && label.text == expectedText)
+                    return button;
+            }
+            return null;
         }
 
         private static Button FindButton(GameObject root, string expectedText)

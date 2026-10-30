@@ -17,6 +17,22 @@ namespace Game.Combat.Core
         private bool _approachPresentationRequested;
         private bool _endTurnProcessed;
         private bool _exited;
+        private bool _isExecutingAllOut;
+        private bool _isReturningToStandoff;
+        private bool _isExecutingSkill;
+        private bool _isExecutingItem;
+
+        internal bool IsExecutingEffect => _isExecutingAllOut || _isExecutingSkill;
+
+        internal bool TryBeginItemExecution(int expectedExchangeVersion)
+        {
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) || Phase != Phase.Standoff)
+                return false;
+            _isExecutingItem = true;
+            return true;
+        }
+
+        internal void EndItemExecution() => _isExecutingItem = false;
 
         public event Action<CombatSession, Action> OnRequireResolutionPlay;
         public event Action<CombatAttackDeclaration, Action> OnRequireApproachPlay;
@@ -192,6 +208,8 @@ namespace Game.Combat.Core
 
             CombatAttackDeclaration replacement = new(original.Attacker, original.Target, replacementSkill);
             if (!CombatDeclarationPolicy.CanDeclareAttack(_session, replacement) ||
+                (_session.TryGetHand(original.Attacker, out CombatHandRuntime hand) &&
+                 !hand.TryFindInHand(replacementSkill, CombatCardKind.Normal, null, out _)) ||
                 !_session.GetCombatState(original.Attacker).CanSpendMp(CombatMpCostResolver.Resolve(replacementSkill)))
             {
                 return false;
@@ -573,7 +591,7 @@ namespace Game.Combat.Core
         public bool TryPrepareSkillExecution()
         {
             CombatExchangeState exchange = _session?.ExchangeState;
-            if (_exited || _session == null || _session.FlowMode != CombatFlowMode.StandoffClashChain ||
+            if (_exited || _isExecutingSkill || _session == null || _session.FlowMode != CombatFlowMode.StandoffClashChain ||
                 Phase != Phase.ApplyOutcome || exchange == null || !exchange.IsOutcomePrepared ||
                 exchange.IsExecutionPrepared || CombatEndEvaluator.Evaluate(_session) != CombatEndReason.None)
             {
@@ -610,7 +628,7 @@ namespace Game.Combat.Core
         public bool TryExecutePreparedSkill()
         {
             CombatExchangeState exchange = _session?.ExchangeState;
-            if (_exited || _session == null || _session.FlowMode != CombatFlowMode.StandoffClashChain ||
+            if (_exited || _isExecutingSkill || _session == null || _session.FlowMode != CombatFlowMode.StandoffClashChain ||
                 Phase != Phase.ApplyOutcome || exchange == null || !exchange.IsOutcomePrepared ||
                 !exchange.IsExecutionPrepared || exchange.IsExecutionCompleted ||
                 CombatEndEvaluator.Evaluate(_session) != CombatEndReason.None)
@@ -628,16 +646,21 @@ namespace Game.Combat.Core
                 return true;
             }
 
-            if (!Game.Combat.Actions.SkillRunner.TryExecute(
-                    _session,
-                    request,
-                    out CombatSkillExecutionResult result))
+            _isExecutingSkill = true;
+            try
             {
+                if (!Game.Combat.Actions.SkillRunner.TryExecute(_session, request, out CombatSkillExecutionResult result))
+                    return false;
+                if (!_exited) exchange.StoreCompletedExecution(result);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                EnterExit(CombatEndReason.Abort);
                 return false;
             }
-
-            exchange.StoreCompletedExecution(result);
-            return true;
+            finally { _isExecutingSkill = false; }
         }
 
         public bool TryExecutePreparedSkill(int expectedExchangeVersion)
@@ -996,6 +1019,12 @@ namespace Game.Combat.Core
                 return false;
             }
 
+            // Presentation may have held this exchange while the roster or HP changed.
+            snapshot = new CombatAftermathSnapshot(_session, exchange);
+            aftermathDecision = CombatAftermathDecisionResolver.Resolve(snapshot);
+            if (aftermathDecision.Kind == CombatAftermathDecisionKind.TiePolicyRequired)
+                return false;
+
             CombatTerminalDecision terminalDecision = null;
             bool isTerminal = aftermathDecision.Kind == CombatAftermathDecisionKind.TerminalCandidate;
             if (isTerminal)
@@ -1029,12 +1058,6 @@ namespace Game.Combat.Core
 
             bool isAllOutCandidate = aftermathDecision.Kind == CombatAftermathDecisionKind.AllOutCandidate &&
                                      CombatAllOutPolicy.IsCandidate(_session);
-            if (aftermathDecision.Kind == CombatAftermathDecisionKind.AllOutCandidate &&
-                !isAllOutCandidate)
-            {
-                return false;
-            }
-
             exchange.StoreAttackAuthority(authority.Winner);
             AdvanceStatusDurationsForCompletedExchange(exchange);
             exchange.FinalizeApplyOutcome(isAllOutCandidate);
@@ -1126,46 +1149,202 @@ namespace Game.Combat.Core
                 return false;
             }
 
-            if (!Game.Combat.Actions.SkillRunner.TryExecute(_session, request, out executionResult))
+            // Reserve before SkillRunner: combatant callbacks can synchronously submit commands.
+            _isExecutingAllOut = true;
+            try
             {
-                executionResult = null;
-                return false;
-            }
+                if (!Game.Combat.Actions.SkillRunner.TryExecute(_session, request, out executionResult))
+                    return false;
 
-            if (!TryApplyMentalConsequences(
-                    null,
-                    executionResult,
-                    null,
-                    out _))
-            {
-                executionResult = null;
-                return false;
-            }
+                if (_exited) return true;
 
-            CombatAftermathSnapshot snapshot = new CombatAftermathSnapshot(_session, exchange);
-            CombatAftermathDecision aftermath = CombatAftermathDecisionResolver.Resolve(snapshot);
-            if (aftermath.Kind == CombatAftermathDecisionKind.TerminalCandidate)
-            {
-                FinalCombatTerminalPolicy terminalPolicy = new FinalCombatTerminalPolicy();
-                if (!terminalPolicy.TryResolve(
-                        aftermath.TerminalCandidate,
-                        snapshot,
-                        out CombatTerminalDecision terminalDecision) ||
-                    !IsValidTerminalDecision(aftermath.TerminalCandidate, terminalDecision))
+                if (!TryApplyMentalConsequences(null, executionResult, null, out _))
                 {
+                    EnterExit(CombatEndReason.Abort);
+                    return true;
+                }
+
+                if (!ResolveCurrentTerminal())
+                    ReturnToStandoff();
+                return true;
+            }
+            catch (Exception exception)
+            {
+                // Partial effects cannot be retried safely. Completion still uses the normal owner.
+                Debug.LogException(exception);
+                EnterExit(CombatEndReason.Abort);
+                return false;
+            }
+            finally { _isExecutingAllOut = false; }
+        }
+
+        internal bool TryRefreshDecisionBoundary(int expectedExchangeVersion)
+        {
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
+                (Phase != Phase.Standoff && Phase != Phase.ChainDecision))
+                return false;
+
+            if (ResolveCurrentTerminal())
+                return true;
+
+            CombatExchangeState exchange = _session.ExchangeState;
+            if (Phase == Phase.ChainDecision)
+            {
+                if (exchange.IsAllOutCandidate && !CombatAllOutPolicy.IsCandidate(_session))
+                    return TryEndChain(expectedExchangeVersion);
+                return false;
+            }
+
+            // Evaluate before recovery, including encounters that enter with every actor stunned.
+            if (CombatAllOutPolicy.IsCandidate(_session))
+            {
+                ICombatant owner = _session.Allies.Find(ally =>
+                    CombatDeclarationPolicy.IsLivingMember(_session, ally));
+                exchange.FinalizeApplyOutcome(true);
+                exchange.BeginChainDecision(owner);
+                SetPhase(Phase.ChainDecision);
+                return true;
+            }
+
+            IReadOnlyList<ICombatant> actingSide = _session.GetSide(exchange.CurrentAttackSide);
+            bool hasLiving = false;
+            foreach (ICombatant actor in actingSide)
+            {
+                if (!CombatDeclarationPolicy.IsLivingMember(_session, actor)) continue;
+                hasLiving = true;
+                if (!actor.IsStunned) return false;
+            }
+            if (!hasLiving) return false;
+            ReturnToStandoff();
+            return true;
+        }
+
+        private bool ResolveCurrentTerminal()
+        {
+            CombatEndReason reason = FinalCombatTerminalPolicy.Evaluate(_session);
+            if (reason == CombatEndReason.None) return false;
+
+            bool enemiesLiving = _session.Enemies.Exists(enemy =>
+                CombatDeclarationPolicy.IsLivingMember(_session, enemy));
+            CombatTerminalCandidate candidate = reason == CombatEndReason.Victory
+                ? CombatTerminalCandidate.EnemiesWiped
+                : enemiesLiving ? CombatTerminalCandidate.AlliesWiped : CombatTerminalCandidate.BothWiped;
+            bool returning = _isReturningToStandoff;
+            _isReturningToStandoff = true;
+            try
+            {
+                _session.ExchangeState.StoreTerminalDecision(new CombatTerminalDecision(candidate, reason));
+                EnterExit(reason);
+            }
+            finally { _isReturningToStandoff = returning; }
+            return true;
+        }
+
+        private void ReturnToStandoff()
+        {
+            _isReturningToStandoff = true;
+            try
+            {
+                RecoverStunsAtStandoff();
+                if (_exited) return;
+                _session.ExchangeState.ResetForStandoff();
+                _session.StandoffState.Reset();
+                _approachPresentationRequested = false;
+                SetPhase(Phase.Standoff);
+            }
+            finally { _isReturningToStandoff = false; }
+        }
+
+        private void RecoverStunsAtStandoff()
+        {
+            foreach (ICombatant actor in _session.Allies)
+                RecoverStun(actor);
+            foreach (ICombatant actor in _session.Enemies)
+                RecoverStun(actor);
+        }
+
+        private void RecoverStun(ICombatant actor)
+        {
+            if (_exited || !CombatDeclarationPolicy.IsLivingMember(_session, actor) || !actor.IsStunned)
+                return;
+            StaggerSystem.ClearStunAtTurnEnd(actor);
+            _session.GetCombatState(actor).SetPosture(0);
+        }
+
+        public bool CanExecuteUltimate(ICombatant actor, ICombatant target,
+            int expectedExchangeVersion)
+        {
+            CombatExchangeState exchange = _session?.ExchangeState;
+            if (!HasExpectedExchangeVersion(expectedExchangeVersion) || _exited ||
+                EndReason != CombatEndReason.None ||
+                _session?.FlowMode != CombatFlowMode.StandoffClashChain ||
+                (Phase != Phase.Standoff && Phase != Phase.ChainDecision) ||
+                exchange == null || actor == null ||
+                exchange.CurrentAttackSide != actor.Side ||
+                Phase == Phase.ChainDecision &&
+                (!exchange.IsApplyOutcomeFinalized || !exchange.IsChainActive || exchange.IsAllOutCandidate ||
+                 !ReferenceEquals(exchange.ChainOwner, actor)) ||
+                CombatEndEvaluator.Evaluate(_session) != CombatEndReason.None ||
+                !_session.TryGetCombatState(actor, out CombatantCombatState actorState) ||
+                !actorState.IsAlive || actor.IsStunned || actorState.IsPanicked ||
+                _session.UltimateRuntime?.TryGetStage(actor, out int stage) != true ||
+                stage != CombatUltimateRuntime.MaximumStage ||
+                !_session.UltimateRuntime.TryGetSkill(actor, out ISkill skill) ||
+                !actorState.CanSpendMp(CombatMpCostResolver.Resolve(skill)))
+                return false;
+
+            CombatOutcomeAction action = new CombatOutcomeAction(actor, skill, target,
+                CombatClashOutcome.AttackerWin);
+            return CombatOutcomeTargetResolver.TryResolve(action, _session, out _);
+        }
+
+        public bool TryExecuteUltimate(ICombatant actor, ICombatant target,
+            int expectedExchangeVersion, out CombatSkillExecutionResult executionResult)
+        {
+            executionResult = null;
+            if (!CanExecuteUltimate(actor, target, expectedExchangeVersion) ||
+                !_session.UltimateRuntime.TryGetSkill(actor, out ISkill skill))
+                return false;
+
+            CombatOutcomeAction action = new CombatOutcomeAction(actor, skill, target,
+                CombatClashOutcome.AttackerWin);
+            if (!CombatOutcomeTargetResolver.TryResolve(action, _session,
+                    out CombatSkillExecutionRequest request))
+                return false;
+
+            CombatantCombatState actorState = _session.GetCombatState(actor);
+            int mpCost = CombatMpCostResolver.Resolve(skill);
+            _isExecutingSkill = true;
+            try
+            {
+                if (!actorState.TrySpendMp(mpCost)) return false;
+                if (!Game.Combat.Actions.SkillRunner.TryExecute(_session, request, out executionResult))
+                {
+                    actorState.RestoreMp(mpCost);
                     executionResult = null;
                     return false;
                 }
+                if (_exited) return true;
 
-                exchange.StoreTerminalDecision(terminalDecision);
-                EnterExit(terminalDecision.EndReason);
-                return Phase == Phase.ExitCombat && EndReason == terminalDecision.EndReason;
+                _session.UltimateRuntime.TryConsumeReadyStage(actor);
+                TryApplyMentalConsequences(null, executionResult, null, out _);
+                if (!ResolveCurrentTerminal())
+                {
+                    CombatExchangeState exchange = _session.ExchangeState;
+                    exchange.ResetForStandoff();
+                    exchange.SetAttackSide(actor.Side == Side.Allies ? Side.Enemies : Side.Allies);
+                    _approachPresentationRequested = false;
+                    SetPhase(Phase.Standoff);
+                }
+                return true;
             }
-
-            exchange.ResetForStandoff();
-            _approachPresentationRequested = false;
-            SetPhase(Phase.Standoff);
-            return true;
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                EnterExit(CombatEndReason.Abort);
+                return false;
+            }
+            finally { _isExecutingSkill = false; }
         }
 
         public bool TryContinueChain(ISkill skill, int expectedExchangeVersion)
@@ -1174,7 +1353,7 @@ namespace Game.Combat.Core
             ICombatant owner = exchange?.CurrentAttackActor;
             if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
                 Phase != Phase.ChainDecision || !exchange.IsApplyOutcomeFinalized ||
-                !exchange.IsChainActive || !ReferenceEquals(exchange.ChainOwner, owner) ||
+                !exchange.IsChainActive || exchange.IsAllOutCandidate || !ReferenceEquals(exchange.ChainOwner, owner) ||
                 !CombatChainPolicy.ShouldContinue(_session, owner, skill, true))
             {
                 return false;
@@ -1191,7 +1370,7 @@ namespace Game.Combat.Core
             ICombatant owner = exchange?.CurrentAttackActor;
             if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
                 Phase != Phase.ChainDecision || !exchange.IsApplyOutcomeFinalized ||
-                !exchange.IsChainActive || !ReferenceEquals(exchange.ChainOwner, owner) ||
+                !exchange.IsChainActive || exchange.IsAllOutCandidate || !ReferenceEquals(exchange.ChainOwner, owner) ||
                 !CombatChainPolicy.CanContinueWithAnySkill(_session, owner))
             {
                 return false;
@@ -1212,7 +1391,7 @@ namespace Game.Combat.Core
             ICombatant owner = exchange?.CurrentAttackActor;
             if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
                 Phase != Phase.ChainDecision || !exchange.IsApplyOutcomeFinalized ||
-                !exchange.IsChainActive || !ReferenceEquals(exchange.ChainOwner, owner) ||
+                !exchange.IsChainActive || exchange.IsAllOutCandidate || !ReferenceEquals(exchange.ChainOwner, owner) ||
                 !CombatHandoffPolicy.TryAuthorize(
                     _session,
                     owner,
@@ -1240,9 +1419,8 @@ namespace Game.Combat.Core
                 return false;
             }
 
-            exchange.ResetForStandoff();
-            _approachPresentationRequested = false;
-            SetPhase(Phase.Standoff);
+            if (!ResolveCurrentTerminal())
+                ReturnToStandoff();
             return true;
         }
 
@@ -1271,7 +1449,8 @@ namespace Game.Combat.Core
         {
             result = CreateRejectedOvercomeResult(actor, CombatOvercomeFailureReason.InvalidSession);
             CombatOvercomeFailureReason failureReason = CombatOvercomeFailureReason.InvalidSession;
-            if (_exited || _session == null ||
+            if (_exited || _isExecutingSkill || _isExecutingAllOut || _isExecutingItem ||
+                _isReturningToStandoff || _session == null ||
                 !CombatOvercomePolicy.TryAuthorize(
                     _session,
                     Phase,
@@ -1338,7 +1517,8 @@ namespace Game.Combat.Core
 
         private bool HasExpectedExchangeVersion(int expectedExchangeVersion)
         {
-            return !_exited && _session != null &&
+            return !_exited && !_isExecutingAllOut && !_isExecutingSkill && !_isExecutingItem &&
+                   !_isReturningToStandoff && _session != null &&
                    _session.FlowMode == CombatFlowMode.StandoffClashChain &&
                    _session.ExchangeState != null &&
                    expectedExchangeVersion >= 0 &&
@@ -1469,7 +1649,7 @@ namespace Game.Combat.Core
             ICombatant responder = response.Responder;
             if (!ReferenceEquals(responder, declaration.Target) ||
                 ReferenceEquals(responder, declaration.Attacker) ||
-                responder.Side == declaration.Attacker.Side || responder.HP <= 0 ||
+                responder.Side == declaration.Attacker.Side || responder.HP <= 0 || responder.IsStunned ||
                 !_session.TryGetCombatState(responder, out CombatantCombatState responderState) ||
                 responderState.IsPanicked || responder.Skills == null)
             {
@@ -1513,7 +1693,7 @@ namespace Game.Combat.Core
                    ReferenceEquals(response.Responder, declaration.Target) &&
                    !ReferenceEquals(response.Responder, declaration.Attacker) &&
                    response.Responder.Side != declaration.Attacker.Side &&
-                   response.Responder.HP > 0 &&
+                   response.Responder.HP > 0 && !response.Responder.IsStunned &&
                    _session.TryGetCombatState(response.Responder, out CombatantCombatState responderState) &&
                    !responderState.IsPanicked &&
                    OwnsSkill(response.Responder, response.Skill);
@@ -1548,7 +1728,7 @@ namespace Game.Combat.Core
 
         private bool CanAcceptDeclaration(CombatAttackDeclaration declaration)
         {
-            if (_exited || _session == null || _session.FlowMode != CombatFlowMode.StandoffClashChain ||
+            if (_exited || _isExecutingSkill || _isExecutingItem || _session == null || _session.FlowMode != CombatFlowMode.StandoffClashChain ||
                 Phase != Phase.Standoff || declaration == null || declaration.Attacker == null ||
                 declaration.Target == null || declaration.Skill == null ||
                 CombatEndEvaluator.Evaluate(_session) != CombatEndReason.None)
@@ -1565,7 +1745,7 @@ namespace Game.Combat.Core
                 return false;
             }
 
-            if (CombatDeclarationPolicy.IsPanicked(_session, attacker))
+            if (attacker.IsStunned || CombatDeclarationPolicy.IsPanicked(_session, attacker))
                 return false;
 
             if (attacker.Skills == null)
@@ -1596,7 +1776,8 @@ namespace Game.Combat.Core
             switch (Phase)
             {
                 case Phase.EnterCombat:
-                    CombatEndReason initialEnd = CombatEndEvaluator.Evaluate(_session);
+                    CombatEndReason initialEnd = _session?.FlowMode == CombatFlowMode.StandoffClashChain
+                        ? FinalCombatTerminalPolicy.Evaluate(_session) : CombatEndEvaluator.Evaluate(_session);
                     if (initialEnd != CombatEndReason.None)
                     {
                         EnterExit(initialEnd);
@@ -1878,6 +2059,8 @@ namespace Game.Combat.Core
 
             _exited = true;
             EndReason = reason;
+            _session?.MarkCombatEnded();
+            _session?.DisposeUltimateRuntime();
             _session?.CurrentTurn?.CompleteForExit();
             SetPhase(Phase.ExitCombat);
         }

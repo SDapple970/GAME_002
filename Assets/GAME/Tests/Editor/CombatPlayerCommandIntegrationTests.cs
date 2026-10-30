@@ -1,6 +1,8 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.Reflection;
+using Game.Combat.Actions;
 using Game.Combat.Core;
 using Game.Combat.Data;
 using Game.Combat.Model;
@@ -195,6 +197,118 @@ namespace Game.Tests.Editor
             Assert.That(fixture.Session.GetCombatState(fixture.AllyTwo).CurrentMp, Is.EqualTo(receivingMp));
             Assert.That(controller.ViewState.DecisionKind, Is.EqualTo(CombatExchangeDecisionKind.Attack));
             Assert.That(controller.ViewState.ActingActor, Is.SameAs(fixture.AllyTwo));
+        }
+
+        [Test]
+        public void HandoffLedger_RecordsOnlyActualEnemyKillByMappedCharacter()
+        {
+            Fixture fixture = CreateFixture();
+            Assert.That(fixture.Session.RegisterAllyCharacter(fixture.Ally, "leader"), Is.True);
+            Assert.That(fixture.Session.RegisterAllyCharacter(fixture.AllyTwo, "companion"), Is.True);
+            fixture.Session.EnableHandoffEligibilityLedger();
+            Assert.That(fixture.Session.IsHandoffEligible(fixture.AllyTwo), Is.False);
+
+            fixture.Enemy.ApplyDamage(9);
+            CombatSkillExecutionRequest request = new CombatSkillExecutionRequest(
+                fixture.AllyTwo, fixture.AllyTwoSkill, new[] { fixture.Enemy }, fixture.Enemy,
+                CombatClashOutcome.AttackerWin);
+            Assert.That(SkillRunner.TryExecute(fixture.Session, request,
+                out CombatSkillExecutionResult execution), Is.True);
+            Assert.That(execution.TargetResults[0].HpBefore, Is.EqualTo(1));
+            Assert.That(execution.TargetResults[0].HpAfter, Is.Zero);
+            Assert.That(fixture.Session.IsHandoffEligible(fixture.AllyTwo), Is.True);
+            Assert.That(fixture.Session.IsHandoffEligible(fixture.Ally), Is.False);
+
+            fixture.Session.RecordHandoffKills(execution);
+            Assert.That(fixture.Session.IsHandoffEligible(fixture.Ally), Is.False);
+        }
+
+        [Test]
+        public void HandoffLedger_ApprovedBpSpendQualifiesOnlySpendingCharacter()
+        {
+            Fixture fixture = CreateFixture();
+            fixture.Session.RegisterAllyCharacter(fixture.Ally, "leader");
+            fixture.Session.RegisterAllyCharacter(fixture.AllyTwo, "companion");
+            fixture.Session.EnableHandoffEligibilityLedger();
+            Assert.That(fixture.Session.TryEnableBpValidation(
+                new CombatBpValidationConfig(3, 2, 3)), Is.True);
+            Assert.That(fixture.Session.TrySetInitialBpForValidation(fixture.AllyTwo, 1), Is.True);
+            Assert.That(fixture.Session.TryAssignUltimateSkill(fixture.AllyTwo,
+                fixture.AllyTwoSkill), Is.True);
+
+            Assert.That(fixture.Session.IsHandoffEligible(fixture.AllyTwo), Is.False);
+            fixture.Session.BpRuntime.CommitInvestment(fixture.AllyTwo, 1);
+            Assert.That(fixture.Session.IsHandoffEligible(fixture.AllyTwo), Is.True);
+            Assert.That(fixture.Session.IsHandoffEligible(fixture.Ally), Is.False);
+            Assert.That(fixture.Session.UltimateRuntime.TryGetStage(fixture.AllyTwo,
+                out int companionStage), Is.True);
+            Assert.That(companionStage, Is.EqualTo(1));
+            Assert.That(fixture.Session.UltimateRuntime.TryGetStage(fixture.Ally,
+                out int leaderStage), Is.True);
+            Assert.That(leaderStage, Is.Zero);
+        }
+
+        [Test]
+        public void MultiAllyHandsAndBpRemainIndependent()
+        {
+            Fixture fixture = CreateFixture();
+            Assert.That(fixture.Session.TryEnableHandValidation(fixture.Ally,
+                new[] { new CombatHandEntry(fixture.AllySkill, CombatCardKind.Normal) },
+                1, 0, 41), Is.True);
+            Assert.That(fixture.Session.TryEnableHandValidation(fixture.AllyTwo,
+                new[] { new CombatHandEntry(fixture.AllyTwoSkill, CombatCardKind.Normal) },
+                1, 0, 42), Is.True);
+            Assert.That(fixture.Session.TryGetHand(fixture.Ally, out CombatHandRuntime leaderHand), Is.True);
+            Assert.That(fixture.Session.TryGetHand(fixture.AllyTwo, out CombatHandRuntime companionHand), Is.True);
+            Assert.That(leaderHand, Is.Not.SameAs(companionHand));
+            Assert.That(leaderHand.Hand[0].Skill, Is.SameAs(fixture.AllySkill));
+            Assert.That(companionHand.Hand[0].Skill, Is.SameAs(fixture.AllyTwoSkill));
+
+            Assert.That(fixture.Session.TryEnableBpValidation(
+                new CombatBpValidationConfig(3, 2, 3)), Is.True);
+            Assert.That(fixture.Session.TrySetInitialBpForValidation(fixture.AllyTwo, 2), Is.True);
+            Assert.That(fixture.Session.BpRuntime.TryGetBalance(fixture.Ally, out int leaderBp), Is.True);
+            Assert.That(fixture.Session.BpRuntime.TryGetBalance(fixture.AllyTwo, out int companionBp), Is.True);
+            Assert.That(leaderBp, Is.Zero);
+            Assert.That(companionBp, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void ProductionUi_UnlocksHandoffOnlyAfterApprovedBpSpend()
+        {
+            Fixture fixture = CreateFixture(allyPower: 3, enemyPower: 1);
+            fixture.Session.RegisterAllyCharacter(fixture.Ally, "leader");
+            fixture.Session.RegisterAllyCharacter(fixture.AllyTwo, "companion");
+            fixture.Session.EnableHandoffEligibilityLedger();
+            Assert.That(fixture.Session.TryEnableBpValidation(
+                new CombatBpValidationConfig(3, 2, 3)), Is.True);
+            Assert.That(fixture.Session.TrySetInitialBpForValidation(fixture.AllyTwo, 1), Is.True);
+            Assert.That(fixture.Bind(), Is.True);
+
+            GameObject uiObject = new GameObject("ProductionHandoffUI");
+            _createdObjects.Add(uiObject);
+            FinalCombatUIBinder binder = uiObject.AddComponent<FinalCombatUIBinder>();
+            typeof(FinalCombatUIBinder).GetField("actorListRoot",
+                BindingFlags.Instance | BindingFlags.NonPublic).SetValue(binder, uiObject);
+            typeof(FinalCombatUIBinder).GetField("handoffListRoot",
+                BindingFlags.Instance | BindingFlags.NonPublic).SetValue(binder, uiObject);
+            binder.Bind(fixture.Session, fixture.StateMachine, fixture.Orchestrator);
+            FinalCombatPlayerCommandController controller =
+                (FinalCombatPlayerCommandController)typeof(FinalCombatUIBinder)
+                    .GetField("_controller", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .GetValue(binder);
+            Assert.That(controller, Is.Not.Null);
+
+            DriveCurrentPlayerNoResponseToChain(fixture, controller);
+            Assert.That(controller.ViewState.HandoffCandidates, Is.Empty);
+            fixture.Session.BpRuntime.CommitInvestment(fixture.AllyTwo, 1);
+            controller.RefreshAvailability();
+            Assert.That(controller.ViewState.HandoffCandidates, Does.Contain(fixture.AllyTwo));
+            Assert.That(controller.SelectHandoffTarget(fixture.AllyTwo), Is.True);
+            Assert.That(controller.SelectHandoffSkill(fixture.AllyTwoSkill), Is.True);
+            Assert.That(controller.ConfirmHandoff(), Is.True);
+            Assert.That(fixture.Orchestrator.PendingDecisionRequest.ActingActor,
+                Is.SameAs(fixture.AllyTwo));
         }
 
         [Test]

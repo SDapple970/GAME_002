@@ -5,6 +5,7 @@ using System.Reflection;
 using Game.Combat.Adapters;
 using Game.Combat.Core;
 using Game.Combat.Data;
+using Game.Combat.Debugging;
 using Game.Combat.Environment;
 using Game.Combat.Integration;
 using Game.Combat.Model;
@@ -24,8 +25,50 @@ namespace Game.Tests.Combat
         private const string ConfigPath = "Assets/GAME/Data/Combat/Runtime/FinalCombatRuntimeConfig_V1.asset";
         private const string RuntimePrefabPath = "Assets/GAME/Prefabs/CombatRuntime.prefab";
         private const string UiPrefabPath = "Assets/GAME/Prefabs/UI/ProductionDungeonUI.prefab";
+        private const string UltimateFixtureSkillPath = "Assets/GAME/Data/Skill/Skill_skill2.asset";
         private const string TemplateScenePath = "Assets/GAME/Scenes/Dungeon_Template.unity";
         private const string DungeonOneScenePath = "Assets/GAME/Scenes/Dungeon_1_Production.unity";
+
+        [TestCase(1920, 1080)]
+        [TestCase(1600, 900)]
+        [TestCase(1280, 720)]
+        public void FinalExchangeHud_UsesSeparatedStatusAndCommandBands(int width, int height)
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(UiPrefabPath);
+            Transform panel = prefab.transform.Find("CombatCanvas/CombatHUD/FinalExchangePanel");
+            Assert.That(panel, Is.Not.Null);
+            Image backdrop = panel.GetComponent<Image>();
+            Assert.That(backdrop.color.a, Is.LessThan(0.1f));
+            Assert.That(backdrop.raycastTarget, Is.False);
+
+            Transform status = panel.Find("Status");
+            RectTransform context = (RectTransform)status.Find("ContextText");
+            RectTransform player = (RectTransform)status.Find("PlayerHpText");
+            RectTransform enemy = (RectTransform)status.Find("EnemyHpText");
+            Assert.That(context.anchoredPosition.y - context.sizeDelta.y,
+                Is.GreaterThan(player.anchoredPosition.y));
+            Assert.That(player.anchorMin.x, Is.Zero);
+            Assert.That(enemy.anchorMin.x, Is.EqualTo(1f));
+            CanvasScaler scaler = prefab.transform.Find("CombatCanvas").GetComponent<CanvasScaler>();
+            Assert.That(scaler.referenceResolution, Is.EqualTo(new Vector2(1920f, 1080f)));
+            float scale = width / scaler.referenceResolution.x;
+            Assert.That(scaler.referenceResolution.y * scale, Is.EqualTo(height).Within(0.01f));
+            Assert.That(player.sizeDelta.x + enemy.sizeDelta.x,
+                Is.LessThan(scaler.referenceResolution.x + ((RectTransform)status).sizeDelta.x));
+
+            RectTransform hand = (RectTransform)panel.Find("SkillListRoot");
+            RectTransform bpCommands = (RectTransform)panel.Find("HandoffListRoot");
+            RectTransform action = (RectTransform)panel.Find("ConfirmButton");
+            Assert.That(hand.anchorMin.y, Is.Zero);
+            Assert.That(bpCommands.anchorMin.y, Is.Zero);
+            Assert.That(bpCommands.anchoredPosition.y - hand.anchoredPosition.y,
+                Is.GreaterThan(70f));
+            Assert.That(hand.anchoredPosition.y - action.anchoredPosition.y,
+                Is.GreaterThan(100f));
+            Assert.That((bpCommands.anchoredPosition.y - bpCommands.sizeDelta.y * 0.5f -
+                hand.anchoredPosition.y - hand.sizeDelta.y * 0.5f) * scale,
+                Is.GreaterThan(0f));
+        }
 
         [Test]
         public void FinalRuntimeConfigAsset_HasApprovedFunctionalV1Values()
@@ -62,6 +105,34 @@ namespace Game.Tests.Combat
 
             Assert.That(entry, Is.Not.Null);
             Assert.That(entry.FinalExchangeRuntimeConfig, Is.SameAs(LoadConfig()));
+        }
+
+        [Test]
+        public void CombatRuntimePrefab_EnablesBpValidationWithApprovedVerificationValues()
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(RuntimePrefabPath);
+            CombatBpValidationOptIn optIn = prefab.GetComponent<CombatBpValidationOptIn>();
+
+            Assert.That(optIn, Is.Not.Null);
+            Assert.That(Reference(optIn, "entryPoint"), Is.SameAs(prefab.GetComponent<CombatEntryPoint>()));
+            Assert.That(Reference(optIn, "orchestrator"), Is.SameAs(prefab.GetComponent<CombatFlowOrchestrator>()));
+            Assert.That(Reference(optIn, "enableValidation"), Is.EqualTo(true));
+            Assert.That(Reference(optIn, "maximumBp"), Is.EqualTo(3));
+            Assert.That(Reference(optIn, "roundCyclesPerGain"), Is.EqualTo(2));
+            Assert.That(Reference(optIn, "maximumInvestment"), Is.EqualTo(3));
+            SkillDefinitionSO fixtureSkill = AssetDatabase.LoadAssetAtPath<SkillDefinitionSO>(
+                UltimateFixtureSkillPath);
+            Assert.That(fixtureSkill, Is.Not.Null);
+            Assert.That(Reference(optIn, "ultimateSkill"), Is.SameAs(fixtureSkill));
+            Array fixtures = Reference(optIn, "skillFixtures") as Array;
+            Assert.That(fixtures, Has.Length.EqualTo(1));
+            object fixture = fixtures.GetValue(0);
+            Assert.That(fixture.GetType().GetField("skill",
+                BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(fixture),
+                Is.SameAs(fixtureSkill));
+            Assert.That(fixture.GetType().GetField("kind",
+                BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(fixture),
+                Is.EqualTo(CombatBpEnhancementKind.ClashPower));
         }
 
         [Test]

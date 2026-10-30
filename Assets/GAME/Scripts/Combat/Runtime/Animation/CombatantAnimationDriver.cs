@@ -74,6 +74,11 @@ namespace Game.Combat.Animation
                 return;
             }
 
+            // A field actor can own an Animator component before art assigns its controller.
+            // Presentation must remain optional in that authored state; SetTrigger logs a Unity error.
+            if (!animator.isActiveAndEnabled || animator.runtimeAnimatorController == null)
+                return;
+
             animator.SetTrigger(Animator.StringToHash(triggerName));
         }
 

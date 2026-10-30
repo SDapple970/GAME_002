@@ -27,7 +27,8 @@ namespace Game.Combat.Core
                 for (int skillIndex = 0; skillIndex < actor.Skills.Count; skillIndex++)
                 {
                     ISkill skill = actor.Skills[skillIndex];
-                    if (skill == null || skill.Targeting != TargetingRule.AllEnemies ||
+                    if (skill == null || skill.Tag != SkillTag.Attack ||
+                        skill.Targeting != TargetingRule.AllEnemies ||
                         skill.BaseDamage <= 0)
                     {
                         continue;

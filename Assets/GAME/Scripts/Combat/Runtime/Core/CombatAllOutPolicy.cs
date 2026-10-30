@@ -6,7 +6,7 @@ namespace Game.Combat.Core
     {
         public static bool IsCandidate(CombatSession session)
         {
-            if (session == null)
+            if (session == null || FinalCombatTerminalPolicy.Evaluate(session) != CombatEndReason.None)
                 return false;
 
             int livingEnemies = 0;

@@ -50,6 +50,32 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void InspectorFixture_CreatesDistinctOwnedCardInstancesWithoutChangingEquippedSkills()
+        {
+            Fixture fixture = CreateFixture();
+            CombatHandValidationOptIn optIn = _owner.AddComponent<CombatHandValidationOptIn>();
+            CombatHandValidationOptIn.FixtureCard normal = new();
+            Set(normal, "skill", fixture.AllyNormalDefinition);
+            Set(normal, "kind", CombatCardKind.Normal);
+            Set(normal, "copies", 4);
+            CombatHandValidationOptIn.FixtureCard clash = new();
+            Set(clash, "skill", fixture.AllyClashDefinition);
+            Set(clash, "kind", CombatCardKind.Clash);
+            Set(clash, "copies", 6);
+            Set(optIn, "playerCardSource", CombatHandValidationOptIn.CardSource.InspectorFixture);
+            Set(optIn, "fixtureCards", new[] { normal, clash });
+
+            Assert.That(optIn.TryApplyToSession(fixture.Session), Is.True);
+            Assert.That(fixture.Session.TryGetHand(fixture.Ally, out CombatHandRuntime hand), Is.True);
+            Assert.That(hand.DeckSnapshot, Has.Count.EqualTo(10));
+            Assert.That(Count(hand.DeckSnapshot, CombatCardKind.Normal), Is.EqualTo(4));
+            Assert.That(Count(hand.DeckSnapshot, CombatCardKind.Clash), Is.EqualTo(6));
+            Assert.That(new HashSet<long>(Ids(hand.DeckSnapshot)).Count, Is.EqualTo(10));
+            foreach (CombatHandCard card in hand.DeckSnapshot)
+                Assert.That(fixture.Ally.Skills, Does.Contain(card.Skill));
+        }
+
+        [Test]
         public void SessionSnapshot_RejectsLateApplication_WithoutCreatingCards()
         {
             Fixture fixture = CreateFixture();
@@ -143,12 +169,10 @@ namespace Game.Tests.Combat
             }, 2, 3, 79), Is.True);
 
             string status = BuildHandStatus(fixture.Session, fixture.Ally);
-            StringAssert.Contains("[일반] 손패 1장", status);
-            StringAssert.Contains("Draw", status);
-            StringAssert.Contains("Discard", status);
-            StringAssert.Contains("[합] 손패 0장", status);
+            StringAssert.Contains("손패 일반 1 / 합 0", status);
+            StringAssert.Contains("Draw 0+0", status);
+            StringAssert.Contains("Discard 0+0", status);
             StringAssert.Contains("Refill 0", status);
-            StringAssert.Contains("합 카드 없음", status);
         }
 
         private Fixture CreateFixture(
@@ -199,6 +223,13 @@ namespace Game.Tests.Combat
             return count;
         }
 
+        private static List<long> Ids(IReadOnlyList<CombatHandCard> cards)
+        {
+            List<long> ids = new();
+            for (int i = 0; i < cards.Count; i++) ids.Add(cards[i].RuntimeId);
+            return ids;
+        }
+
         private static void Set(object target, string fieldName, object value)
         {
             FieldInfo field = target.GetType().GetField(fieldName,
@@ -235,6 +266,7 @@ namespace Game.Tests.Combat
             public TestCombatant Ally { get; }
             public TestCombatant Enemy { get; }
             public SoSkill AllyNormal { get; }
+            public SkillDefinitionSO AllyNormalDefinition { get; }
             public SkillDefinitionSO AllyClashDefinition { get; }
 
             public Fixture(CombatSession session, CombatStateMachine stateMachine, TestCombatant ally,
@@ -245,6 +277,7 @@ namespace Game.Tests.Combat
                 Ally = ally;
                 Enemy = enemy;
                 AllyNormal = allyNormal;
+                AllyNormalDefinition = allyNormal.Definition;
                 AllyClashDefinition = allyClashDefinition;
             }
         }

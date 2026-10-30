@@ -26,7 +26,10 @@ namespace Game.Combat.Debugging
         [SerializeField] [Min(1)] private int maximumBp = 3;
         [SerializeField] [Min(1)] private int roundCyclesPerGain = 2;
         [SerializeField] [Min(1)] private int maximumInvestment = 3;
+        [Tooltip("Validation-only player BP before the first declaration. This does not charge Ultimate.")]
+        [SerializeField] [Min(0)] private int initialPlayerBp;
         [SerializeField] private SkillFixture[] skillFixtures = Array.Empty<SkillFixture>();
+        [SerializeField] private SkillDefinitionSO ultimateSkill;
 
         private CombatFlowOrchestrator _subscribedOrchestrator;
         public bool WasApplied { get; private set; }
@@ -56,23 +59,54 @@ namespace Game.Combat.Debugging
         public bool TryApplyToSession(CombatSession session)
         {
             WasApplied = false;
+            if (session?.HasProductionHandBpInitialization == true)
+            {
+                LastStatus = "Production owns this session's Hand/BP initialization.";
+                return false;
+            }
             if (!enableValidation || session == null ||
                 session.FlowMode != CombatFlowMode.StandoffClashChain ||
-                session.Allies.Count != 1 || session.Enemies.Count != 1 ||
-                maximumBp <= 0 || roundCyclesPerGain <= 0 || maximumInvestment <= 0)
+                session.Allies.Count < 1 || session.Allies.Count > 3 || session.Enemies.Count < 1 ||
+                maximumBp <= 0 || roundCyclesPerGain <= 0 || maximumInvestment <= 0 ||
+                initialPlayerBp < 0 || initialPlayerBp > maximumBp)
             {
-                LastStatus = "Enable validation on a new 1v1 FinalExchange with positive BP settings.";
+                LastStatus = "Enable validation on a new 1-3 ally FinalExchange with positive BP settings.";
                 return false;
             }
 
             List<CombatBpEnhancementEntry> entries = new();
-            CollectFixtures(session.Allies[0], entries);
-            CollectFixtures(session.Enemies[0], entries);
+            foreach (ICombatant ally in session.Allies) CollectFixtures(ally, entries);
+            foreach (ICombatant enemy in session.Enemies) CollectFixtures(enemy, entries);
             WasApplied = session.TryEnableBpValidation(
                 new CombatBpValidationConfig(maximumBp, roundCyclesPerGain, maximumInvestment), entries);
+            if (WasApplied && initialPlayerBp > 0 &&
+                !session.TrySetInitialBpForValidation(session.Allies[0], initialPlayerBp))
+            {
+                LastStatus = "BP validation started, but the explicit initial player BP was rejected.";
+                WasApplied = false;
+                return false;
+            }
+            if (WasApplied && ultimateSkill != null)
+            {
+                foreach (ICombatant ally in session.Allies) AssignUltimateFixture(session, ally);
+                foreach (ICombatant enemy in session.Enemies) AssignUltimateFixture(session, enemy);
+            }
             LastStatus = WasApplied ? "BP validation applied." :
                 "CombatSession rejected BP validation; apply before its first attack declaration.";
             return WasApplied;
+        }
+
+        private void AssignUltimateFixture(CombatSession session, ICombatant actor)
+        {
+            if (actor?.Skills == null) return;
+            foreach (ISkill skill in actor.Skills)
+            {
+                if (skill is SoSkill soSkill && ReferenceEquals(soSkill.Definition, ultimateSkill))
+                {
+                    session.TryAssignUltimateSkill(actor, skill);
+                    return;
+                }
+            }
         }
 
         private void CollectFixtures(ICombatant actor, List<CombatBpEnhancementEntry> entries)
@@ -90,9 +124,37 @@ namespace Game.Combat.Debugging
 
         private void ApplyWhenClashEnabled()
         {
-            if (!enableValidation) return;
-            if (!TryApplyToSession(entryPoint != null ? entryPoint.ActiveSession : null))
+            if (!enableValidation || IsShadowedByConfiguredFixture()) return;
+            CombatSession session = entryPoint != null ? entryPoint.ActiveSession : null;
+            if (session?.HasProductionHandBpInitialization == true) return;
+            if (session?.BpRuntime != null)
+            {
+                if (ultimateSkill != null)
+                {
+                    foreach (ICombatant ally in session.Allies) AssignUltimateFixture(session, ally);
+                    foreach (ICombatant enemy in session.Enemies) AssignUltimateFixture(session, enemy);
+                }
+                LastStatus = "BP validation already active for this session.";
+                return;
+            }
+            if (!TryApplyToSession(session))
                 Debug.LogError($"[CombatBpValidationOptIn] {LastStatus}", this);
+        }
+
+        private bool IsShadowedByConfiguredFixture()
+        {
+            if (initialPlayerBp > 0 || ultimateSkill != null || skillFixtures?.Length > 0) return false;
+            CombatBpValidationOptIn[] components = GetComponents<CombatBpValidationOptIn>();
+            for (int i = 0; i < components.Length; i++)
+            {
+                CombatBpValidationOptIn other = components[i];
+                if (!ReferenceEquals(other, this) && other.isActiveAndEnabled &&
+                    other.enableValidation &&
+                    (other.initialPlayerBp > 0 || other.ultimateSkill != null ||
+                     other.skillFixtures?.Length > 0))
+                    return true;
+            }
+            return false;
         }
 
         private void ResolveReferences()

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Game.Combat.Core;
 using Game.Combat.Model;
+using Game.Core;
 
 namespace Game.Combat.UI
 {
@@ -16,6 +17,7 @@ namespace Game.Combat.UI
         private CombatFlowOrchestrator _orchestrator;
         private CombatSession _session;
         private CombatExchangeDecisionRequest _request;
+        private GameStateMachine _gameStateMachine;
         private ICombatant _selectedActor;
         private ISkill _selectedSkill;
         private long? _selectedCardRuntimeId;
@@ -28,6 +30,83 @@ namespace Game.Combat.UI
 
         public PlayerCombatDecisionViewState ViewState { get; private set; } = PlayerCombatDecisionViewState.Empty;
         public int SelectedBpInvestment => _selectedBpInvestment;
+        public bool IsAllOutCandidate => _orchestrator?.IsAllOutSelection == true;
+        public string AllOutUnavailableReason => _orchestrator?.AllOutUnavailableReason;
+
+        public string GetHandoffUnavailableReason(ICombatant candidate)
+        {
+            if (_session == null || candidate == null ||
+                !HasRawRequest(CombatExchangeDecisionKind.Chain))
+                return "현재 인계 불가";
+            if (ReferenceEquals(candidate, _request.ActingActor)) return "현재 공격자";
+            if (!_session.IsHandoffEligible(candidate)) return "인계 자격 없음";
+            if (!_session.TryGetCombatState(candidate, out CombatantCombatState state) ||
+                !state.IsAlive || candidate.IsStunned || state.IsPanicked)
+                return "행동 불가";
+            if (_session.ExchangeState.HandoffCount >= CombatHandoffPolicy.MaximumHandoffsPerChain)
+                return "연계당 1회 제한";
+            return BuildHandoffSkills(candidate).Count > 0 ? null : "카드·MP·대상 부족";
+        }
+
+        public ICombatant UltimateActor => _request?.Kind == CombatExchangeDecisionKind.Chain
+            ? _request.ActingActor : GetRequiredAttackActor();
+
+        public ICombatant UltimateTarget
+        {
+            get
+            {
+                ICombatant actor = UltimateActor;
+                if (actor == null || _session?.UltimateRuntime == null ||
+                    !_session.UltimateRuntime.TryGetSkill(actor, out ISkill skill))
+                    return null;
+                if (skill.Targeting == TargetingRule.Self ||
+                    skill.Targeting == TargetingRule.SingleAlly)
+                    return actor;
+                if (skill.Targeting != TargetingRule.SingleEnemy) return null;
+                IReadOnlyList<ICombatant> opponents = _session.GetSide(
+                    actor.Side == Side.Allies ? Side.Enemies : Side.Allies);
+                for (int i = 0; i < opponents.Count; i++)
+                    if (opponents[i]?.HP > 0) return opponents[i];
+                return null;
+            }
+        }
+
+        public string UltimateUnavailableReason
+        {
+            get
+            {
+                ICombatant actor = UltimateActor;
+                if (_session?.UltimateRuntime == null || actor == null)
+                    return "현재 명령에서 사용 불가";
+                if (!_session.UltimateRuntime.TryGetSkill(actor, out ISkill skill))
+                    return "스킬 미배정";
+                if (!_session.UltimateRuntime.TryGetStage(actor, out int stage) ||
+                    stage < CombatUltimateRuntime.MaximumStage)
+                    return "게이지 부족";
+                if (!_session.TryGetCombatState(actor, out CombatantCombatState state) ||
+                    !state.IsAlive || actor.IsStunned || state.IsPanicked)
+                    return "행동 불가";
+                if (!state.CanSpendMp(CombatMpCostResolver.Resolve(skill)))
+                    return "MP 부족";
+                if (_orchestrator == null ||
+                    !_orchestrator.CanExecuteUltimate(_request, actor, UltimateTarget))
+                    return "대상 또는 명령 단계 무효";
+                return null;
+            }
+        }
+
+        public bool ConfirmUltimate()
+        {
+            if (UltimateUnavailableReason != null) return false;
+            CombatExchangeDecisionRequest request = _request;
+            ICombatant actor = UltimateActor;
+            ICombatant target = UltimateTarget;
+            ClearRequestAndSelection(true);
+            bool accepted = _orchestrator.ExecuteUltimate(request, actor, target);
+            if (!accepted && ReferenceEquals(_orchestrator.PendingDecisionRequest, request))
+                ConsumeRequest(request);
+            return accepted;
+        }
 
         public bool SelectBpInvestment(int amount)
         {
@@ -69,6 +148,12 @@ namespace Game.Combat.UI
             _orchestrator.ChainDecisionRequested += HandleChainDecisionRequested;
             _orchestrator.ClashSeriesDecisionRequested += HandleClashSeriesDecisionRequested;
             _orchestrator.ClashSeriesValidationEnabled += RefreshAvailability;
+            _orchestrator.CombatItemOptionsChanged += RefreshAvailability;
+            _orchestrator.ChainDecisionAccepted += HandleDecisionAccepted;
+            _orchestrator.FinalExchangeUnbound += HandleFinalExchangeUnbound;
+            _gameStateMachine = GameStateMachine.Instance;
+            if (_gameStateMachine != null)
+                _gameStateMachine.OnStateChanged += HandleGameStateChanged;
 
             ConsumeRequest(_orchestrator.PendingDecisionRequest);
             return true;
@@ -83,7 +168,14 @@ namespace Game.Combat.UI
                 _orchestrator.ChainDecisionRequested -= HandleChainDecisionRequested;
                 _orchestrator.ClashSeriesDecisionRequested -= HandleClashSeriesDecisionRequested;
                 _orchestrator.ClashSeriesValidationEnabled -= RefreshAvailability;
+                _orchestrator.CombatItemOptionsChanged -= RefreshAvailability;
+                _orchestrator.ChainDecisionAccepted -= HandleDecisionAccepted;
+                _orchestrator.FinalExchangeUnbound -= HandleFinalExchangeUnbound;
             }
+
+            if (_gameStateMachine != null)
+                _gameStateMachine.OnStateChanged -= HandleGameStateChanged;
+            _gameStateMachine = null;
 
             _orchestrator = null;
             _session = null;
@@ -288,7 +380,7 @@ namespace Game.Combat.UI
 
         public bool ConfirmContinue()
         {
-            if (!HasCurrentPlayerRequest(CombatExchangeDecisionKind.Chain) ||
+            if (IsAllOutCandidate || !HasCurrentPlayerRequest(CombatExchangeDecisionKind.Chain) ||
                 _selectedHandoffTarget != null ||
                 !CanContinueWithCurrentHand(_request.ActingActor))
             {
@@ -302,7 +394,7 @@ namespace Game.Combat.UI
 
         public bool ConfirmHandoff()
         {
-            if (!HasCurrentPlayerRequest(CombatExchangeDecisionKind.Chain) ||
+            if (IsAllOutCandidate || !HasCurrentPlayerRequest(CombatExchangeDecisionKind.Chain) ||
                 _selectedHandoffTarget == null || _selectedSkill == null ||
                 !Contains(BuildHandoffSkills(_selectedHandoffTarget), _selectedSkill))
             {
@@ -328,15 +420,26 @@ namespace Game.Combat.UI
 
         public bool ConfirmAllOut()
         {
-            if (!HasCurrentPlayerRequest(CombatExchangeDecisionKind.Chain) ||
+            return ConfirmAllOut(_request);
+        }
+
+        public bool ConfirmAllOut(CombatExchangeDecisionRequest request)
+        {
+            if (!ReferenceEquals(request, _request) || !HasCurrentPlayerRequest(CombatExchangeDecisionKind.Chain) ||
                 !CanExecuteAllOut())
             {
                 return false;
             }
 
-            int version = _request.ExchangeVersion;
             ClearSelectionOnly(true);
-            return _orchestrator.ExecuteAllOut(version);
+            return _orchestrator.ExecuteAllOut(request);
+        }
+
+        public bool DeclineAllOut(CombatExchangeDecisionRequest request)
+        {
+            return ReferenceEquals(request, _request) &&
+                HasCurrentPlayerRequest(CombatExchangeDecisionKind.Chain) &&
+                _orchestrator.DeclineAllOut(request);
         }
 
         public bool ConfirmOvercome()
@@ -461,6 +564,18 @@ namespace Game.Combat.UI
             ConsumeRequest(request);
         }
 
+        private void HandleDecisionAccepted() => ClearRequestAndSelection(true);
+
+        private void HandleFinalExchangeUnbound(CombatSession session)
+        {
+            if (ReferenceEquals(session, _session)) Unbind();
+        }
+
+        private void HandleGameStateChanged(GameState previous, GameState next)
+        {
+            if (IsAllOutCandidate) ClearSelectionOnly(true);
+        }
+
         private void ConsumeRequest(CombatExchangeDecisionRequest request)
         {
             ClearRequestAndSelection(false);
@@ -492,7 +607,7 @@ namespace Game.Combat.UI
                 return false;
             }
 
-            return _request.Kind == kind;
+            return _request.Kind == kind && GameStateMachine.Instance?.Is(GameState.Paused) != true;
         }
 
         public void RefreshAvailability()
@@ -787,7 +902,7 @@ namespace Game.Combat.UI
 
         private void PublishViewState()
         {
-            if (_request == null)
+            if (_request == null || IsAllOutCandidate && GameStateMachine.Instance?.Is(GameState.Paused) == true)
             {
                 ViewState = PlayerCombatDecisionViewState.Empty;
             }
@@ -862,9 +977,11 @@ namespace Game.Combat.UI
                     _request.Kind == CombatExchangeDecisionKind.Response ||
                     _request.Kind == CombatExchangeDecisionKind.ClashResponse,
                     _request.Kind == CombatExchangeDecisionKind.Chain &&
+                    !IsAllOutCandidate &&
                     _selectedHandoffTarget == null &&
                     CanContinueWithCurrentHand(_request.ActingActor),
                     _request.Kind == CombatExchangeDecisionKind.Chain &&
+                    !IsAllOutCandidate &&
                     _selectedHandoffTarget != null && _selectedSkill != null &&
                     Contains(BuildHandoffSkills(_selectedHandoffTarget), _selectedSkill),
                     _request.Kind == CombatExchangeDecisionKind.Chain,
@@ -922,8 +1039,7 @@ namespace Game.Combat.UI
 
         private bool CanExecuteAllOut()
         {
-            return _session?.ExchangeState?.IsAllOutCandidate == true &&
-                   CombatAllOutExecutionPolicy.TryCreateExecutionRequest(_session, out _);
+            return IsAllOutCandidate && _orchestrator.AllOutUnavailableReason == null;
         }
 
         private bool CanOvercome(ICombatant actor)

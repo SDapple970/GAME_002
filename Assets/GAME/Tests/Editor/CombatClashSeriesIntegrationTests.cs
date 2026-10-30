@@ -30,6 +30,91 @@ namespace Game.Tests.Combat
 
         // Durability, power, costs, and timers here are fixture values, not game balance.
         [Test]
+        public void ThreeRounds_MentalAndStatusAdvanceOnceAtCompletedExchange()
+        {
+            Fixture f = CreateFixture(3, 2, 2, 3, 4, 2);
+            CombatStatusDefinitionSO status = ScriptableObject.CreateInstance<CombatStatusDefinitionSO>();
+            try
+            {
+                SetPrivateField(status, "statusId", "06b.duration");
+                SetPrivateField(status, "durationKind", CombatStatusDurationKind.Explicit);
+                SetPrivateField(status, "explicitDuration", 3);
+                CombatantCombatState enemy = f.Session.GetCombatState(f.Enemy);
+                enemy.ApplyStatus(status);
+                Assert.That(f.Enable(4, 3, 3), Is.True);
+                List<CombatClashRoundPresentationRequest> rounds = new();
+                CombatOutcomePresentationRequest outcome = null;
+                f.Flow.ClashRoundPresentationRequested += rounds.Add;
+                f.Flow.OutcomePresentationRequested += value => outcome = value;
+                f.DeclareAndApproach();
+                Assert.That(enemy.CurrentMental, Is.EqualTo(100));
+                Assert.That(enemy.TryGetStatus("06b.duration", out CombatStatusRuntime current), Is.True);
+                Assert.That(current.RemainingDuration, Is.EqualTo(3));
+                Assert.That(rounds[0].TryComplete(), Is.True);
+                Assert.That(f.Flow.SubmitClashSeriesSkill(f.Flow.PendingDecisionRequest, f.AllySkills[1]), Is.True);
+                Assert.That(f.Flow.SubmitClashSeriesSkill(f.Flow.PendingDecisionRequest, f.EnemySkills[1]), Is.True);
+                Assert.That(enemy.CurrentMental, Is.EqualTo(100));
+                Assert.That(current.RemainingDuration, Is.EqualTo(3));
+                Assert.That(rounds[1].TryComplete(), Is.True);
+                Assert.That(f.Flow.SubmitClashSeriesSkill(f.Flow.PendingDecisionRequest, f.AllySkills[2]), Is.True);
+                Assert.That(f.Flow.SubmitClashSeriesSkill(f.Flow.PendingDecisionRequest, f.EnemySkills[2]), Is.True);
+                Assert.That(enemy.CurrentMental, Is.EqualTo(100));
+                Assert.That(current.RemainingDuration, Is.EqualTo(3));
+                int damageCallbacks = 0;
+                f.Enemy.DamageCallback = () =>
+                {
+                    damageCallbacks++;
+                    Assert.That(f.State.TryExecutePreparedSkill(), Is.False);
+                    Assert.That(f.State.TryExecutePreparedSkill(f.Session.ExchangeState.Version), Is.False);
+                };
+                Assert.That(rounds[2].TryComplete(), Is.True);
+                Assert.That(damageCallbacks, Is.EqualTo(1));
+                Assert.That(enemy.CurrentHp, Is.EqualTo(9));
+                Assert.That(enemy.CurrentMental, Is.EqualTo(85));
+                Assert.That(current.RemainingDuration, Is.EqualTo(3));
+                Assert.That(outcome.TryComplete(), Is.True);
+                Assert.That(current.RemainingDuration, Is.EqualTo(2));
+                Assert.That(enemy.CurrentMental, Is.EqualTo(85));
+                Assert.That(outcome.TryComplete(), Is.False);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(status); }
+        }
+
+        [Test]
+        public void Ultimate_StatusAndDamageApplyOnceDespiteSynchronousReentry()
+        {
+            Fixture f = CreateFixture(Side.Allies, 2, 2);
+            CombatStatusDefinitionSO status = ScriptableObject.CreateInstance<CombatStatusDefinitionSO>();
+            try
+            {
+                SetPrivateField(status, "statusId", "06b.ultimate");
+                SetPrivateField(status, "stackPolicy", CombatStatusStackPolicy.Stack);
+                SetPrivateField(status, "maximumStacks", 3);
+                f.AllySkills[0].AppliedStatusEffects = new[] { status };
+                Assert.That(f.Session.TryEnableBpValidation(new CombatBpValidationConfig(3, 1, 3)), Is.True);
+                Assert.That(f.Session.TryAssignUltimateSkill(f.Ally, f.AllySkills[0]), Is.True);
+                Assert.That(f.Session.TrySetInitialBpForValidation(f.Ally, 3), Is.True);
+                CommitBpFixture(f.Session.BpRuntime, f.Ally, 3);
+                CombatExchangeDecisionRequest request = f.Flow.PendingDecisionRequest;
+                f.Enemy.DamageCallback = () =>
+                {
+                    CombatantCombatState allyState = f.Session.GetCombatState(f.Ally);
+                    allyState.ApplyMentalDelta(-allyState.MaxMental);
+                    Assert.That(f.Flow.TryOvercome(f.Ally, request.ExchangeVersion, out _), Is.False);
+                    Assert.That(allyState.CurrentMental, Is.Zero);
+                    Assert.That(f.State.TryExecuteUltimate(f.Ally, f.Enemy, request.ExchangeVersion, out _), Is.False);
+                    Assert.That(f.Flow.ExecuteUltimate(request, f.Ally, f.Enemy), Is.False);
+                };
+                Assert.That(f.Flow.ExecuteUltimate(request, f.Ally, f.Enemy), Is.True);
+                Assert.That(f.Enemy.HP, Is.EqualTo(9));
+                Assert.That(f.Session.GetCombatState(f.Enemy).TryGetStatus("06b.ultimate", out CombatStatusRuntime applied), Is.True);
+                Assert.That(applied.StackCount, Is.EqualTo(1));
+                Assert.That(f.Flow.ExecuteUltimate(request, f.Ally, f.Enemy), Is.False);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(status); }
+        }
+
+        [Test]
         public void ThreeRounds_GateEachMotion_ThenApplyHpOnceAndReachChain()
         {
             Fixture f = CreateFixture(3, 2, 2, 3, 4, 2);
@@ -177,6 +262,79 @@ namespace Game.Tests.Combat
             Assert.That(option.Reason, Is.EqualTo(CombatSkillUnavailableReason.InsufficientMp));
             Assert.That(f.Flow.SubmitClashSeriesSkill(request, f.AllySkills[0]), Is.False);
             Assert.That(f.Flow.GetAvailableClashSeriesSkills(request), Is.Empty);
+        }
+
+        [Test]
+        public void EnemyNextAttackWithoutMp_TimesOutToStandoffWithoutAnotherCommit()
+        {
+            Fixture f = CreateFixture(Side.Enemies, 2, 2);
+            Assert.That(f.Enable(3, 3, 3), Is.True);
+            f.Session.GetCombatState(f.Enemy).SetMp(1);
+            CombatApproachPresentationRequest approach = null;
+            CombatClashRoundPresentationRequest round = null;
+            f.Flow.ApproachPresentationRequested += value => approach = value;
+            f.Flow.ClashRoundPresentationRequested += value => round = value;
+            Assert.That(f.Flow.SubmitAttackDeclaration(
+                new CombatAttackDeclaration(f.Enemy, f.Ally, f.EnemySkills[0]),
+                f.Flow.PendingDecisionRequest.ExchangeVersion), Is.True);
+            Assert.That(f.Flow.SubmitResponse(
+                new CombatResponseDeclaration(f.Ally, f.AllySkills[0]),
+                f.Flow.PendingDecisionRequest.ExchangeVersion), Is.True);
+            Assert.That(approach.TryComplete(), Is.True);
+            Assert.That(round.TryComplete(), Is.True);
+
+            CombatExchangeDecisionRequest blocked = f.Flow.PendingDecisionRequest;
+            Assert.That(blocked.Kind, Is.EqualTo(CombatExchangeDecisionKind.ClashAttack));
+            Assert.That(f.Flow.GetAvailableClashSeriesSkills(blocked), Is.Empty);
+            Time.timeScale = 0f;
+            f.Flow.Tick(0f, 3f);
+            Assert.That(f.Flow.PendingDecisionRequest, Is.SameAs(blocked));
+            Time.timeScale = 1f;
+            f.Flow.Tick(0f, 3f);
+
+            Assert.That(f.State.Phase, Is.EqualTo(Phase.Standoff));
+            Assert.That(f.Session.ExchangeState.ClashSeries, Is.Null);
+            Assert.That(f.Enemy.HP, Is.EqualTo(10));
+            Assert.That(f.Ally.HP, Is.EqualTo(10));
+            Assert.That(f.Session.GetCombatState(f.Enemy).CurrentMp, Is.Zero);
+            Assert.That(f.Session.GetCombatState(f.Ally).CurrentMp, Is.EqualTo(4));
+            Assert.That(f.Flow.SubmitClashSeriesSkill(blocked, f.EnemySkills[0]), Is.False);
+            Assert.That(round.TryComplete(), Is.False);
+        }
+
+        [Test]
+        public void NextAttackWithoutClashCard_TimesOutWithoutDoubleDiscard()
+        {
+            Fixture f = CreateFixture(2, 2);
+            Assert.That(f.Enable(3, 3, 3), Is.True);
+            Assert.That(f.Session.TryEnableHandValidation(f.Ally, new[]
+            {
+                new CombatHandEntry(f.AllySkills[0], CombatCardKind.Normal)
+            }, 1, 1, 23), Is.True);
+            Assert.That(f.Session.TryEnableHandValidation(f.Enemy, new[]
+            {
+                new CombatHandEntry(f.EnemySkills[0], CombatCardKind.Clash)
+            }, 1, 1, 24), Is.True);
+            CombatClashRoundPresentationRequest round = null;
+            f.Flow.ClashRoundPresentationRequested += value => round = value;
+            f.DeclareAndApproach();
+            Assert.That(round.TryComplete(), Is.True);
+            CombatExchangeDecisionRequest blocked = f.Flow.PendingDecisionRequest;
+            Assert.That(f.Flow.GetAvailableClashSeriesSkills(blocked), Is.Empty);
+            Assert.That(f.Session.TryGetHand(f.Ally, out CombatHandRuntime allyHand), Is.True);
+            Assert.That(f.Session.TryGetHand(f.Enemy, out CombatHandRuntime enemyHand), Is.True);
+            Assert.That(allyHand.NormalDiscard.Count, Is.EqualTo(1));
+            Assert.That(enemyHand.ClashDiscard.Count, Is.EqualTo(1));
+
+            f.Flow.Tick(0f, 3f);
+
+            Assert.That(f.State.Phase, Is.EqualTo(Phase.Standoff));
+            Assert.That(allyHand.NormalDiscard.Count, Is.EqualTo(1));
+            Assert.That(enemyHand.ClashDiscard.Count, Is.EqualTo(1));
+            Assert.That(f.Session.GetCombatState(f.Ally).CurrentMp, Is.EqualTo(4));
+            Assert.That(f.Session.GetCombatState(f.Enemy).CurrentMp, Is.EqualTo(4));
+            Assert.That(f.Ally.HP, Is.EqualTo(10));
+            Assert.That(f.Enemy.HP, Is.EqualTo(10));
         }
 
         [Test]
@@ -474,6 +632,283 @@ namespace Game.Tests.Combat
             binder.Unbind();
         }
 
+        [UnityTest]
+        public IEnumerator ActualPlayMode_BpUiShowsBalanceEffectAndInvestmentLimitWithoutSpending()
+        {
+            yield return new EnterPlayMode();
+            yield return RunBpUiPlayModeScenario();
+            yield return new ExitPlayMode();
+        }
+
+        private IEnumerator RunBpUiPlayModeScenario()
+        {
+            Fixture f = CreateFixture(2, 2);
+            Assert.That(f.Enable(3, 3, 3), Is.True);
+            Assert.That(f.Session.TryEnableBpValidation(new CombatBpValidationConfig(3, 1, 3),
+                new[]
+                {
+                    new CombatBpEnhancementEntry(f.AllySkills[0],
+                        CombatBpEnhancementKind.ExtraHits, 2)
+                }), Is.True);
+            Assert.That(f.Session.TryRecordCompletedBpAttackCycle(Side.Allies, 1, true), Is.True);
+            Assert.That(f.Session.TryRecordCompletedBpAttackCycle(Side.Enemies, 1, true), Is.True);
+            Assert.That(f.Session.BpRuntime.TryGetBalance(f.Ally, out int currentBp), Is.True);
+            Assert.That(currentBp, Is.EqualTo(1));
+
+            GameObject panel = NewUiObject("BpPanel");
+            GameObject actors = NewUiObject("BpActors", panel.transform);
+            GameObject skills = NewUiObject("BpSkills", panel.transform);
+            GameObject commands = NewUiObject("BpCommands", panel.transform);
+            GameObject buttonObject = NewUiObject("BpOptionTemplate");
+            Image image = buttonObject.AddComponent<Image>();
+            Button template = buttonObject.AddComponent<Button>();
+            template.targetGraphic = image;
+            NewUiObject("Label", buttonObject.transform).AddComponent<Text>();
+            FinalCombatUIBinder binder = _owner.AddComponent<FinalCombatUIBinder>();
+            SetPrivateField(binder, "panelRoot", panel);
+            SetPrivateField(binder, "actorListRoot", actors);
+            SetPrivateField(binder, "skillListRoot", skills);
+            SetPrivateField(binder, "handoffListRoot", commands);
+            SetPrivateField(binder, "optionButtonPrefab", template);
+            binder.Bind(f.Session, f.State, f.Flow);
+
+            Button actorOption = actors.GetComponentInChildren<Button>();
+            Assert.That(actorOption, Is.Not.Null);
+            actorOption.onClick.Invoke();
+            Button skillOption = FindButtonContaining(skills, f.AllySkills[0].Name);
+            Assert.That(skillOption, Is.Not.Null);
+            skillOption.onClick.Invoke();
+
+            Button noInvestment = FindButtonContaining(commands, "BP 0 · 기본 효과");
+            Button oneInvestment = FindButtonContaining(commands, "BP 1 · 추가 타격 +2 ON");
+            Button overBalance = FindButtonContaining(commands, "BP 2 · 추가 타격 +4 OFF");
+            Assert.That(noInvestment, Is.Not.Null);
+            Assert.That(oneInvestment, Is.Not.Null);
+            Assert.That(oneInvestment.interactable, Is.True);
+            Assert.That(overBalance, Is.Not.Null);
+            Assert.That(overBalance.interactable, Is.False);
+
+            oneInvestment.onClick.Invoke();
+            Assert.That(f.Session.BpRuntime.TryGetBalance(f.Ally, out currentBp), Is.True);
+            Assert.That(currentBp, Is.EqualTo(1));
+            Assert.That(f.Session.BpRuntime.ApprovedSpends, Is.Empty);
+            yield return null;
+            binder.Unbind();
+        }
+
+        [Test]
+        public void UltimateGauge_OnlyApprovedUniqueReceiptsAdvanceIndependentStages()
+        {
+            Fixture f = CreateFixture(Side.Allies, 2, 2);
+            Assert.That(f.Session.TryEnableBpValidation(new CombatBpValidationConfig(3, 1, 3)), Is.True);
+            CombatUltimateRuntime gauge = f.Session.UltimateRuntime;
+            Assert.That(gauge.TryGetStage(f.Ally, out int stage), Is.True);
+            Assert.That(stage, Is.Zero);
+            for (int cycle = 1; cycle <= 3; cycle++)
+            {
+                Assert.That(f.Session.TryRecordCompletedBpAttackCycle(Side.Allies, cycle, true), Is.True);
+                Assert.That(f.Session.TryRecordCompletedBpAttackCycle(Side.Enemies, cycle, true), Is.True);
+            }
+
+            CommitBpFixture(f.Session.BpRuntime, f.Ally, 1);
+            gauge.TryGetStage(f.Ally, out stage);
+            Assert.That(stage, Is.EqualTo(1));
+            Assert.That(gauge.TryAcceptApprovedSpend(f.Session.BpRuntime.ApprovedSpends[0]), Is.False);
+            CommitBpFixture(f.Session.BpRuntime, f.Ally, 1);
+            gauge.TryGetStage(f.Ally, out stage);
+            Assert.That(stage, Is.EqualTo(2));
+            CommitBpFixture(f.Session.BpRuntime, f.Ally, 1);
+            gauge.TryGetStage(f.Ally, out stage);
+            Assert.That(stage, Is.EqualTo(3));
+            gauge.TryGetStage(f.Enemy, out int enemyStage);
+            Assert.That(enemyStage, Is.Zero);
+            CommitBpFixture(f.Session.BpRuntime, f.Enemy, 3);
+            gauge.TryGetStage(f.Enemy, out enemyStage);
+            Assert.That(enemyStage, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void InitialBp_ChargesUltimateOnlyAfterAThreePointApproval_ThenUltimateResetsIt()
+        {
+            Fixture f = CreateFixture(Side.Allies, 2, 2);
+            Assert.That(f.Session.TryEnableBpValidation(new CombatBpValidationConfig(3, 1, 3),
+                new[] { new CombatBpEnhancementEntry(f.AllySkills[0],
+                    CombatBpEnhancementKind.ExtraHits, 1) }), Is.True);
+            Assert.That(f.Session.TryAssignUltimateSkill(f.Ally, f.AllySkills[0]), Is.True);
+            Assert.That(f.Session.TrySetInitialBpForValidation(f.Ally, 3), Is.True);
+            Assert.That(f.Session.UltimateRuntime.TryGetStage(f.Ally, out int stage), Is.True);
+            Assert.That(stage, Is.Zero);
+
+            Assert.That(CombatExchangeCommitPolicy.TryCommit(f.Session,
+                new CombatAttackDeclaration(f.Ally, f.Enemy, f.AllySkills[0], null, 3),
+                null, out CombatExchangeCommitResult committed), Is.True);
+            Assert.That(committed.AttackBpSpent, Is.EqualTo(3));
+            Assert.That(f.Session.BpRuntime.ApprovedSpends, Has.Count.EqualTo(1));
+            Assert.That(f.Session.UltimateRuntime.TryGetStage(f.Ally, out stage), Is.True);
+            Assert.That(stage, Is.EqualTo(3));
+            Assert.That(f.Flow.ExecuteUltimate(f.Flow.PendingDecisionRequest, f.Ally, f.Enemy), Is.True);
+            Assert.That(f.Session.UltimateRuntime.TryGetStage(f.Ally, out stage), Is.True);
+            Assert.That(stage, Is.Zero);
+        }
+
+        [Test]
+        public void UltimateCommand_RejectsInvalidConditions_ThenRunsSkillOnceAndReturnsToStandoff()
+        {
+            Fixture f = CreateFixture(Side.Allies, 2, 2);
+            Assert.That(f.Session.TryEnableBpValidation(new CombatBpValidationConfig(3, 1, 3)), Is.True);
+            Assert.That(f.Session.TryAssignUltimateSkill(f.Ally, f.AllySkills[0]), Is.True);
+            CombatExchangeDecisionRequest request = f.Flow.PendingDecisionRequest;
+            Assert.That(f.Flow.ExecuteUltimate(request, f.Ally, f.Enemy), Is.False);
+            Assert.That(f.Enemy.HP, Is.EqualTo(10));
+            for (int cycle = 1; cycle <= 3; cycle++)
+            {
+                f.Session.TryRecordCompletedBpAttackCycle(Side.Allies, cycle, true);
+                f.Session.TryRecordCompletedBpAttackCycle(Side.Enemies, cycle, true);
+            }
+            CommitBpFixture(f.Session.BpRuntime, f.Ally, 3);
+            Assert.That(f.Flow.ExecuteUltimate(request, f.Ally, null), Is.False);
+            Assert.That(f.Flow.ExecuteUltimate(request, f.Ally, f.Ally), Is.False);
+            f.Ally.SetStunned(true);
+            Assert.That(f.Flow.ExecuteUltimate(request, f.Ally, f.Enemy), Is.False);
+            f.Ally.SetStunned(false);
+            CombatantCombatState allyState = f.Session.GetCombatState(f.Ally);
+            allyState.ApplyMentalDelta(-allyState.MaxMental);
+            Assert.That(f.Flow.ExecuteUltimate(request, f.Ally, f.Enemy), Is.False);
+            allyState.ApplyMentalDelta(allyState.MaxMental);
+            allyState.SetMp(0);
+            Assert.That(f.Flow.ExecuteUltimate(request, f.Ally, f.Enemy), Is.False);
+            allyState.SetMp(5);
+            Assert.That(f.Flow.CanExecuteUltimate(request, f.Ally, f.Enemy), Is.True);
+            Assert.That(f.Flow.ExecuteUltimate(request, f.Ally, f.Enemy), Is.True);
+            Assert.That(f.Enemy.HP, Is.EqualTo(9));
+            Assert.That(f.Session.GetCombatState(f.Ally).CurrentMp, Is.EqualTo(4));
+            Assert.That(f.Session.UltimateRuntime.TryGetStage(f.Ally, out int stage), Is.True);
+            Assert.That(stage, Is.Zero);
+            Assert.That(f.Flow.ExecuteUltimate(request, f.Ally, f.Enemy), Is.False);
+            Assert.That(f.Enemy.HP, Is.EqualTo(9));
+            Assert.That(f.State.Phase, Is.EqualTo(Phase.Standoff));
+            Assert.That(f.Flow.PendingDecisionRequest.ActingSide, Is.EqualTo(Side.Enemies));
+        }
+
+        [Test]
+        public void UltimateCommand_EnemyAuthorityAndTerminalVictoryFollowCanonicalFlow()
+        {
+            Fixture enemyFirst = CreateFixture(Side.Enemies, 2, 2);
+            Assert.That(enemyFirst.Session.TryEnableBpValidation(
+                new CombatBpValidationConfig(3, 1, 3)), Is.True);
+            Assert.That(enemyFirst.Session.TryAssignUltimateSkill(
+                enemyFirst.Enemy, enemyFirst.EnemySkills[0]), Is.True);
+            for (int cycle = 1; cycle <= 3; cycle++)
+            {
+                enemyFirst.Session.TryRecordCompletedBpAttackCycle(Side.Allies, cycle, true);
+                enemyFirst.Session.TryRecordCompletedBpAttackCycle(Side.Enemies, cycle, true);
+            }
+            CommitBpFixture(enemyFirst.Session.BpRuntime, enemyFirst.Enemy, 3);
+            CombatExchangeDecisionRequest enemyRequest = enemyFirst.Flow.PendingDecisionRequest;
+            Assert.That(enemyFirst.Flow.ExecuteUltimate(enemyRequest,
+                enemyFirst.Enemy, enemyFirst.Ally), Is.True);
+            Assert.That(enemyFirst.Ally.HP, Is.EqualTo(9));
+            Assert.That(enemyFirst.Flow.PendingDecisionRequest.ActingSide, Is.EqualTo(Side.Allies));
+
+            UnityEngine.Object.DestroyImmediate(_owner);
+            _owner = null;
+            Fixture lethal = CreateFixture(Side.Allies, 2, 2);
+            Assert.That(lethal.Session.TryEnableBpValidation(
+                new CombatBpValidationConfig(3, 1, 3)), Is.True);
+            Assert.That(lethal.Session.TryAssignUltimateSkill(lethal.Ally, lethal.AllySkills[0]), Is.True);
+            for (int cycle = 1; cycle <= 3; cycle++)
+            {
+                lethal.Session.TryRecordCompletedBpAttackCycle(Side.Allies, cycle, true);
+                lethal.Session.TryRecordCompletedBpAttackCycle(Side.Enemies, cycle, true);
+            }
+            CommitBpFixture(lethal.Session.BpRuntime, lethal.Ally, 3);
+            lethal.Enemy.ApplyDamage(9);
+            Assert.That(lethal.Flow.ExecuteUltimate(lethal.Flow.PendingDecisionRequest,
+                lethal.Ally, lethal.Enemy), Is.True);
+            Assert.That(lethal.State.Phase, Is.EqualTo(Phase.ExitCombat));
+            Assert.That(lethal.State.EndReason, Is.EqualTo(CombatEndReason.Victory));
+            Assert.That(lethal.Session.UltimateRuntime.TryGetStage(lethal.Ally, out _), Is.False);
+        }
+
+        [Test]
+        public void UltimateGauge_IsDisposedOnExplicitCombatExit()
+        {
+            Fixture f = CreateFixture(Side.Allies, 2, 2);
+            Assert.That(f.Session.TryEnableBpValidation(new CombatBpValidationConfig(3, 1, 3)), Is.True);
+            CombatUltimateRuntime gauge = f.Session.UltimateRuntime;
+            Assert.That(f.State.TryTerminateExplicit(CombatEndReason.Abort,
+                f.Session.ExchangeState.Version), Is.True);
+            Assert.That(gauge.TryGetStage(f.Ally, out _), Is.False);
+            Assert.That(gauge.TryAcceptApprovedSpend(null), Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator ActualPlayMode_UltimateHudChargesExecutesAndResets()
+        {
+            yield return new EnterPlayMode();
+            Fixture f = CreateFixture(Side.Allies, 2, 2);
+            Assert.That(f.Session.TryEnableBpValidation(new CombatBpValidationConfig(3, 1, 3)), Is.True);
+            Assert.That(f.Session.TryAssignUltimateSkill(f.Ally, f.AllySkills[0]), Is.True);
+            for (int cycle = 1; cycle <= 3; cycle++)
+            {
+                f.Session.TryRecordCompletedBpAttackCycle(Side.Allies, cycle, true);
+                f.Session.TryRecordCompletedBpAttackCycle(Side.Enemies, cycle, true);
+            }
+
+            GameObject panel = NewUiObject("UltimatePanel");
+            GameObject actors = NewUiObject("UltimateActors", panel.transform);
+            GameObject commands = NewUiObject("UltimateCommands", panel.transform);
+            GameObject templateObject = NewUiObject("UltimateOptionTemplate");
+            Image image = templateObject.AddComponent<Image>();
+            Button template = templateObject.AddComponent<Button>();
+            template.targetGraphic = image;
+            NewUiObject("Label", templateObject.transform).AddComponent<Text>();
+            Text resources = NewUiObject("UltimateResources", panel.transform).AddComponent<Text>();
+            FinalCombatUIBinder binder = _owner.AddComponent<FinalCombatUIBinder>();
+            SetPrivateField(binder, "panelRoot", panel);
+            SetPrivateField(binder, "actorListRoot", actors);
+            SetPrivateField(binder, "handoffListRoot", commands);
+            SetPrivateField(binder, "playerMpText", resources);
+            SetPrivateField(binder, "optionButtonPrefab", template);
+            binder.Bind(f.Session, f.State, f.Flow);
+            actors.GetComponentInChildren<Button>().onClick.Invoke();
+            Assert.That(resources.text, Does.Contain("궁극기 0/3 [---]"));
+            Assert.That(FindButtonContaining(actors, "궁극기 0/3").interactable, Is.False);
+
+            CommitBpFixture(f.Session.BpRuntime, f.Ally, 3);
+            yield return null;
+            Assert.That(resources.text, Does.Contain("궁극기 3/3 [===]"));
+            Button ultimate = FindButtonContaining(actors, "궁극기 3/3");
+            Assert.That(ultimate, Is.Not.Null);
+            Assert.That(ultimate.interactable, Is.True);
+            ultimate.onClick.Invoke();
+            Assert.That(f.Enemy.HP, Is.EqualTo(9));
+            Assert.That(f.Session.GetCombatState(f.Ally).CurrentMp, Is.EqualTo(4));
+            Assert.That(resources.text, Does.Contain("궁극기 0/3 [---]"));
+            binder.Unbind();
+            yield return new ExitPlayMode();
+        }
+
+        private static void CommitBpFixture(CombatBpRuntime runtime, ICombatant actor, int amount)
+        {
+            typeof(CombatBpRuntime).GetMethod("CommitInvestment",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(runtime, new object[] { actor, amount });
+        }
+
+        private static Button FindButtonContaining(GameObject host, string text)
+        {
+            Button[] buttons = host.GetComponentsInChildren<Button>(true);
+            for (int i = 0; i < buttons.Length; i++)
+            {
+                Text label = buttons[i].GetComponentInChildren<Text>();
+                if (label != null && label.text.Contains(text))
+                    return buttons[i];
+            }
+
+            return null;
+        }
+
         private GameObject NewUiObject(string name, Transform parent = null)
         {
             GameObject created = new GameObject(name, typeof(RectTransform));
@@ -594,7 +1029,7 @@ namespace Game.Tests.Combat
             }
         }
 
-        private sealed class TestSkill : ISkill, ICombatMpCostProvider
+        private sealed class TestSkill : ISkill, ICombatMpCostProvider, ICombatStatusEffectProvider
         {
             public SkillId Id { get; }
             public int Power { get; }
@@ -613,6 +1048,7 @@ namespace Game.Tests.Combat
             public int Speed => 1;
             public bool ConsumesTurn => true;
             public int MpCost => 1;
+            public IReadOnlyList<CombatStatusDefinitionSO> AppliedStatusEffects { get; set; } = Array.Empty<CombatStatusDefinitionSO>();
             public TestSkill(int id, int power) { Id = new SkillId(id); Power = power; }
         }
 
@@ -630,10 +1066,11 @@ namespace Game.Tests.Combat
             public int StaggerMax => 0;
             public bool IsStunned { get; private set; }
             public IReadOnlyList<ISkill> Skills => _skills;
+            public Action DamageCallback;
             public TestCombatant(int id, Side side) { Id = new CombatantId(id); Side = side; }
             public void AddSkill(ISkill skill) => _skills.Add(skill);
             public void BindCombatState(CombatantCombatState state) => _state = state;
-            public void ApplyDamage(int amount) => _state?.ApplyDamage(amount);
+            public void ApplyDamage(int amount) { _state?.ApplyDamage(amount); DamageCallback?.Invoke(); }
             public void AddStagger(int amount) { }
             public void SetStunned(bool value) => IsStunned = value;
             public void ResetStaggerIfNeededOnStunEnd() { }

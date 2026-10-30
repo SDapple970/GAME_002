@@ -136,6 +136,24 @@ namespace Game.Combat.Core
 
             System.Collections.Generic.IReadOnlyList<ISkill> available =
                 _orchestrator.GetAvailableClashSeriesSkills(request);
+#if UNITY_EDITOR
+            var reasons = new System.Text.StringBuilder();
+            if (request.ActingActor?.Skills != null)
+            {
+                foreach (ISkill skill in request.ActingActor.Skills)
+                {
+                    CombatSkillAvailability status = _orchestrator.GetSkillAvailability(
+                        request, request.ActingActor, skill);
+                    if (reasons.Length > 0)
+                        reasons.Append(", ");
+                    reasons.Append(skill?.Name).Append(':').Append(status.Reason);
+                }
+            }
+            UnityEngine.Debug.Log($"[ClashTrace/Enemy] Decision session={_session.CompletionId} " +
+                $"exchange={request.ExchangeVersion} round={_session.ExchangeState.ClashSeries?.ComparisonCount} " +
+                $"kind={request.Kind} actor={request.ActingActor?.Id} available={available.Count} " +
+                $"skills=[{reasons}]", null);
+#endif
             if (available.Count == 0)
             {
                 if (request.Kind == CombatExchangeDecisionKind.ClashResponse)

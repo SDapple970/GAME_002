@@ -14,6 +14,15 @@ namespace Game.Combat.Core
             SkillBook skillBook,
             ICombatantFactory combatantFactory = null)
         {
+            return StartCombat(req, skillBook, combatantFactory, null);
+        }
+
+        internal static (CombatSession session, CombatStateMachine stateMachine) StartCombat(
+            CombatStartRequest req,
+            SkillBook skillBook,
+            ICombatantFactory combatantFactory,
+            System.Action<CombatSession> initializeRuntime)
+        {
             var inspiration = new InspirationPool(req.InspirationMax, req.InspirationStart);
             var env = new CombatEnvironment();
 
@@ -32,18 +41,28 @@ namespace Game.Combat.Core
             var timeline = new CombatTimeline();
             var sm = new CombatStateMachine(session, timeline, skillBook);
 
-            // FinalExchange must enter Standoff after the opening state is already canonical.
-            if (session.FlowMode == CombatFlowMode.StandoffClashChain)
-                OpeningEffectApplier.ApplyIfAny(session, req.OpeningEffectOrNull);
+            try
+            {
+                initializeRuntime?.Invoke(session);
 
-            // EnterCombat 1틱 해서 Turn 생성(Events 기록 가능하게)
-            sm.Tick();
+                // FinalExchange must enter Standoff after the opening state is already canonical.
+                if (session.FlowMode == CombatFlowMode.StandoffClashChain)
+                    OpeningEffectApplier.ApplyIfAny(session, req.OpeningEffectOrNull);
 
-            // Preserve the existing LegacyPlanning event-recording order.
-            if (session.FlowMode != CombatFlowMode.StandoffClashChain)
-                OpeningEffectApplier.ApplyIfAny(session, req.OpeningEffectOrNull);
+                // EnterCombat 1틱 해서 Turn 생성(Events 기록 가능하게)
+                sm.Tick();
 
-            return (session, sm);
+                // Preserve the existing LegacyPlanning event-recording order.
+                if (session.FlowMode != CombatFlowMode.StandoffClashChain)
+                    OpeningEffectApplier.ApplyIfAny(session, req.OpeningEffectOrNull);
+
+                return (session, sm);
+            }
+            catch
+            {
+                session.AbortStartup();
+                throw;
+            }
         }
     }
 }

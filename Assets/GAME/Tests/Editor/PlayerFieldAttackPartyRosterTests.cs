@@ -72,6 +72,44 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void ContactAndFieldAttack_UseSamePartySnapshotWithTheirOwnInitiative()
+        {
+            Fixture fixture = CreateFixture(3);
+            GameObject contactObject = Track(new GameObject("Contact"));
+            contactObject.AddComponent<BoxCollider2D>();
+            CombatEncounterTrigger2D contact = contactObject.AddComponent<CombatEncounterTrigger2D>();
+            SetField(contact, "usePartyCombatRoster", true);
+            SetField(contact, "partyRuntime", fixture.Party);
+            SetField(contact, "characterProgression", typeof(PlayerFieldAttackController)
+                .GetField("characterProgression", BindingFlags.Instance | BindingFlags.NonPublic)
+                .GetValue(fixture.Attack));
+            SetField(contact, "partyCombatantBindings", typeof(PlayerFieldAttackController)
+                .GetField("partyCombatantBindings", BindingFlags.Instance | BindingFlags.NonPublic)
+                .GetValue(fixture.Attack));
+            SetField(contact, "flowMode", CombatFlowMode.StandoffClashChain);
+
+            Assert.That(Build(fixture.Attack, fixture.EnemyObjects,
+                CombatFlowMode.StandoffClashChain, out CombatStartRequest field, out string message),
+                Is.True, message);
+            CombatStartRequest touch = (CombatStartRequest)typeof(CombatEncounterTrigger2D)
+                .GetMethod("CreateEncounterRequest", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(contact, new object[] { fixture.Allies, fixture.EnemyObjects });
+
+            Assert.That(touch, Is.Not.Null);
+            Assert.That(touch.AllyFieldObjects, Is.EqualTo(field.AllyFieldObjects));
+            foreach (GameObject ally in field.AllyFieldObjects)
+            {
+                Assert.That(touch.TryGetAllyCharacterId(ally, out string touchId), Is.True);
+                Assert.That(field.TryGetAllyCharacterId(ally, out string fieldId), Is.True);
+                Assert.That(touchId, Is.EqualTo(fieldId));
+            }
+            Assert.That(field.Reason, Is.EqualTo(StartReason.PlayerFirstHit));
+            Assert.That(field.InitiativeSide, Is.EqualTo(Side.Allies));
+            Assert.That(touch.Reason, Is.EqualTo(StartReason.PlayerGotHit));
+            Assert.That(touch.InitiativeSide, Is.EqualTo(Side.Enemies));
+        }
+
+        [Test]
         public void PartyOptIn_InvalidRoster_DoesNotFallbackToSinglePlayer()
         {
             Fixture fixture = CreateFixture(2);
@@ -101,6 +139,18 @@ namespace Game.Tests.Integration
             Assert.That(Build(fixture.Attack, fixture.EnemyObjects, CombatFlowMode.LegacyPlanning,
                 out _, out string duplicateMessage), Is.False);
             Assert.That(duplicateMessage, Does.Contain("duplicate field bindings"));
+        }
+
+        [Test]
+        public void PartyOptIn_RejectsInactiveSelectedFieldBinding()
+        {
+            Fixture fixture = CreateFixture(2);
+            fixture.Allies[1].SetActive(false);
+
+            Assert.That(Build(fixture.Attack, fixture.EnemyObjects, CombatFlowMode.LegacyPlanning,
+                out CombatStartRequest request, out string message), Is.False);
+            Assert.That(request, Is.Null);
+            Assert.That(message, Does.Contain("inactive field binding"));
         }
 
         [Test]

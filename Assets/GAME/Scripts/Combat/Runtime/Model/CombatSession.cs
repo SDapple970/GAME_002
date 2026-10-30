@@ -8,6 +8,21 @@ namespace Game.Combat.Model
 {
     public sealed class CombatSession
     {
+        public bool HasProductionHandBpInitialization { get; internal set; }
+        internal CombatClashSeriesConfig? ProductionClashConfig { get; set; }
+        internal float ProductionClashDecisionDuration { get; set; }
+
+        internal void AbortStartup()
+        {
+            MarkCombatEnded();
+            DisposeUltimateRuntime();
+            _hands.Clear();
+            BpRuntime = null;
+            UltimateRuntime = null;
+            HasProductionHandBpInitialization = false;
+            ProductionClashConfig = null;
+            ProductionClashDecisionDuration = 0f;
+        }
         public readonly List<ICombatant> Allies = new();
         public readonly List<ICombatant> Enemies = new();
 
@@ -20,6 +35,9 @@ namespace Game.Combat.Model
         private readonly Dictionary<ICombatant, string> _allyCharacterIds =
             new(CombatantReferenceComparer.Instance);
         private readonly HashSet<string> _registeredAllyCharacterIds = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _handoffEligibleCharacterIds = new(StringComparer.Ordinal);
+        private readonly HashSet<int> _recordedHandoffKillIds = new();
+        private readonly HashSet<long> _recordedHandoffBpReceipts = new();
         private readonly Dictionary<ICombatant, CombatHandRuntime> _hands =
             new(CombatantReferenceComparer.Instance);
         private readonly int[] _lastCompletedAttackCycle = new int[2];
@@ -99,6 +117,46 @@ namespace Game.Combat.Model
         public bool OpeningEffectApplied { get; private set; }
         public bool HasHandValidation => _hands.Count > 0;
         public CombatBpRuntime BpRuntime { get; private set; }
+        public CombatUltimateRuntime UltimateRuntime { get; private set; }
+        internal bool IsCombatEnded { get; private set; }
+
+        internal void MarkCombatEnded() => IsCombatEnded = true;
+        internal bool HandoffEligibilityLedgerEnabled { get; private set; }
+
+        internal void EnableHandoffEligibilityLedger()
+        {
+            HandoffEligibilityLedgerEnabled = Allies.Count > 1 &&
+                _allyCharacterIds.Count == Allies.Count;
+        }
+
+        public bool IsHandoffEligible(ICombatant actor)
+        {
+            return HandoffEligibilityLedgerEnabled &&
+                TryGetAllyCharacterId(actor, out string characterId) &&
+                _handoffEligibleCharacterIds.Contains(characterId);
+        }
+
+        internal void RecordHandoffKills(CombatSkillExecutionResult execution)
+        {
+            if (!HandoffEligibilityLedgerEnabled || execution?.Actor == null ||
+                !TryGetAllyCharacterId(execution.Actor, out string characterId)) return;
+
+            foreach (CombatSkillTargetResult target in execution.TargetResults)
+            {
+                if (target?.Target?.Side != Side.Enemies || target.HpBefore <= 0 ||
+                    target.HpAfter > 0 || !Enemies.Contains(target.Target) ||
+                    !_recordedHandoffKillIds.Add(target.Target.Id.Value)) continue;
+                _handoffEligibleCharacterIds.Add(characterId);
+            }
+        }
+
+        private void RecordHandoffBpSpend(CombatBpSpendResult receipt)
+        {
+            if (!HandoffEligibilityLedgerEnabled || receipt?.Amount <= 0 ||
+                !_recordedHandoffBpReceipts.Add(receipt.ReceiptId) ||
+                !TryGetAllyCharacterId(receipt.Actor, out string characterId)) return;
+            _handoffEligibleCharacterIds.Add(characterId);
+        }
 
         public CombatSession(
             StartReason reason,
@@ -160,7 +218,7 @@ namespace Game.Combat.Model
             int clashCapacity,
             int seed)
         {
-            if (FlowMode != CombatFlowMode.StandoffClashChain ||
+            if (IsCombatEnded || FlowMode != CombatFlowMode.StandoffClashChain ||
                 ExchangeState.DeclarationId != 0 || actor == null ||
                 !TryGetCombatState(actor, out _) || _hands.ContainsKey(actor) ||
                 entries == null || normalCapacity < 0 || clashCapacity < 0)
@@ -197,14 +255,41 @@ namespace Game.Combat.Model
         public bool TryEnableBpValidation(CombatBpValidationConfig config,
             IReadOnlyList<CombatBpEnhancementEntry> enhancements)
         {
-            if (BpRuntime != null || FlowMode != CombatFlowMode.StandoffClashChain ||
-                ExchangeState.DeclarationId != 0 || Allies.Count != 1 || Enemies.Count != 1 ||
+            if (IsCombatEnded || BpRuntime != null || FlowMode != CombatFlowMode.StandoffClashChain ||
+                ExchangeState.DeclarationId != 0 || Allies.Count < 1 || Allies.Count > 3 || Enemies.Count < 1 ||
                 config.MaximumBp <= 0 || config.RoundCyclesPerGain <= 0 ||
                 config.MaximumInvestment <= 0)
                 return false;
 
             BpRuntime = new CombatBpRuntime(config, this, enhancements);
+            BpRuntime.InvestmentCommitted += RecordHandoffBpSpend;
+            UltimateRuntime = new CombatUltimateRuntime(BpRuntime, this);
             return true;
+        }
+
+        public bool TryAssignUltimateSkill(ICombatant actor, ISkill skill)
+        {
+            return FlowMode == CombatFlowMode.StandoffClashChain &&
+                ExchangeState.DeclarationId == 0 &&
+                UltimateRuntime?.TryAssignSkill(actor, skill) == true;
+        }
+
+        /// <summary>
+        /// Explicit validation-only setup before the first declaration. It sets ledger state only;
+        /// Ultimate charge still comes exclusively from an approved BP spend receipt.
+        /// </summary>
+        public bool TrySetInitialBpForValidation(ICombatant actor, int amount)
+        {
+            return FlowMode == CombatFlowMode.StandoffClashChain &&
+                ExchangeState.DeclarationId == 0 &&
+                BpRuntime?.TrySetInitialBalanceForValidation(actor, amount) == true;
+        }
+
+        internal void DisposeUltimateRuntime()
+        {
+            if (BpRuntime != null)
+                BpRuntime.InvestmentCommitted -= RecordHandoffBpSpend;
+            UltimateRuntime?.Dispose();
         }
 
         public bool TryRecordCompletedBpAttackCycle(Side side, int cycleId, bool hadSuccessfulExchange)

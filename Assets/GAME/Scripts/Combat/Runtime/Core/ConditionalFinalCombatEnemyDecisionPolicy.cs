@@ -71,6 +71,8 @@ namespace Game.Combat.Core
             {
                 ISkill skill = actor.Skills[skillIndex];
                 if (skill == null || skill.Id.Value != skillId ||
+                    (session.TryGetHand(actor, out CombatHandRuntime hand) &&
+                     !hand.TryFindInHand(skill, CombatCardKind.Normal, null, out _)) ||
                     !state.CanSpendMp(CombatMpCostResolver.Resolve(skill)))
                 {
                     continue;

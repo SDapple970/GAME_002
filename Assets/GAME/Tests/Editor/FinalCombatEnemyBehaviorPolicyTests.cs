@@ -57,6 +57,19 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void AuthoredPriority_UsesOnlyCardPresentInEnemyHand()
+        {
+            Fixture fixture = CreateFixture(enemyHp: 5,
+                profile: Profile((2, 1f)), Skill(1), Skill(2));
+            ICombatant enemy = fixture.Enemy;
+            Assert.That(fixture.Session.TryEnableHandValidation(enemy,
+                new[] { new CombatHandEntry(enemy.Skills[0], CombatCardKind.Normal) },
+                1, 0, 23), Is.True);
+
+            Assert.That(AttackSkillId(fixture), Is.EqualTo(1));
+        }
+
+        [Test]
         public void UnmetOrUnusablePriority_FallsBackToAnotherLegalSkill()
         {
             FinalCombatEnemyBehaviorProfileSO thresholdProfile = Profile((2, 0.5f));

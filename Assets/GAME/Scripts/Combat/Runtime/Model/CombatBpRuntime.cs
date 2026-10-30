@@ -27,6 +27,7 @@ namespace Game.Combat.Model
         private readonly Dictionary<ISkill, CombatBpEnhancementEntry> _enhancements =
             new(SkillReferenceComparer.Instance);
         private readonly int[] _pendingCycles = new int[2];
+        private readonly HashSet<ICombatant> _initialBalanceActors = new(ActorReferenceComparer.Instance);
         private long _nextReceiptId = 1;
 
         public CombatBpValidationConfig Config { get; }
@@ -34,6 +35,7 @@ namespace Game.Combat.Model
         public int RoundCyclesUntilGain => Config.RoundCyclesPerGain -
             RoundCycleCount % Config.RoundCyclesPerGain;
         public IReadOnlyList<CombatBpSpendResult> ApprovedSpends => _spends.AsReadOnly();
+        public event Action<CombatBpSpendResult> InvestmentCommitted;
 
         internal CombatBpRuntime(CombatBpValidationConfig config, CombatSession session,
             IReadOnlyList<CombatBpEnhancementEntry> enhancements)
@@ -76,13 +78,26 @@ namespace Game.Combat.Model
                 TryGetBalance(actor, out int balance) && balance >= amount;
         }
 
+        /// <summary>One-time validation setup. This creates no spend receipt and never charges Ultimate.</summary>
+        internal bool TrySetInitialBalanceForValidation(ICombatant actor, int amount)
+        {
+            if (amount < 0 || amount > Config.MaximumBp || actor == null ||
+                !_balances.ContainsKey(actor) || !_initialBalanceActors.Add(actor))
+                return false;
+
+            _balances[actor] = amount;
+            return true;
+        }
+
         internal void CommitInvestment(ICombatant actor, int amount)
         {
             if (!CanInvest(actor, amount))
                 throw new InvalidOperationException("BP changed after synchronous commit validation.");
             if (amount == 0) return;
             _balances[actor] -= amount;
-            _spends.Add(new CombatBpSpendResult(_nextReceiptId++, actor, amount));
+            CombatBpSpendResult receipt = new CombatBpSpendResult(_nextReceiptId++, actor, amount);
+            _spends.Add(receipt);
+            InvestmentCommitted?.Invoke(receipt);
         }
 
         internal bool RecordAttackCycle(Side side, int cycleId, bool successful, CombatSession session)

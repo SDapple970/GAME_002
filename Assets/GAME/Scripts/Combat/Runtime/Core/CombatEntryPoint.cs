@@ -349,7 +349,12 @@ namespace Game.Combat.Core
                 CombatStartRequest startupRequest = normalized.CreateRequest();
                 EnemyCombatProvenanceBridge.PrepareRequest(startupRequest, this);
                 FieldCombatantFactory factory = new FieldCombatantFactory(_book);
-                (createdSession, createdStateMachine) = CombatBootstrapper.StartCombat(startupRequest, _book, factory);
+                (createdSession, createdStateMachine) = CombatBootstrapper.StartCombat(startupRequest, _book, factory,
+                    session =>
+                    {
+                        VerifyConstructedRoster(session, normalized);
+                        InitializeProductionHandBp(session, startupRequest);
+                    });
 
                 if (createdSession == null)
                     throw new InvalidOperationException("CombatBootstrapper returned a null CombatSession.");
@@ -358,6 +363,7 @@ namespace Game.Combat.Core
                     throw new InvalidOperationException("CombatBootstrapper returned a null CombatStateMachine.");
 
                 VerifyConstructedRoster(createdSession, normalized);
+                createdSession.EnableHandoffEligibilityLedger();
 
                 ActiveSession = createdSession;
                 ActiveStateMachine = createdStateMachine;
@@ -377,8 +383,8 @@ namespace Game.Combat.Core
 
                 if (flowOrchestrator != null)
                 {
-                    flowOrchestrator.BindSession(createdSession);
                     orchestratorBound = true;
+                    flowOrchestrator.BindSession(createdSession);
                 }
 
                 if (createdSession.FlowMode == CombatFlowMode.StandoffClashChain &&
@@ -425,6 +431,7 @@ namespace Game.Combat.Core
             }
             catch (Exception exception)
             {
+                createdSession?.AbortStartup();
                 RollbackStartup(
                     createdStateMachine,
                     orchestratorBound,
@@ -444,6 +451,134 @@ namespace Game.Combat.Core
             {
                 _startingCombat = false;
             }
+        }
+
+        private void InitializeProductionHandBp(CombatSession session, CombatStartRequest request)
+        {
+            FinalCombatRuntimeConfigSO config = finalExchangeRuntimeConfig;
+            if (session.FlowMode != CombatFlowMode.StandoffClashChain || config == null || !config.EnableProductionHandBp)
+                return;
+            if (session.IsCombatEnded || session.Allies.Count < 1 || session.Allies.Count > 3 || session.Enemies.Count < 1 ||
+                session.HasProductionHandBpInitialization || session.HasHandValidation ||
+                session.BpRuntime != null || session.ExchangeState.DeclarationId != 0)
+                throw new InvalidOperationException("Production Hand/BP requires a fresh session before its first declaration.");
+            if (config.NormalHandCapacity < 0 || config.ClashHandCapacity < 0 ||
+                (long)config.NormalHandCapacity + config.ClashHandCapacity == 0 ||
+                config.BpMaximum <= 0 || config.BpRoundCyclesPerGain <= 0 || config.BpMaximumInvestment <= 0 ||
+                config.HandCardRules.Count == 0)
+                throw new InvalidOperationException("Production Hand/BP configuration is incomplete: author capacities, card rules and positive BP limits/cycle.");
+
+            if (flowOrchestrator == null || config.ClashAttackerDurability <= 0 ||
+                config.ClashResponderDurability <= 0 || config.ClashMaxComparisons <= 0 ||
+                config.ClashDecisionDurationSeconds <= 0f || float.IsNaN(config.ClashDecisionDurationSeconds) ||
+                float.IsInfinity(config.ClashDecisionDurationSeconds) ||
+                config.FinalSkillPolicy != FinalCombatRuntimeConfigSO.ClashFinalSkillPolicy.LastCommittedWinningSkill ||
+                config.TimeoutAttackPolicy != FinalCombatRuntimeConfigSO.ClashTimeoutAttackPolicy.FirstAvailableSkill)
+                throw new InvalidOperationException("Production Hand/BP requires an orchestrator and explicit, valid Clash durability, comparison limit, timeout and skill policies before opening effects.");
+
+            HashSet<string> enemyHandSources = new(StringComparer.Ordinal);
+            foreach (string sourceKey in config.EnemyHandSourceKeys)
+                if (string.IsNullOrWhiteSpace(sourceKey) || !enemyHandSources.Add(sourceKey.Trim()))
+                    throw new InvalidOperationException("Production enemy Hand source keys must be non-empty and unique.");
+
+            HashSet<string> characterIds = new(StringComparer.Ordinal);
+            for (int i = 0; i < session.Allies.Count; i++)
+            {
+                GameObject field = request.AllyFieldObjects[i];
+                if (!request.TryGetAllyCharacterId(field, out string id) || string.IsNullOrWhiteSpace(id) ||
+                    !characterIds.Add(id.Trim()) || !session.TryGetAllyCharacterId(session.Allies[i], out string boundId) ||
+                    boundId != id.Trim() || !request.TryGetAllyLoadoutSnapshot(field, out CombatSkillLoadoutSnapshot snapshot) ||
+                    snapshot.Skills.Count == 0)
+                    throw new InvalidOperationException($"Production Hand/BP ally {i} requires a unique Character ID and an equipped skill snapshot.");
+            }
+
+            var rules = new Dictionary<SkillDefinitionSO, FinalCombatRuntimeConfigSO.HandCardRule>();
+            HashSet<string> keys = new(StringComparer.Ordinal);
+            foreach (var rule in config.HandCardRules)
+            {
+                if (rule?.Skill == null || string.IsNullOrWhiteSpace(rule.Skill.PersistentKey) ||
+                    !keys.Add(rule.Skill.PersistentKey) || !IsRegisteredDefinition(rule.Skill) || rule.Copies <= 0 ||
+                    !Enum.IsDefined(typeof(CombatCardKind), rule.Kind))
+                    throw new InvalidOperationException("Production Hand/BP has a missing, duplicate or unregistered card rule.");
+                rules.Add(rule.Skill, rule);
+            }
+            var ultimateDefinitions = new HashSet<SkillDefinitionSO>();
+            foreach (SkillDefinitionSO skill in config.UltimateSkills)
+                if (skill == null || !IsRegisteredDefinition(skill) || !ultimateDefinitions.Add(skill))
+                    throw new InvalidOperationException("Production Hand/BP has a missing, duplicate or unregistered Ultimate mapping.");
+
+            var hands = new Dictionary<ICombatant, List<CombatHandEntry>>();
+            var ultimates = new Dictionary<ICombatant, ISkill>();
+            var enhancements = new List<CombatBpEnhancementEntry>();
+            var actors = new List<ICombatant>(session.Allies);
+            actors.AddRange(session.Enemies);
+            // Prepare and validate every actor before publishing any runtime state.
+            foreach (ICombatant actor in actors)
+            {
+                if (actor?.Skills == null || actor.Skills.Count == 0)
+                    throw new InvalidOperationException("Production Hand/BP requires non-empty participant skill snapshots.");
+                long count = 0;
+                bool canDraw = false;
+                bool usesHand = actor.Side == Side.Allies ||
+                    session.TryGetEnemySource(actor, out EnemySourceSnapshot source) && enemyHandSources.Contains(source.SourceKey);
+                var entries = new List<CombatHandEntry>();
+                foreach (ISkill skill in actor.Skills)
+                {
+                    if (skill is not SoSkill soSkill || !IsRegisteredDefinition(soSkill.Definition))
+                        throw new InvalidOperationException($"Production participant {actor.Id.Value} requires registered authored skills.");
+                    if (usesHand)
+                    {
+                        if (!rules.TryGetValue(soSkill.Definition, out var rule))
+                            throw new InvalidOperationException($"Production Hand/BP has no explicit card rule for participant {actor.Id.Value} skill {skill.Id.Value}.");
+                        count += rule.Copies;
+                        canDraw |= rule.Kind == CombatCardKind.Normal ? config.NormalHandCapacity > 0 : config.ClashHandCapacity > 0;
+                        if (count > int.MaxValue)
+                            throw new InvalidOperationException("Production Hand/BP card count exceeds runtime capacity.");
+                    }
+                    if (!Enum.IsDefined(typeof(CombatBpEnhancementKind), soSkill.Definition.BpEnhancementKind) ||
+                        soSkill.Definition.BpEnhancementPerPoint < 0 ||
+                        soSkill.Definition.BpEnhancementKind != CombatBpEnhancementKind.None && soSkill.Definition.BpEnhancementPerPoint == 0)
+                        throw new InvalidOperationException("Production Hand/BP skill enhancement data is invalid.");
+                    if (soSkill.Definition.BpEnhancementKind != CombatBpEnhancementKind.None)
+                        enhancements.Add(new CombatBpEnhancementEntry(skill, soSkill.Definition.BpEnhancementKind, soSkill.Definition.BpEnhancementPerPoint));
+                    if (ultimateDefinitions.Contains(soSkill.Definition) && !ultimates.TryAdd(actor, skill))
+                        throw new InvalidOperationException("Production Hand/BP permits only one configured Ultimate per participant.");
+                }
+                if (usesHand && !canDraw)
+                    throw new InvalidOperationException($"Production Hand/BP participant {actor.Id.Value} has no drawable cards for the configured capacities.");
+                if (usesHand) hands.Add(actor, entries);
+            }
+            foreach (var pair in hands)
+            {
+                foreach (ISkill skill in pair.Key.Skills)
+                {
+                    var rule = rules[((SoSkill)skill).Definition];
+                    for (int copy = 0; copy < rule.Copies; copy++) pair.Value.Add(new CombatHandEntry(skill, rule.Kind));
+                }
+            }
+            for (int i = 0; i < actors.Count; i++)
+                if (hands.TryGetValue(actors[i], out var handEntries) &&
+                    !session.TryEnableHandValidation(actors[i], handEntries, config.NormalHandCapacity,
+                        config.ClashHandCapacity, unchecked(config.HandSeed + i)))
+                    throw new InvalidOperationException("Production Hand initialization was rejected.");
+            if (!session.TryEnableBpValidation(new CombatBpValidationConfig(config.BpMaximum,
+                    config.BpRoundCyclesPerGain, config.BpMaximumInvestment), enhancements))
+                throw new InvalidOperationException("Production BP initialization was rejected.");
+            foreach (var pair in ultimates)
+                if (!session.TryAssignUltimateSkill(pair.Key, pair.Value))
+                    throw new InvalidOperationException("Production Ultimate assignment was rejected.");
+            session.ProductionClashConfig = new CombatClashSeriesConfig(config.ClashAttackerDurability,
+                config.ClashResponderDurability, config.ClashMaxComparisons);
+            session.ProductionClashDecisionDuration = config.ClashDecisionDurationSeconds;
+            session.HasProductionHandBpInitialization = true;
+        }
+
+        private bool IsRegisteredDefinition(SkillDefinitionSO definition)
+        {
+            if (skillDefinitions == null) return false;
+            foreach (SkillDefinitionSO registered in skillDefinitions)
+                if (ReferenceEquals(registered, definition)) return true;
+            return false;
         }
 
         private static void AddFieldObjects(List<GameObject> destination, List<GameObject> source)
@@ -897,6 +1032,7 @@ namespace Game.Combat.Core
 
             CombatSession endingSession = ActiveSession;
             CombatStateMachine endingStateMachine = ActiveStateMachine;
+            endingSession?.DisposeUltimateRuntime();
 
             if (endingStateMachine != null)
                 endingStateMachine.OnPhaseChanged -= HandleCombatPhaseChanged;

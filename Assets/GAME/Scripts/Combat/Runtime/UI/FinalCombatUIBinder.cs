@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Game.Combat.Core;
 using Game.Combat.Model;
+using Game.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -58,6 +59,8 @@ namespace Game.Combat.UI
         private int _lastActingMp = -1;
         private int _lastActingBp = -1;
         private int _lastBpRoundCycle = -1;
+        private int _lastUltimateStage = -1;
+        private int _lastAllOutWiringErrorVersion = -1;
 
         public bool IsBound => _controller != null && _session != null;
         public PlayerCombatDecisionViewState ViewState => _viewState;
@@ -103,7 +106,18 @@ namespace Game.Combat.UI
                 RefreshStatus();
             }
 
-            if (_viewState.ClashSeriesToken.HasValue ||
+            ICombatant player = _viewState.SelectedHandoffTarget ??
+                (_viewState.ActingActor?.Side == Side.Allies ? _viewState.ActingActor : null) ??
+                _viewState.SelectedActor ?? FindFirst(_session.Allies);
+            if (_session.UltimateRuntime != null &&
+                _session.UltimateRuntime.TryGetStage(player, out int ultimateStage) &&
+                ultimateStage != _lastUltimateStage)
+            {
+                _lastUltimateStage = ultimateStage;
+                Render();
+            }
+
+            if (_controller.IsAllOutCandidate || _viewState.ClashSeriesToken.HasValue ||
                 _session.ExchangeState.ClashSeries != null && _stateMachine?.Phase == Phase.Clash)
                 RefreshStatus();
         }
@@ -126,7 +140,7 @@ namespace Game.Combat.UI
             _session = session;
             _stateMachine = stateMachine;
             _orchestrator = orchestrator;
-            _controller = new FinalCombatPlayerCommandController();
+            _controller = new FinalCombatPlayerCommandController(new SessionHandoffEligibilityProvider());
             _controller.ViewStateChanged += HandleViewStateChanged;
             _stateMachine.OnPhaseChanged += HandlePhaseChanged;
             _session.ExchangeState.OnStateChanged += HandleExchangeStateChanged;
@@ -160,6 +174,8 @@ namespace Game.Combat.UI
             _lastActingMp = -1;
             _lastActingBp = -1;
             _lastBpRoundCycle = -1;
+            _lastUltimateStage = -1;
+            _lastAllOutWiringErrorVersion = -1;
             _viewState = PlayerCombatDecisionViewState.Empty;
             ClearDynamicButtons();
             statusListPresenter?.Clear();
@@ -178,17 +194,41 @@ namespace Game.Combat.UI
         private void HandlePhaseChanged(Phase previous, Phase next)
         {
             ApplyPhase(next);
+            if (previous == Phase.Clash || next == Phase.Clash)
+                TraceClashUi("PhaseChanged");
         }
 
         private void HandleViewStateChanged(PlayerCombatDecisionViewState state)
         {
             _viewState = state ?? PlayerCombatDecisionViewState.Empty;
             Render();
+            if (_stateMachine?.Phase == Phase.Clash)
+                TraceClashUi("ViewStateChanged");
         }
 
         private void HandleExchangeStateChanged(int version)
         {
             RefreshStatus();
+            if (_stateMachine?.Phase == Phase.Clash)
+                TraceClashUi("ExchangeStateChanged");
+        }
+
+        private void TraceClashUi(string boundary)
+        {
+#if UNITY_EDITOR
+            if (_session == null || _orchestrator == null)
+                return;
+
+            CombatClashSeriesState series = _session.ExchangeState?.ClashSeries;
+            CombatClashRoundPresentationRequest request =
+                _orchestrator.PendingClashRoundPresentationRequest;
+            Debug.Log($"[ClashTrace/UI] {boundary} session={_session.CompletionId} " +
+                $"exchange={_session.ExchangeState?.DeclarationId}/{_session.ExchangeState?.Version} " +
+                $"round={series?.ComparisonCount} token={series?.CommandToken} " +
+                $"phase={_stateMachine?.Phase} gameState={GameStateMachine.Instance?.Current.ToString() ?? "<none>"} " +
+                $"timeScale={Time.timeScale:0.###} request={request?.GetHashCode()} " +
+                $"decision={_viewState.DecisionKind} title={phaseText?.text} context={contextText?.text}", this);
+#endif
         }
 
         private void Render()
@@ -204,16 +244,22 @@ namespace Game.Combat.UI
             bool chain = _viewState.DecisionKind == CombatExchangeDecisionKind.Chain;
 
             ClearDynamicButtons();
-            SetVisible(actorListRoot, hasRequest && attack && _viewState.SelectableActors.Count > 0);
+            bool showUltimate = hasRequest && (attack || chain) &&
+                _session?.UltimateRuntime != null;
+            SetVisible(actorListRoot, hasRequest && attack &&
+                (_viewState.SelectableActors.Count > 0 || showUltimate));
             SetVisible(skillListRoot, hasRequest && (attack || response || chain || series) &&
                 (_viewState.HandCards.Count > 0 || _viewState.SkillAvailability.Count > 0 ||
-                 _viewState.SelectableSkills.Count > 0 ||
-                 _viewState.SelectableItems.Count > 0 ||
-                 _viewState.CanOvercome));
+                 _viewState.SelectableSkills.Count > 0));
             SetVisible(targetListRoot, hasRequest && (attack || response) && _viewState.SelectableTargets.Count > 0);
-            bool canAllOut = hasRequest && chain && _viewState.CanAllOut;
-            SetVisible(handoffListRoot, hasRequest && chain &&
-                (_viewState.HandoffCandidates.Count > 0 || canAllOut));
+            bool allOut = hasRequest && chain && _controller.IsAllOutCandidate;
+            SetVisible(handoffListRoot, hasRequest &&
+                (chain && (_viewState.HandoffCandidates.Count > 0 || allOut) ||
+                 attack && (_viewState.SelectableItems.Count > 0 || _viewState.CanOvercome ||
+                            _viewState.SelectedSkill != null && _session?.BpRuntime != null) ||
+                 response && _viewState.SelectedSkill != null && _session?.BpRuntime != null ||
+                 series && _viewState.SelectedSkill != null && _session?.BpRuntime != null ||
+                 showUltimate && chain));
 
             if (hasRequest && attack)
                 BuildCombatantOptions(actorListRoot, _viewState.SelectableActors, _viewState.SelectedActor, HandleActorSelected);
@@ -229,25 +275,35 @@ namespace Game.Combat.UI
                 BuildSkillOptions(skillListRoot, _viewState.SelectableSkills,
                     _viewState.SelectedSkill, HandleSkillSelected);
             if (hasRequest && (attack || response || series))
-                BuildBpInvestmentOptions(skillListRoot);
+                BuildBpInvestmentOptions(handoffListRoot);
             if (hasRequest && attack)
-                BuildCombatItemOptions(skillListRoot, _viewState.SelectableItems, _viewState.SelectedItem);
+                BuildCombatItemOptions(handoffListRoot, _viewState.SelectableItems, _viewState.SelectedItem);
             if (hasRequest && attack && _viewState.CanOvercome)
-                BuildOvercomeOption(skillListRoot);
+                BuildOvercomeOption(handoffListRoot);
             if (hasRequest && (attack || response))
                 BuildCombatantOptions(targetListRoot, _viewState.SelectableTargets, _viewState.SelectedTarget, HandleTargetSelected);
-            if (hasRequest && chain)
-                BuildCombatantOptions(handoffListRoot, _viewState.HandoffCandidates, _viewState.SelectedHandoffTarget, HandleHandoffTargetSelected);
+            if (hasRequest && chain && !allOut)
+                BuildHandoffOptions(handoffListRoot);
 
-            if (canAllOut)
+            if (allOut)
+            {
+                if ((handoffListRoot == null || contextText == null || optionButtonPrefab == null) &&
+                    _lastAllOutWiringErrorVersion != _viewState.ExchangeVersion)
+                {
+                    _lastAllOutWiringErrorVersion = _viewState.ExchangeVersion;
+                    Debug.LogError("[FinalCombatUIBinder] All-Out requires handoffListRoot, contextText and optionButtonPrefab connections.", this);
+                }
                 BuildAllOutOption(handoffListRoot);
+            }
+            if (showUltimate && !allOut)
+                BuildUltimateOption(attack ? actorListRoot : handoffListRoot);
 
             SetCommandButton(confirmButton, hasRequest && (attack || response || series) && _viewState.CanConfirm);
             SetCommandButton(cancelButton, hasRequest && (attack || response || chain || series));
             SetCommandButton(noResponseButton, hasRequest && (response || series) && _viewState.CanNoResponse);
             SetCommandButton(continueButton, hasRequest && chain && _viewState.CanContinue);
             SetCommandButton(handoffButton, hasRequest && chain && _viewState.CanHandoff);
-            SetCommandButton(endButton, hasRequest && chain && _viewState.CanEnd);
+            SetCommandButton(endButton, hasRequest && chain && !allOut && _viewState.CanEnd);
             RefreshStatus();
         }
 
@@ -272,6 +328,26 @@ namespace Game.Combat.UI
 
                 button.interactable = !ReferenceEquals(combatant, selected);
                 button.onClick.AddListener(() => selectedAction.Invoke(combatant));
+            }
+        }
+
+        private void BuildHandoffOptions(GameObject host)
+        {
+            if (host == null || _session == null || _controller == null) return;
+
+            foreach (ICombatant candidate in _session.Allies)
+            {
+                if (candidate == null || ReferenceEquals(candidate, _viewState.ActingActor)) continue;
+                string name = _session.TryGetAllyCharacterId(candidate, out string characterId)
+                    ? characterId : candidate.Id.Value.ToString();
+                string reason = _controller.GetHandoffUnavailableReason(candidate);
+                Button button = CreateOption(host.transform,
+                    $"인계 {name}" + (reason == null ? string.Empty : $" · {reason}"));
+                if (button == null) continue;
+                button.interactable = reason == null &&
+                    !ReferenceEquals(candidate, _viewState.SelectedHandoffTarget);
+                if (reason == null)
+                    button.onClick.AddListener(() => HandleHandoffTargetSelected(candidate));
             }
         }
 
@@ -445,8 +521,31 @@ namespace Game.Combat.UI
             _spawnedButtons.Add(button);
             Text text = button.GetComponentInChildren<Text>(true);
             if (text != null)
+            {
                 text.text = label;
+                text.fontSize = 20;
+                text.resizeTextForBestFit = true;
+                text.resizeTextMinSize = 15;
+                text.resizeTextMaxSize = 20;
+            }
+            LayoutElement layout = button.GetComponent<LayoutElement>();
+            if (layout == null) layout = button.gameObject.AddComponent<LayoutElement>();
+            layout.preferredWidth = 250f;
+            layout.preferredHeight = 64f;
             return button;
+        }
+
+        private void BuildUltimateOption(GameObject host)
+        {
+            ICombatant actor = _controller?.UltimateActor;
+            int stage = 0;
+            _session?.UltimateRuntime?.TryGetStage(actor, out stage);
+            string reason = _controller?.UltimateUnavailableReason;
+            Button button = CreateOption(host.transform,
+                $"궁극기 {stage}/3" + (reason == null ? " 사용" : $" · {reason}"));
+            if (button == null) return;
+            button.interactable = reason == null;
+            if (reason == null) button.onClick.AddListener(HandleUltimate);
         }
 
         private void BuildAllOutOption(GameObject host)
@@ -454,8 +553,15 @@ namespace Game.Combat.UI
             if (host == null)
                 return;
 
-            Button button = CreateOption(host.transform, "ALL-OUT");
-            button?.onClick.AddListener(HandleAllOut);
+            CombatExchangeDecisionRequest request = _orchestrator.PendingDecisionRequest;
+            Button button = CreateOption(host.transform, "총공격 수락");
+            if (button != null)
+            {
+                button.interactable = _viewState.CanAllOut;
+                button.onClick.AddListener(() => _controller?.ConfirmAllOut(request));
+            }
+            Button decline = CreateOption(host.transform, "총공격 거절");
+            decline?.onClick.AddListener(() => _controller?.DeclineAllOut(request));
         }
 
         private void BuildOvercomeOption(GameObject host)
@@ -473,7 +579,14 @@ namespace Game.Combat.UI
             {
                 Button button = _spawnedButtons[i];
                 if (button != null)
-                    Destroy(button.gameObject);
+                {
+                    button.interactable = false;
+                    button.gameObject.SetActive(false);
+                    if (Application.isPlaying)
+                        Destroy(button.gameObject);
+                    else
+                        DestroyImmediate(button.gameObject);
+                }
             }
 
             _spawnedButtons.Clear();
@@ -543,6 +656,7 @@ namespace Game.Combat.UI
         private void HandleEnd() => _controller?.EndChain();
         private void HandleAllOut() => _controller?.ConfirmAllOut();
         private void HandleOvercome() => _controller?.ConfirmOvercome();
+        private void HandleUltimate() => _controller?.ConfirmUltimate();
 
         private void RefreshStatus()
         {
@@ -553,6 +667,9 @@ namespace Game.Combat.UI
             SetText(phaseText, GetPhaseTitle(phase, _viewState.DecisionKind));
             string context = GetContextMessage(phase, _viewState,
                 _orchestrator?.ClashSeriesDecisionTimeRemaining ?? 0f);
+            if (_controller.IsAllOutCandidate)
+                context = $"적 전원 기절 · 총공격 수락 / 거절\n남은 시간 {_orchestrator.AllOutDecisionTimeRemaining:0.0}초" +
+                    (_controller.AllOutUnavailableReason is string reason ? $"\n선택 불가: {reason}" : string.Empty);
             CombatClashSeriesState series = _session.ExchangeState.ClashSeries;
             if (phase == Phase.Clash && series != null)
             {
@@ -562,24 +679,28 @@ namespace Game.Combat.UI
                 if (round != null)
                     context += $"\n합 위력 {round.AttackerPower} : {round.ResponderPower}";
             }
-            ICombatant player = FindFirst(_session.Allies);
+            ICombatant player = _viewState.SelectedHandoffTarget ??
+                (_viewState.ActingActor?.Side == Side.Allies ? _viewState.ActingActor : null) ??
+                _viewState.SelectedActor ?? FindFirst(_session.Allies);
             ICombatant enemy = FindStatusEnemy();
+            string playerName = _session.TryGetAllyCharacterId(player, out string characterId)
+                ? characterId : "PLAYER";
             context += $"\n{BuildHandStatus(_session, player)}";
             if (_session.BpRuntime is CombatBpRuntime bp &&
                 bp.TryGetBalance(_viewState.ActingActor ?? player, out int currentBp))
-                context += $"\nBP {currentBp}/{bp.Config.MaximumBp} · " +
-                    $"획득까지 유효 주기 {bp.RoundCyclesUntilGain} · " +
-                    $"선택 투자 {_controller?.SelectedBpInvestment ?? 0}";
+                context += $"\nBP 획득까지 {bp.RoundCyclesUntilGain}주기" +
+                    (_viewState.SelectedSkill != null
+                        ? $" · 투자 {_controller?.SelectedBpInvestment ?? 0}" : string.Empty);
             SetText(contextText, context);
-            SetText(playerHpText, FormatHp("PLAYER", player));
+            SetText(playerHpText, FormatHp(playerName, player));
             SetText(enemyHpText, FormatHp("ENEMY", enemy));
-            SetText(playerMpText, FormatMp("PLAYER", player));
-            SetText(enemyMpText, FormatMp("ENEMY", enemy));
+            SetText(playerMpText, FormatResources(playerName, player));
+            SetText(enemyMpText, FormatResources("ENEMY", enemy));
             float pressure = _session.StandoffState != null ? _session.StandoffState.CurrentPressure : 0f;
             float pressureMax = _session.StandoffState != null ? _session.StandoffState.MaxPressure : 0f;
             float pressurePercent = pressureMax > 0f ? pressure / pressureMax * 100f : 0f;
             SetText(pressureText, $"압박 {pressurePercent:0}%");
-            SetText(playerPostureText, FormatPosture("PLAYER", player));
+            SetText(playerPostureText, FormatPosture(playerName, player));
             SetText(enemyPostureText, FormatPosture("ENEMY", enemy));
             statusListPresenter?.Render(_session);
         }
@@ -603,10 +724,22 @@ namespace Game.Combat.UI
                     normalCount++;
             }
 
-            string status = $"[일반] 손패 {normalCount}장 | Draw {hand.NormalDrawCount} | Discard {hand.NormalDiscard.Count}" +
-                $"\n[합] 손패 {clashCount}장 | Draw {hand.ClashDrawCount} | Discard {hand.ClashDiscard.Count}" +
-                $"\nRefill {hand.RefillCount}";
-            return clashCount == 0 ? status + "\n합 카드 없음" : status;
+            return $"손패 일반 {normalCount} / 합 {clashCount} · " +
+                $"Draw {hand.NormalDrawCount}+{hand.ClashDrawCount} · " +
+                $"Discard {hand.NormalDiscard.Count}+{hand.ClashDiscard.Count} · " +
+                $"Refill {hand.RefillCount}";
+        }
+
+        private string FormatResources(string label, ICombatant actor)
+        {
+            string value = FormatMp(label, actor);
+            if (_session.BpRuntime != null &&
+                _session.BpRuntime.TryGetBalance(actor, out int bp))
+                value += $"  BP {bp}/{_session.BpRuntime.Config.MaximumBp}";
+            if (_session.UltimateRuntime != null &&
+                _session.UltimateRuntime.TryGetStage(actor, out int stage))
+                value += $"  궁극기 {stage}/3 [{new string('=', stage)}{new string('-', 3 - stage)}]";
+            return value;
         }
 
         private ICombatant FindStatusEnemy()
@@ -677,7 +810,7 @@ namespace Game.Combat.UI
             if (viewState?.ClashSeriesToken.HasValue == true)
                 return $"다음 합 스킬을 선택하세요. 남은 시간 {remainingSeconds:0.0}초" +
                        (viewState.DecisionKind == CombatExchangeDecisionKind.ClashResponse
-                           ? "\n대응할 수 없으면 무대응을 선택하세요." : string.Empty);
+                           ? " · 대응할 수 없으면 무대응을 선택하세요." : string.Empty);
             if (phase == Phase.Approach)
                 return "접근 중...";
             if (phase == Phase.Clash)
@@ -689,7 +822,7 @@ namespace Game.Combat.UI
             {
                 CombatAttackDeclaration attack = viewState.DeclaredAttack;
                 string declaration = viewState.DeclarationToken?.Revision > 0 && attack != null
-                    ? $"공격 변경: {attack.Skill.Name} → {attack.Target.Id}. 이전 대응 선택이 해제되었습니다.\n"
+                    ? $"공격 변경: {attack.Skill.Name} → {attack.Target.Id}. 이전 대응 선택이 해제되었습니다. · "
                     : string.Empty;
                 if (viewState.SelectedSkill == null)
                     return declaration + "대응 스킬을 선택하거나 대응하지 않기를 선택하세요.";
@@ -803,6 +936,15 @@ namespace Game.Combat.UI
                 return;
 
             ApplyFont(button.GetComponentInChildren<Text>(true));
+        }
+
+        private sealed class SessionHandoffEligibilityProvider : ICombatHandoffEligibilityProvider
+        {
+            public bool IsEligible(CombatSession session, ICombatant currentAttackOwner,
+                ICombatant receivingActor)
+            {
+                return session?.IsHandoffEligible(receivingActor) == true;
+            }
         }
     }
 }

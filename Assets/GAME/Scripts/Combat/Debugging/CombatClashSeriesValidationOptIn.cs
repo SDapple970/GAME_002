@@ -37,7 +37,7 @@ namespace Game.Combat.Debugging
 
         private void HandleCombatStarted(CombatSession session)
         {
-            if (!enableValidation || session?.FlowMode != CombatFlowMode.StandoffClashChain ||
+            if (!enableValidation || session?.HasProductionHandBpInitialization == true || session?.FlowMode != CombatFlowMode.StandoffClashChain ||
                 orchestrator == null)
                 return;
 

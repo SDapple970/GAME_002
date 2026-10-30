@@ -187,7 +187,7 @@ namespace Game.Combat.Model
 
         public CombatStatusApplicationResult ApplyStatus(CombatStatusDefinitionSO definition)
         {
-            if (definition == null || string.IsNullOrEmpty(definition.StatusId))
+            if (!IsAlive || definition == null || string.IsNullOrEmpty(definition.StatusId))
                 return null;
 
             if (!_statuses.TryGetValue(definition.StatusId, out CombatStatusRuntime status))
@@ -204,7 +204,7 @@ namespace Game.Combat.Model
 
         public bool CanApplyStatus(CombatStatusDefinitionSO definition)
         {
-            if (definition == null || string.IsNullOrEmpty(definition.StatusId))
+            if (!IsAlive || definition == null || string.IsNullOrEmpty(definition.StatusId))
                 return false;
 
             if (!_statuses.TryGetValue(definition.StatusId, out CombatStatusRuntime status))

@@ -7,6 +7,7 @@ using Game.Combat.Core;
 using Game.Combat.Data;
 using Game.Combat.Effects;
 using Game.Combat.Environment;
+using Game.Combat.Animation;
 using Game.Combat.Model;
 using Game.Combat.UI;
 using NUnit.Framework;
@@ -308,6 +309,24 @@ namespace Game.Tests.Combat
                 CombatFinalPresentationCueKind.Approach
             }));
             Assert.That(Time.timeScale, Is.EqualTo(timeScale));
+        }
+
+        [Test]
+        public void AnimatorWithoutController_IsSkippedWithoutProducingAnError()
+        {
+            GameObject actor = NewObject("Presentation.NoControllerAnimator");
+            actor.AddComponent<Animator>();
+            CombatantAnimationDriver driver = actor.AddComponent<CombatantAnimationDriver>();
+            GameObject directAnimatorActor = NewObject("Presentation.NoControllerFallback");
+            directAnimatorActor.AddComponent<Animator>();
+            MethodInfo playAttackTrigger = typeof(CombatDirector).GetMethod(
+                "PlayAttackTrigger", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(playAttackTrigger, Is.Not.Null);
+
+            driver.PlayAttack();
+            playAttackTrigger.Invoke(null, new object[] { directAnimatorActor, null });
+
+            LogAssert.NoUnexpectedReceived();
         }
 
         [Test]

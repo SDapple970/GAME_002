@@ -24619,6 +24619,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1665839071176935761}
+    - targetCorrespondingSourceObject: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1665839071176935766}
   m_SourcePrefab: {fileID: 100100000, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
 --- !u!114 &1665839071176935754 stripped
 MonoBehaviour:
@@ -24682,20 +24685,32 @@ MonoBehaviour:
   entryPoint: {fileID: 1665839071176935754}
   orchestrator: {fileID: 1665839071176935755}
   enableValidation: 1
-  playerCardSource: 0
+  playerCardSource: 1
   clashSkillDefinitions:
   - {fileID: 11400000, guid: 762d0613f18cd424eba3e68f2b4e1bf5, type: 2}
   - {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}
-  fixtureCards: []
+  fixtureCards:
+  - skill: {fileID: 11400000, guid: 762d0613f18cd424eba3e68f2b4e1bf5, type: 2}
+    kind: 0
+    copies: 4
+  - skill: {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}
+    kind: 1
+    copies: 6
   normalHandCapacity: 2
   clashHandCapacity: 3
   seed: 2303
-  enableEnemyHand: 0
-  enemyCardSource: 0
+  enableEnemyHand: 1
+  enemyCardSource: 1
   enemyClashSkillDefinitions:
   - {fileID: 11400000, guid: 3f33bab0ec4af6c4db0b827917ba147d, type: 2}
   - {fileID: 11400000, guid: 1f9d7ebdbd0b7fd48ace84c03839d87e, type: 2}
-  enemyFixtureCards: []
+  enemyFixtureCards:
+  - skill: {fileID: 11400000, guid: 3f33bab0ec4af6c4db0b827917ba147d, type: 2}
+    kind: 0
+    copies: 4
+  - skill: {fileID: 11400000, guid: 1f9d7ebdbd0b7fd48ace84c03839d87e, type: 2}
+    kind: 1
+    copies: 6
   enemySeed: 2304
 --- !u!114 &1665839071176935761
 MonoBehaviour:
@@ -24716,6 +24731,27 @@ MonoBehaviour:
   responderDurability: 3
   maxComparisons: 3
   decisionDurationSeconds: 5
+--- !u!114 &1665839071176935766
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1665839071176935756}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4bd31fad07c44e9795d18530d37a6855, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Debugging.CombatBpValidationOptIn
+  entryPoint: {fileID: 1665839071176935754}
+  orchestrator: {fileID: 1665839071176935755}
+  enableValidation: 1
+  maximumBp: 3
+  roundCyclesPerGain: 2
+  maximumInvestment: 3
+  initialPlayerBp: 3
+  skillFixtures: []
+  ultimateSkill: {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

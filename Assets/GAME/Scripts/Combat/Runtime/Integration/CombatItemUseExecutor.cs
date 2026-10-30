@@ -70,9 +70,31 @@ namespace Game.Combat.Integration
             if (!CanApplyEffect(targetState, definition))
                 return CombatItemUseResult.Failure(CombatItemUseStatus.EffectNotApplicable, definition.ItemId);
 
-            InventoryMutationResult removal = _inventory.TryRemoveItemDetailed(definition.ItemId, 1);
+            int countBeforeRemoval = _inventory.GetCount(definition.ItemId);
+            InventoryMutationResult removal;
+            try
+            {
+                removal = _inventory.TryRemoveItemDetailed(definition.ItemId, 1);
+            }
+            catch (Exception exception)
+            {
+                UnityEngine.Debug.LogWarning($"Combat item inventory notification failed: {exception.Message}");
+                bool restored = RestoreRemovedItem(definition.ItemId, countBeforeRemoval);
+                return new CombatItemUseResult(CombatItemUseStatus.InventoryMutationFailed,
+                    definition.ItemId, !restored, false, 0, null);
+            }
             if (removal.Status != InventoryMutationStatus.Success)
                 return CombatItemUseResult.Failure(CombatItemUseStatus.InventoryMutationFailed, definition.ItemId);
+
+            // Inventory notifications are synchronous and can end combat or change the target.
+            if (session.IsCombatEnded || !IsValidUser(session, request.User) ||
+                !IsValidTarget(session, definition, request.User, request.Target) ||
+                !CanApplyEffect(targetState, definition))
+            {
+                bool restored = RestoreRemovedItem(definition.ItemId, countBeforeRemoval);
+                return new CombatItemUseResult(CombatItemUseStatus.EffectFailed, definition.ItemId,
+                    !restored, false, 0, null);
+            }
 
             bool effectApplied;
             int hpRecovered;
@@ -103,14 +125,27 @@ namespace Game.Combat.Integration
                     statusApplication);
             }
 
-            InventoryMutationResult rollback = _inventory.TryAddItem(definition.ItemId, 1);
+            bool rollback = RestoreRemovedItem(definition.ItemId, countBeforeRemoval);
             return new CombatItemUseResult(
                 CombatItemUseStatus.EffectFailed,
                 definition.ItemId,
-                rollback.Status != InventoryMutationStatus.Success,
+                !rollback,
                 false,
                 0,
                 null);
+        }
+
+        private bool RestoreRemovedItem(string itemId, int countBeforeRemoval)
+        {
+            if (_inventory.GetCount(itemId) == countBeforeRemoval - 1)
+            {
+                try { _inventory.TryAddItem(itemId, 1); }
+                catch (Exception exception)
+                {
+                    UnityEngine.Debug.LogWarning($"Combat item rollback notification failed: {exception.Message}");
+                }
+            }
+            return _inventory.GetCount(itemId) == countBeforeRemoval;
         }
 
         public IReadOnlyList<ICombatant> GetUsableTargets(
@@ -174,10 +209,11 @@ namespace Game.Combat.Integration
 
         private static bool IsValidUser(CombatSession session, ICombatant user)
         {
-            return user != null && user.Side == Side.Allies && user.HP > 0 &&
+            return session != null && !session.IsCombatEnded && user != null && user.Side == Side.Allies &&
+                   user.HP > 0 && !user.IsStunned &&
                    IsCurrentRosterMember(session, user) &&
                    session.TryGetCombatState(user, out CombatantCombatState state) &&
-                   !state.IsPanicked;
+                   state.IsAlive && !state.IsPanicked;
         }
 
         private static bool IsValidTarget(

@@ -69,8 +69,12 @@ namespace Game.Combat.Core
 
         public bool CanContinue(CombatSession session, ICombatant actor)
         {
-            return actor?.Side == Side.Enemies &&
-                   CombatChainPolicy.CanContinueWithAnySkill(session, actor);
+            if (actor?.Side != Side.Enemies || actor.Skills == null) return false;
+            for (int i = 0; i < actor.Skills.Count; i++)
+                if (CanAfford(session, actor, actor.Skills[i]) &&
+                    CombatChainPolicy.CanContinue(session, actor, actor.Skills[i]))
+                    return true;
+            return false;
         }
 
         private static ICombatant FindFirstActiveEnemy(CombatSession session)
@@ -93,6 +97,8 @@ namespace Game.Combat.Core
         {
             return session != null && actor != null && skill != null &&
                    session.TryGetCombatState(actor, out CombatantCombatState state) &&
+                   (!session.TryGetHand(actor, out CombatHandRuntime hand) ||
+                    hand.TryFindInHand(skill, CombatCardKind.Normal, null, out _)) &&
                    state.CanSpendMp(CombatMpCostResolver.Resolve(skill));
         }
 

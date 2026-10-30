@@ -30,12 +30,16 @@ namespace Game.Combat.Core
             out Result result)
         {
             result = null;
-            if (completedHandoffs < 0 || completedHandoffs >= MaximumHandoffsPerChain ||
+            if (session == null || completedHandoffs < 0 || completedHandoffs >= MaximumHandoffsPerChain ||
                 !isHandoffEligible || currentAttackOwner == null || receivingActor == null ||
+                (session?.HandoffEligibilityLedgerEnabled == true &&
+                 !session.IsHandoffEligible(receivingActor)) ||
                 ReferenceEquals(currentAttackOwner, receivingActor) ||
                 currentAttackOwner.Side != receivingActor.Side ||
                 !CombatDeclarationPolicy.IsActiveMember(session, currentAttackOwner) ||
                 CombatDeclarationPolicy.IsPanicked(session, receivingActor) ||
+                (session.TryGetHand(receivingActor, out CombatHandRuntime hand) &&
+                 !hand.TryFindInHand(receivingSkill, CombatCardKind.Normal, null, out _)) ||
                 !CombatChainPolicy.CanContinue(session, receivingActor, receivingSkill))
             {
                 return false;

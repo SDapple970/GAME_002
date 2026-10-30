@@ -64,6 +64,21 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void PartyMembership_PreservesExistingUnlimitedRosterPolicyBeyondSix()
+        {
+            PartyRuntime party = new GameObject("Party").AddComponent<PartyRuntime>();
+            for (int i = 0; i < 7; i++)
+                Assert.That(party.AddMember($"member.{i}").Changed, Is.True);
+
+            Assert.That(party.Members, Has.Count.EqualTo(7));
+            for (int i = 0; i < 3; i++)
+                Assert.That(party.SelectForCombat($"member.{i}", true).Changed, Is.True);
+            Assert.That(party.SelectForCombat("member.3", true).Status,
+                Is.EqualTo(PartyMutationStatus.CombatLineupFull));
+            Assert.That(party.CombatLineup, Has.Count.EqualTo(3));
+        }
+
+        [Test]
         public void PartySaveRestore_PreservesStateSilentlyAndDoesNotWriteLevels()
         {
             PartyRuntime party = new GameObject("Party").AddComponent<PartyRuntime>();

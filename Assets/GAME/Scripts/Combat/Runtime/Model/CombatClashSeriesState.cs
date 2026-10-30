@@ -222,6 +222,17 @@ namespace Game.Combat.Model
             return true;
         }
 
+        internal bool TryConcludeWithoutNextAttack(long expectedToken)
+        {
+            if (!IsCurrent(expectedToken) || IsComplete || _roundCommitted || ComparisonCount == 0)
+                return false;
+
+            IsComplete = true;
+            FinalOutcome = CombatClashOutcome.Tie;
+            CommandToken++;
+            return true;
+        }
+
         // The caller must choose a committed skill explicitly; first versus last remains a policy decision.
         // A successful claim is single use. Recovery after a failed downstream execution is unresolved.
         public bool TryClaimFinalOutcome(

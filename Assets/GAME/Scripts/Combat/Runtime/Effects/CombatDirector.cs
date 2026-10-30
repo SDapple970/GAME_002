@@ -204,6 +204,8 @@ namespace Game.Combat.Effects
 
         private void OnDisable()
         {
+            if (_activeClashRoundRequest != null)
+                TraceClash("DirectorDisabledBeforeCompletion", _activeClashRoundRequest);
             UnbindFinalExchange();
 
             if (_activeResolutionRoutine != null)
@@ -376,12 +378,16 @@ namespace Game.Combat.Effects
         {
             if (!IsCurrentFinalRequest(request?.ExchangeVersion ?? -1) ||
                 ReferenceEquals(_activeClashRoundRequest, request))
+            {
+                TraceClash("DirectorRequestRejected", request);
                 return;
+            }
 
             if (_activeClashRoundRoutine != null)
                 StopCoroutine(_activeClashRoundRoutine);
 
             _activeClashRoundRequest = request;
+            TraceClash("DirectorRequestAccepted", request);
             if (!isActiveAndEnabled)
             {
                 CompleteClashRound(_finalBindingId, request);
@@ -394,6 +400,7 @@ namespace Game.Combat.Effects
 
         private IEnumerator Co_PlayClashRound(int bindingId, CombatClashRoundPresentationRequest request)
         {
+            TraceClash("DirectorRoutineStarted", request);
             CombatClashRoundResult result = request.Result;
             bool attackerWon = result.AttackerPower > result.ResponderPower;
             bool responderWon = result.ResponderPower > result.AttackerPower;
@@ -422,19 +429,42 @@ namespace Game.Combat.Effects
                     elapsed += Time.deltaTime;
                 yield return null;
             }
+            TraceClash("DirectorRoutineEnded", request);
             CompleteClashRound(bindingId, request);
         }
 
         private void CompleteClashRound(int bindingId, CombatClashRoundPresentationRequest request)
         {
-            if (bindingId != _finalBindingId ||
-                !ReferenceEquals(_activeClashRoundRequest, request) ||
-                !IsCurrentFinalRequest(request?.ExchangeVersion ?? -1))
+            string rejection = bindingId != _finalBindingId ? "BindingChanged" :
+                !ReferenceEquals(_activeClashRoundRequest, request) ? "ActiveRequestChanged" :
+                !IsCurrentFinalRequest(request?.ExchangeVersion ?? -1) ? "ExchangeChanged" : null;
+            if (rejection != null)
+            {
+                TraceClash($"DirectorCompletionRejected reason={rejection}", request);
                 return;
+            }
 
             _activeClashRoundRoutine = null;
             _activeClashRoundRequest = null;
-            request.TryComplete();
+            TraceClash("DirectorTryComplete", request);
+            bool completed = request.TryComplete();
+            TraceClash($"DirectorTryCompleteResult accepted={completed}", request);
+        }
+
+        private void TraceClash(string boundary, CombatClashRoundPresentationRequest request)
+        {
+#if UNITY_EDITOR
+            if (_finalSession == null || request == null)
+                return;
+
+            Debug.Log($"[ClashTrace/Director] {boundary} session={_finalSession.CompletionId} " +
+                $"exchange={_finalSession.ExchangeState?.DeclarationId}/{request.ExchangeVersion} " +
+                $"round={request.Result?.ComparisonNumber} request={request.GetHashCode()} " +
+                $"phase={entryPoint?.ActiveStateMachine?.Phase} " +
+                $"gameState={GameStateMachine.Instance?.Current.ToString() ?? "<none>"} " +
+                $"timeScale={Time.timeScale:0.###} active={isActiveAndEnabled} " +
+                $"binding={_finalBindingId}", this);
+#endif
         }
 
         private IEnumerator Co_PlayFinalOutcome(
@@ -1093,7 +1123,7 @@ namespace Game.Combat.Effects
             }
 
             Animator anim = actorObj.GetComponentInChildren<Animator>();
-            if (anim != null)
+            if (anim != null && anim.isActiveAndEnabled && anim.runtimeAnimatorController != null)
                 anim.SetTrigger(Animator.StringToHash("Attack"));
         }
 

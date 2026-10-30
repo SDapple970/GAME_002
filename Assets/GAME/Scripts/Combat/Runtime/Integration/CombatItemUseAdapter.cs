@@ -16,6 +16,7 @@ namespace Game.Combat.Integration
         [SerializeField] private CombatItemCatalogSO combatItemCatalog;
 
         private CombatItemUseExecutor _executor;
+        private InventoryService _subscribedInventory;
 
         private void Awake()
         {
@@ -32,12 +33,14 @@ namespace Game.Combat.Integration
 
         private void OnDisable()
         {
+            UnsubscribeInventory();
             flowOrchestrator?.UnregisterCombatItemUseExecutor(_executor);
             _executor = null;
         }
 
         private void Bind()
         {
+            UnsubscribeInventory();
             if (flowOrchestrator == null)
                 flowOrchestrator = FindFirstObjectByType<CombatFlowOrchestrator>();
             if (inventoryService == null)
@@ -47,7 +50,29 @@ namespace Game.Combat.Integration
                 return;
 
             _executor = new CombatItemUseExecutor(inventoryService, combatItemCatalog);
+            _subscribedInventory = inventoryService;
+            _subscribedInventory.Changed += OnInventoryChanged;
+            _subscribedInventory.Refreshed += OnInventoryRefreshed;
             flowOrchestrator.RegisterCombatItemUseExecutor(_executor);
+        }
+
+        private void UnsubscribeInventory()
+        {
+            if (_subscribedInventory == null)
+                return;
+            _subscribedInventory.Changed -= OnInventoryChanged;
+            _subscribedInventory.Refreshed -= OnInventoryRefreshed;
+            _subscribedInventory = null;
+        }
+
+        private void OnInventoryChanged(InventoryMutationResult change)
+        {
+            flowOrchestrator?.NotifyCombatItemOptionsChanged();
+        }
+
+        private void OnInventoryRefreshed()
+        {
+            flowOrchestrator?.NotifyCombatItemOptionsChanged();
         }
     }
 }

@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 7555609939051138548}
   - component: {fileID: 4972631044839159580}
   - component: {fileID: 7893522877659082516}
+  - component: {fileID: 3049129679861795314}
   m_Layer: 0
   m_Name: CombatRuntime
   m_TagString: Untagged
@@ -136,3 +137,27 @@ MonoBehaviour:
   gameObjectsToDisable: []
   freezeBodies2D: []
   disableColliders2D: []
+--- !u!114 &3049129679861795314
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 983610231012664106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4bd31fad07c44e9795d18530d37a6855, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Debugging.CombatBpValidationOptIn
+  entryPoint: {fileID: 8945921886167358035}
+  orchestrator: {fileID: 3458696486045702784}
+  enableValidation: 1
+  maximumBp: 3
+  roundCyclesPerGain: 2
+  maximumInvestment: 3
+  initialPlayerBp: 3
+  skillFixtures:
+  - skill: {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}
+    kind: 1
+    perPoint: 1
+  ultimateSkill: {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}

@@ -203,6 +203,9 @@ namespace Game.Tests.Integration
             Assert.That(snapshot, Is.EqualTo(new[] { 1011, 1010, 1020 }));
             Assert.That(snapshot, Has.No.Member(1012));
             Assert.That(snapshot, Has.No.Member(1021));
+            Assert.That(fieldSession.TryGetHand(fieldSession.Allies.Single(), out CombatHandRuntime filmHand), Is.True);
+            Assert.That(filmHand.DeckSnapshot.Select(card => card.Skill.Id.Value), Is.EquivalentTo(snapshot),
+                "The transient hand fixture must use the equipped combat snapshot, not the Scene's fixed skill 1/2 cards.");
             GameSaveData beforeMutation = new(); CharacterSkillSaveParticipant.Instance.CaptureSaveData(beforeMutation);
             runtime.TryUnequip(HeroA, _filmA.PersistentKey);
             CharacterSkillSaveParticipant.Instance.RestoreSaveData(beforeMutation);
@@ -213,9 +216,12 @@ namespace Game.Tests.Integration
             yield return Wait(() => combatView.ViewState.DecisionKind == CombatExchangeDecisionKind.Attack && combatView.ViewState.SelectableActors.Count > 0,
                 "player attack decision UI");
             if (combatView.ViewState.SelectedActor == null) { Click(Options(combatView, "actorListRoot")[0]); yield return null; }
-            int skillIndex = combatView.ViewState.SelectableSkills.ToList().FindIndex(skill => skill.Id.Value == 1010);
+            Assert.That(combatView.ViewState.HasHand, Is.True);
+            int skillIndex = combatView.ViewState.HandCards.ToList().FindIndex(card => card.Skill.Id.Value == 1010);
             Assert.That(skillIndex, Is.GreaterThanOrEqualTo(0));
-            Click(Options(combatView, "skillListRoot")[skillIndex]); yield return null;
+            Button filmCardButton = Options(combatView, "skillListRoot")[skillIndex];
+            Assert.That(filmCardButton.interactable, Is.True);
+            Click(filmCardButton); yield return null;
             Click(Options(combatView, "targetListRoot")[0]); yield return null;
             Assert.That(combatView.ViewState.CanConfirm, Is.True);
             Click((Button)Reference(combatView, "confirmButton"));
@@ -333,6 +339,17 @@ namespace Game.Tests.Integration
         private void ConfigureSceneInstances()
         {
             CombatEntryPoint entry = One<CombatEntryPoint>();
+            // Test-only in-memory setup: Film equip replaces compatibility skill IDs in the next snapshot.
+            // Keep hand validation active, but derive its cards from that snapshot instead of authored Debug cards.
+            var handFixture = entry.GetComponent<Game.Combat.Debugging.CombatHandValidationOptIn>();
+            Assert.That(handFixture, Is.Not.Null);
+            SerializedObject handData = new(handFixture);
+            handData.FindProperty("playerCardSource").enumValueIndex =
+                (int)Game.Combat.Debugging.CombatHandValidationOptIn.CardSource.SessionSkillSnapshot;
+            // The fixture equips two Films plus one unlocked Unique; draw all three normal cards
+            // deterministically. Existing scene clash classification stays separate from those clones.
+            handData.FindProperty("normalHandCapacity").intValue = 3;
+            handData.ApplyModifiedPropertiesWithoutUndo();
             SerializedObject data = new(entry); SerializedProperty definitions = data.FindProperty("skillDefinitions");
             definitions.arraySize = _registry.Length;
             for (int i = 0; i < _registry.Length; i++) definitions.GetArrayElementAtIndex(i).objectReferenceValue = _registry[i];

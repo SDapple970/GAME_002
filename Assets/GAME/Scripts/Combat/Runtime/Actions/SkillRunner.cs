@@ -29,7 +29,11 @@ namespace Game.Combat.Actions
 
             for (int i = 0; i < request.Targets.Count; i++)
             {
+                if (session.IsCombatEnded)
+                    break;
                 ICombatant target = request.Targets[i];
+                if (target.HP <= 0 || !IsCurrentRosterMember(session, target))
+                    continue;
                 int hpBefore = target.HP;
 
                 if (revealsWeakness)
@@ -42,11 +46,12 @@ namespace Game.Combat.Actions
                             request.Actor,
                             request.Skill.BaseDamage)
                         : request.Skill.BaseDamage;
-                    for (int hit = 0; hit <= extraHits && target.HP > 0; hit++)
+                    for (int hit = 0; hit <= extraHits && target.HP > 0 && !session.IsCombatEnded; hit++)
                         target.ApplyDamage(damage);
                 }
 
-                if (healing > 0 && session.TryGetCombatState(target, out CombatantCombatState targetState))
+                if (!session.IsCombatEnded && healing > 0 &&
+                    session.TryGetCombatState(target, out CombatantCombatState targetState) && targetState.IsAlive)
                     targetState.RestoreHp(healing);
 
                 targetResults.Add(new CombatSkillTargetResult(target, hpBefore, target.HP));
@@ -60,6 +65,7 @@ namespace Game.Combat.Actions
                 request.SourceOutcome,
                 targetResults,
                 appliedStatuses);
+            session.RecordHandoffKills(result);
             return true;
         }
 
@@ -68,7 +74,7 @@ namespace Game.Combat.Actions
             CombatSkillExecutionRequest request,
             System.Collections.Generic.List<CombatStatusApplicationResult> destination)
         {
-            if (!(request.Skill is ICombatStatusEffectProvider provider) ||
+            if (session.IsCombatEnded || !(request.Skill is ICombatStatusEffectProvider provider) ||
                 provider.AppliedStatusEffects == null)
             {
                 return;
@@ -77,7 +83,9 @@ namespace Game.Combat.Actions
             for (int targetIndex = 0; targetIndex < request.Targets.Count; targetIndex++)
             {
                 ICombatant target = request.Targets[targetIndex];
-                if (!session.TryGetCombatState(target, out CombatantCombatState state))
+                if (session.IsCombatEnded || target.HP <= 0 ||
+                    !IsCurrentRosterMember(session, target) ||
+                    !session.TryGetCombatState(target, out CombatantCombatState state) || !state.IsAlive)
                     continue;
 
                 int extraApplications = System.Math.Min(31, CombatBpEnhancementPolicy.Magnitude(
@@ -101,12 +109,17 @@ namespace Game.Combat.Actions
             CombatSession session,
             CombatSkillExecutionRequest request)
         {
-            if (session == null || request?.Actor == null || request.Skill == null ||
+            if (session == null || session.IsCombatEnded || request?.Actor == null || request.Skill == null ||
                 request.Targets == null || request.Actor.HP <= 0 || request.Actor.IsStunned ||
                 !IsCurrentRosterMember(session, request.Actor) || !OwnsSkill(request.Actor, request.Skill))
             {
                 return false;
             }
+
+            if (session.FlowMode == CombatFlowMode.StandoffClashChain &&
+                (!session.TryGetCombatState(request.Actor, out CombatantCombatState actorState) ||
+                 !actorState.IsAlive || actorState.IsPanicked))
+                return false;
 
             System.Collections.Generic.HashSet<ICombatant> targets =
                 new System.Collections.Generic.HashSet<ICombatant>(CombatantReferenceComparer.Instance);

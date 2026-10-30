@@ -1,6 +1,7 @@
 #if UNITY_INCLUDE_TESTS
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Game.Combat.Actions;
 using Game.Combat.Core;
 using Game.Combat.Data;
@@ -69,6 +70,27 @@ namespace Game.Tests.Combat
             GainRounds(capped, 1, 8);
             Assert.That(Balance(capped, capped.Ally), Is.EqualTo(3));
             Assert.That(Balance(capped, capped.Enemy), Is.EqualTo(3));
+        }
+
+        [Test]
+        public void ExplicitInitialBp_IsOneTimeValidationSetup_AndDoesNotCreateAnUltimateReceipt()
+        {
+            Fixture f = NewFixture();
+            EnableBp(f, CombatBpEnhancementKind.ExtraHits, 1);
+            Assert.That(f.Session.TryAssignUltimateSkill(f.Ally, f.AllySkill), Is.True);
+            Assert.That(Balance(f, f.Ally), Is.Zero);
+
+            Assert.That(f.Session.TrySetInitialBpForValidation(f.Ally, 3), Is.True);
+            Assert.That(Balance(f, f.Ally), Is.EqualTo(3));
+            Assert.That(f.Session.BpRuntime.ApprovedSpends, Is.Empty);
+            Assert.That(f.Session.UltimateRuntime.TryGetStage(f.Ally, out int stage), Is.True);
+            Assert.That(stage, Is.Zero);
+            Assert.That(f.Session.TrySetInitialBpForValidation(f.Ally, 0), Is.False);
+            Assert.That(f.Session.TrySetInitialBpForValidation(f.Enemy, 4), Is.False);
+
+            Assert.That(f.StateMachine.TryDeclareAttack(new CombatAttackDeclaration(
+                f.Ally, f.Enemy, f.AllySkill), f.Session.ExchangeState.Version), Is.True);
+            Assert.That(f.Session.TrySetInitialBpForValidation(f.Enemy, 1), Is.False);
         }
 
         [Test]
@@ -182,6 +204,121 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void PanicRejectsDeclarationWithoutSpendingMpBpOrCard()
+        {
+            Fixture f = NewFixture();
+            EnableBp(f, CombatBpEnhancementKind.ExtraHits, 1);
+            GainRounds(f, 1, 2);
+            Assert.That(f.Session.TryEnableHandValidation(f.Ally,
+                new[] { new CombatHandEntry(f.AllySkill, CombatCardKind.Normal) }, 1, 0, 7), Is.True);
+            f.Session.TryGetHand(f.Ally, out CombatHandRuntime hand);
+            long cardId = hand.Hand[0].RuntimeId;
+            CombatantCombatState state = f.Session.GetCombatState(f.Ally);
+            state.ApplyMentalDelta(-state.MaxMental);
+            int mp = state.CurrentMp;
+            int bp = Balance(f, f.Ally);
+            CombatAttackDeclaration declaration = new(f.Ally, f.Enemy, f.AllySkill, cardId, 1);
+            Assert.That(f.StateMachine.TryDeclareAttack(declaration), Is.False);
+            Assert.That(f.StateMachine.TryDeclareAttack(declaration, f.Session.ExchangeState.Version), Is.False);
+            Assert.That(CombatExchangeCommitPolicy.TryCommit(f.Session, declaration, null, out _), Is.False);
+            Assert.That(state.CurrentMp, Is.EqualTo(mp));
+            Assert.That(Balance(f, f.Ally), Is.EqualTo(bp));
+            Assert.That(hand.Hand[0].RuntimeId, Is.EqualTo(cardId));
+            Assert.That(hand.NormalDiscard, Is.Empty);
+            Assert.That(f.Session.BpRuntime.ApprovedSpends, Is.Empty);
+        }
+
+        [TestCase(CombatBpEnhancementKind.ExtraHits, 8, 1)]
+        [TestCase(CombatBpEnhancementKind.StatusApplications, 9, 2)]
+        public void MultiHitAndExplicitStatusApplications_UseTheirSeparateContracts(
+            CombatBpEnhancementKind kind, int expectedHp, int expectedStacks)
+        {
+            Fixture f = NewFixture();
+            CombatStatusDefinitionSO status = CreateStatusFixture();
+            try
+            {
+                f.AllySkill.AppliedStatusEffects = new[] { status };
+                EnableBp(f, kind, 1);
+                GainRounds(f, 1, 2);
+                CombatSkillExecutionRequest request = ResolveSeriesAction(f);
+                Assert.That(SkillRunner.TryExecute(f.Session, request, out CombatSkillExecutionResult result), Is.True);
+                Assert.That(f.Enemy.HP, Is.EqualTo(expectedHp));
+                Assert.That(f.Session.GetCombatState(f.Enemy).TryGetStatus("06b.bp.status", out CombatStatusRuntime current), Is.True);
+                Assert.That(current.StackCount, Is.EqualTo(expectedStacks));
+                Assert.That(result.AppliedStatusResults.Count, Is.EqualTo(expectedStacks));
+            }
+            finally { UnityEngine.Object.DestroyImmediate(status); }
+        }
+
+        [TestCase(CombatBpEnhancementKind.ExtraHits)]
+        [TestCase(CombatBpEnhancementKind.Healing)]
+        public void LethalDamage_DoesNotApplyStatusOrReviveTarget(CombatBpEnhancementKind kind)
+        {
+            Fixture f = NewFixture();
+            CombatStatusDefinitionSO status = CreateStatusFixture();
+            try
+            {
+                f.AllySkill.AppliedStatusEffects = new[] { status };
+                EnableBp(f, kind, 1);
+                GainRounds(f, 1, 2);
+                f.Enemy.ApplyDamage(9);
+                CombatSkillExecutionRequest request = ResolveSeriesAction(f);
+                Assert.That(SkillRunner.TryExecute(f.Session, request, out CombatSkillExecutionResult result), Is.True);
+                Assert.That(f.Enemy.HP, Is.Zero);
+                Assert.That(f.Session.GetCombatState(f.Enemy).HasStatus("06b.bp.status"), Is.False);
+                Assert.That(result.AppliedStatusResults, Is.Empty);
+                Assert.That(f.Session.GetCombatState(f.Enemy).CanApplyStatus(status), Is.False);
+                Assert.That(f.Session.GetCombatState(f.Enemy).ApplyStatus(status), Is.Null);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(status); }
+        }
+
+        [Test]
+        public void AbortDuringDamage_StopsRemainingHitsStatusAndDelayedReplay()
+        {
+            Fixture f = NewFixture();
+            CombatStatusDefinitionSO status = CreateStatusFixture();
+            try
+            {
+                f.AllySkill.AppliedStatusEffects = new[] { status };
+                EnableBp(f, CombatBpEnhancementKind.ExtraHits, 1);
+                GainRounds(f, 1, 2);
+                CombatSkillExecutionRequest request = ResolveSeriesAction(f);
+                f.Enemy.DamageCallback = () => f.StateMachine.ForceExit(CombatEndReason.Abort);
+                Assert.That(SkillRunner.TryExecute(f.Session, request, out CombatSkillExecutionResult result), Is.True);
+                Assert.That(f.Enemy.HP, Is.EqualTo(9));
+                Assert.That(result.AppliedStatusResults, Is.Empty);
+                Assert.That(f.Session.GetCombatState(f.Enemy).HasStatus("06b.bp.status"), Is.False);
+                Assert.That(SkillRunner.TryExecute(f.Session, request, out _), Is.False);
+                Assert.That(f.Enemy.HP, Is.EqualTo(9));
+            }
+            finally { UnityEngine.Object.DestroyImmediate(status); }
+        }
+
+        private static CombatStatusDefinitionSO CreateStatusFixture()
+        {
+            CombatStatusDefinitionSO status = UnityEngine.ScriptableObject.CreateInstance<CombatStatusDefinitionSO>();
+            typeof(CombatStatusDefinitionSO).GetField("statusId", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(status, "06b.bp.status");
+            typeof(CombatStatusDefinitionSO).GetField("stackPolicy", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(status, CombatStatusStackPolicy.Stack);
+            typeof(CombatStatusDefinitionSO).GetField("maximumStacks", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(status, 5);
+            return status;
+        }
+
+        private static CombatSkillExecutionRequest ResolveSeriesAction(Fixture f)
+        {
+            CombatClashSeriesState series = BeginSeries(f, 1, 1, 2, 1);
+            Assert.That(series.TryResolveRound(series.CommandToken,
+                Input(f.Ally, f.AllySkill, 4, true), Input(f.Enemy, f.EnemySkill, 2, false), out _), Is.True);
+            Assert.That(series.TryClaimFinalOutcome(series.CommandToken, f.AllySkill, out CombatClashResult final), Is.True);
+            Assert.That(CombatOutcomeSelector.TrySelect(final, out CombatOutcomeAction action), Is.True);
+            Assert.That(CombatOutcomeTargetResolver.TryResolve(action, f.Session, out CombatSkillExecutionRequest request), Is.True);
+            return request;
+        }
+
+        [Test]
         public void ExtraHits_ExecuteWithinOneApprovedAction_WithoutRepeatingCostsOrFinalOutcome()
         {
             Fixture f = NewFixture();
@@ -292,7 +429,7 @@ namespace Game.Tests.Combat
             }
         }
 
-        private sealed class Skill : ISkill, ICombatMpCostProvider
+        private sealed class Skill : ISkill, ICombatMpCostProvider, ICombatStatusEffectProvider
         {
             public SkillId Id { get; }
             public string Name => "BP fixture";
@@ -310,6 +447,7 @@ namespace Game.Tests.Combat
             public int Speed => 1;
             public bool ConsumesTurn => true;
             public int MpCost => 1;
+            public IReadOnlyList<CombatStatusDefinitionSO> AppliedStatusEffects { get; set; } = Array.Empty<CombatStatusDefinitionSO>();
             public Skill(int id) => Id = new SkillId(id);
         }
 
@@ -327,10 +465,11 @@ namespace Game.Tests.Combat
             public int StaggerMax => 0;
             public bool IsStunned { get; private set; }
             public IReadOnlyList<ISkill> Skills => _skills;
+            public Action DamageCallback;
             public Actor(int id, Side side) { Id = new CombatantId(id); Side = side; }
             public void AddSkill(ISkill skill) => _skills.Add(skill);
             public void BindCombatState(CombatantCombatState state) => _state = state;
-            public void ApplyDamage(int amount) => _state?.ApplyDamage(amount);
+            public void ApplyDamage(int amount) { _state?.ApplyDamage(amount); DamageCallback?.Invoke(); }
             public void AddStagger(int amount) { }
             public void SetStunned(bool value) => IsStunned = value;
             public void ResetStaggerIfNeededOnStunEnd() { }

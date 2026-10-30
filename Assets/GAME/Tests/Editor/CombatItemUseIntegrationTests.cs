@@ -32,6 +32,76 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void ThrowingInventoryNotification_RestoresStockAndDoesNotApplyEffect()
+        {
+            CombatItemDefinitionSO item = CreateHealItem("06b.notification", CombatItemTargetRule.Self, 2);
+            Fixture fixture = CreateFixture(item, 2);
+            fixture.Session.GetCombatState(fixture.Ally).ApplyDamage(6);
+            fixture.Bind();
+            CombatItemUseRequest request = new CombatItemUseRequest(item.ItemId, fixture.Ally, fixture.Ally,
+                fixture.Session.ExchangeState.Version);
+            fixture.Inventory.Changed += _ => throw new System.InvalidOperationException("notification failed");
+            Assert.That(fixture.Orchestrator.TryUseCombatItem(request, out CombatItemUseResult result), Is.False);
+            Assert.That(result.ItemConsumed, Is.False);
+            Assert.That(result.EffectApplied, Is.False);
+            Assert.That(fixture.Inventory.GetCount(item.ItemId), Is.EqualTo(2));
+            Assert.That(fixture.Session.GetCombatState(fixture.Ally).CurrentHp, Is.EqualTo(4));
+            Assert.That(fixture.Orchestrator.TryUseCombatItem(request, out _), Is.False);
+            Assert.That(fixture.Inventory.GetCount(item.ItemId), Is.EqualTo(2));
+        }
+
+        [Test]
+        public void InventoryNotification_CannotReenterTheSameItemCommand()
+        {
+            CombatItemDefinitionSO item = CreateHealItem("06b.reentry", CombatItemTargetRule.Self, 2);
+            Fixture fixture = CreateFixture(item, 2);
+            fixture.Session.GetCombatState(fixture.Ally).ApplyDamage(6);
+            fixture.Bind();
+            CombatItemUseRequest request = new CombatItemUseRequest(item.ItemId, fixture.Ally, fixture.Ally,
+                fixture.Session.ExchangeState.Version);
+            int callbacks = 0;
+            fixture.Inventory.Changed += change =>
+            {
+                callbacks++;
+                Assert.That(fixture.Orchestrator.TryUseCombatItem(request, out _), Is.False);
+                Assert.That(fixture.Orchestrator.YieldStandoffAttackAuthority(Side.Allies, request.ExchangeVersion), Is.False);
+                Assert.That(fixture.StateMachine.TryGrantStandoffAttackAuthority(Side.Enemies, request.ExchangeVersion), Is.False);
+            };
+            Assert.That(fixture.Orchestrator.TryUseCombatItem(request, out _), Is.True);
+            Assert.That(callbacks, Is.EqualTo(1));
+            Assert.That(fixture.Inventory.GetCount(item.ItemId), Is.EqualTo(1));
+            Assert.That(fixture.Session.GetCombatState(fixture.Ally).CurrentHp, Is.EqualTo(6));
+        }
+
+        [TestCase("death")]
+        [TestCase("abort")]
+        [TestCase("unbind")]
+        public void InventoryNotification_InvalidatesItemAndRestoresStock(string cancellation)
+        {
+            CombatItemDefinitionSO item = CreateHealItem("06b.cancel", CombatItemTargetRule.SingleAlly, 2);
+            Fixture fixture = CreateFixture(item, 2);
+            CombatantCombatState target = fixture.Session.GetCombatState(fixture.AllyTwo);
+            target.ApplyDamage(4);
+            fixture.Bind();
+            CombatItemUseRequest request = new CombatItemUseRequest(item.ItemId, fixture.Ally, fixture.AllyTwo,
+                fixture.Session.ExchangeState.Version);
+            bool first = true;
+            fixture.Inventory.Changed += _ =>
+            {
+                if (!first) return;
+                first = false;
+                if (cancellation == "death") target.ApplyDamage(100);
+                else if (cancellation == "abort") fixture.StateMachine.ForceExit(CombatEndReason.Abort);
+                else fixture.Orchestrator.BindSession(null);
+            };
+            Assert.That(fixture.Orchestrator.TryUseCombatItem(request, out CombatItemUseResult result), Is.False);
+            Assert.That(result.EffectApplied, Is.False);
+            Assert.That(fixture.Inventory.GetCount(item.ItemId), Is.EqualTo(2));
+            Assert.That(target.CurrentHp, Is.EqualTo(cancellation == "death" ? 0 : 6));
+            if (cancellation != "death") Assert.That(fixture.StateMachine.EndReason, Is.EqualTo(CombatEndReason.Abort));
+        }
+
+        [Test]
         public void StandoffItemCommand_ExposesReadOnlyOption_HealsOnceAndConsumesOnce()
         {
             CombatItemDefinitionSO item = CreateHealItem("test.heal", CombatItemTargetRule.SingleAlly, 4);

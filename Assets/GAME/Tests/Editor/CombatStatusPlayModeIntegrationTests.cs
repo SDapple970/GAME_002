@@ -188,9 +188,10 @@ namespace Game.Tests.Combat
             SoSkill allOutSkill = CreateAllOutSkill();
             fixture.Ally.Add(finalAttack);
             fixture.Ally.Add(allOutSkill);
-            fixture.Enemy.SetStunned(true);
             fixture.AllyState.ApplyStatus(damageBoost);
-            BindWithSynchronousPresentation(fixture);
+            // Enter normally, then stun at the outcome gate. An initially all-stunned roster
+            // now offers All-Out before accepting an ordinary attack (CBT-R2-06A).
+            BindWithSynchronousPresentation(fixture, () => fixture.Enemy.SetStunned(true));
 
             SubmitUnopposedAttack(fixture, finalAttack);
             Assert.That(fixture.Machine.Phase, Is.EqualTo(Phase.ChainDecision));
@@ -256,10 +257,14 @@ namespace Game.Tests.Combat
                 enemy);
         }
 
-        private static void BindWithSynchronousPresentation(RuntimeFixture fixture)
+        private static void BindWithSynchronousPresentation(RuntimeFixture fixture, Action beforeOutcomeComplete = null)
         {
             fixture.Orchestrator.ApproachPresentationRequested += request => request.TryComplete();
-            fixture.Orchestrator.OutcomePresentationRequested += request => request.TryComplete();
+            fixture.Orchestrator.OutcomePresentationRequested += request =>
+            {
+                beforeOutcomeComplete?.Invoke();
+                request.TryComplete();
+            };
             Assert.That(fixture.Orchestrator.BindFinalExchange(
                 fixture.Session,
                 fixture.Machine,

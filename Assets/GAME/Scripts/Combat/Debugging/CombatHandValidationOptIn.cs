@@ -9,8 +9,8 @@ using UnityEngine;
 namespace Game.Combat.Debugging
 {
     /// <summary>
-    /// Explicit validation-only bridge from a constructed 1v1 FinalExchange session to its
-    /// per-session hand. It never edits persistent loadouts or supplies a Production default.
+    /// Explicit validation-only bridge from a constructed FinalExchange session to
+    /// per-combatant hands. It never edits persistent loadouts or supplies a Production default.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class CombatHandValidationOptIn : MonoBehaviour
@@ -90,11 +90,16 @@ namespace Game.Combat.Debugging
         {
             WasApplied = false;
             LastStatus = null;
+            if (session?.HasProductionHandBpInitialization == true)
+            {
+                LastStatus = "Production owns this session's Hand/BP initialization.";
+                return false;
+            }
             if (session == null || session.FlowMode != CombatFlowMode.StandoffClashChain ||
-                session.Allies.Count != 1 || session.Enemies.Count != 1 ||
+                session.Allies.Count < 1 || session.Allies.Count > 3 || session.Enemies.Count < 1 ||
                 session.ExchangeState.DeclarationId != 0)
             {
-                LastStatus = "Hand validation requires a new 1v1 StandoffClashChain session before the first declaration.";
+                LastStatus = "Hand validation requires a new 1-3 ally StandoffClashChain session before the first declaration.";
                 return false;
             }
 
@@ -104,39 +109,43 @@ namespace Game.Combat.Debugging
                 return false;
             }
 
-            List<CombatHandEntry> playerEntries = BuildEntries(
-                session.Allies[0], playerCardSource, clashSkillDefinitions, fixtureCards);
-            if (playerEntries.Count == 0)
+            List<CombatHandEntry>[] playerEntries = new List<CombatHandEntry>[session.Allies.Count];
+            for (int i = 0; i < session.Allies.Count; i++)
             {
-                LastStatus = "Player has no matching session skills. Check the selected fixture.";
+                playerEntries[i] = BuildEntries(session.Allies[i], playerCardSource,
+                    clashSkillDefinitions, fixtureCards);
+                if (playerEntries[i].Count > 0) continue;
+                LastStatus = $"Ally {i} has no matching session skills. Check the selected fixture.";
                 return false;
             }
 
-            List<CombatHandEntry> enemyEntries = null;
+            List<CombatHandEntry>[] enemyEntries = null;
             if (enableEnemyHand)
             {
-                enemyEntries = BuildEntries(session.Enemies[0], enemyCardSource,
-                    enemyClashSkillDefinitions, enemyFixtureCards);
-                if (enemyEntries.Count == 0)
+                enemyEntries = new List<CombatHandEntry>[session.Enemies.Count];
+                for (int i = 0; i < session.Enemies.Count; i++)
                 {
-                    LastStatus = "Enemy has no matching session skills. Check the selected fixture.";
+                    enemyEntries[i] = BuildEntries(session.Enemies[i], enemyCardSource,
+                        enemyClashSkillDefinitions, enemyFixtureCards);
+                    if (enemyEntries[i].Count > 0) continue;
+                    LastStatus = $"Enemy {i} has no matching session skills. Check the selected fixture.";
                     return false;
                 }
             }
 
-            if (!session.TryEnableHandValidation(session.Allies[0], playerEntries,
-                    normalHandCapacity, clashHandCapacity, seed))
+            for (int i = 0; i < session.Allies.Count; i++)
             {
-                LastStatus = "Player hand validation was rejected by CombatSession.";
+                if (session.TryEnableHandValidation(session.Allies[i], playerEntries[i],
+                    normalHandCapacity, clashHandCapacity, seed + i)) continue;
+                LastStatus = $"Ally {i} hand validation was rejected by CombatSession.";
                 return false;
             }
 
-            if (enableEnemyHand && !session.TryEnableHandValidation(session.Enemies[0], enemyEntries,
-                    normalHandCapacity, clashHandCapacity, enemySeed))
+            for (int i = 0; enableEnemyHand && i < session.Enemies.Count; i++)
             {
-                // Both requests were completely validated before the first commit. A failure here means
-                // the session changed unexpectedly during this synchronous validation callback.
-                LastStatus = "Enemy hand validation was rejected after player hand commit.";
+                if (session.TryEnableHandValidation(session.Enemies[i], enemyEntries[i],
+                    normalHandCapacity, clashHandCapacity, enemySeed + i)) continue;
+                LastStatus = $"Enemy {i} hand validation was rejected after ally hand commit.";
                 Debug.LogError($"[CombatHandValidationOptIn] {LastStatus}", this);
                 return false;
             }
@@ -155,6 +164,7 @@ namespace Game.Combat.Debugging
                 return;
 
             CombatSession session = entryPoint != null ? entryPoint.ActiveSession : null;
+            if (session?.HasProductionHandBpInitialization == true) return;
             if (!TryApplyToSession(session))
                 Debug.LogError($"[CombatHandValidationOptIn] {LastStatus}", this);
         }

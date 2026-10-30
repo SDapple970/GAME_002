@@ -86,6 +86,8 @@ namespace Game.Combat.Adapters
                     return Failed($"Character '{id}' has no authored definition or progression state.");
                 if (!byId.TryGetValue(id, out UnityEngine.GameObject fieldObject))
                     return Failed($"Character '{id}' has no explicit field binding.");
+                if (!fieldObject.activeInHierarchy)
+                    return Failed($"Character '{id}' has an inactive field binding.");
                 if (!selectedFieldObjects.Add(fieldObject))
                     return Failed($"Character '{id}' reuses a field binding already selected for combat.");
                 HpAccessor hp = HpAccessor.TryCreate(fieldObject);
