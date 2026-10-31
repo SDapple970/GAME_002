@@ -28,6 +28,8 @@ namespace Game.Core
         [SerializeField] private bool logWarnings = true;
         [Tooltip("Assign only approved character/initial Party data. Empty retains existing scene and Test Hero compatibility.")]
         [SerializeField] private CharacterStartDefinitionSO characterStartDefinition;
+        [Tooltip("Optional existing Legacy definition for lookup only; never seeds the New Game Party or skills.")]
+        [SerializeField] private CharacterProgressionDefinitionSO legacyCharacterDefinition;
 
         private int _initialStateAppliedSceneHandle = int.MinValue;
 
@@ -97,9 +99,10 @@ namespace Game.Core
             FindOrCreate<PersistentConditionRuntime>("PersistentConditionRuntime", createMissing, warn);
             FindOrCreate<FeastService>("FeastService", createMissing, warn);
             CharacterProgressionService progression = FindOrCreate<CharacterProgressionService>("CharacterProgressionService", createMissing, warn);
+            RegisterExistingLegacyDefinition(CharacterProgressionService.Instance != null ? CharacterProgressionService.Instance : progression, warn);
+            FindOrCreate<CharacterSkillSaveParticipant>("CharacterSkillSaveParticipant", createMissing, warn);
             ConfigureCharacterServices(PartyRuntime.Instance != null ? PartyRuntime.Instance : party,
                 CharacterProgressionService.Instance != null ? CharacterProgressionService.Instance : progression, warn);
-            FindOrCreate<CharacterSkillSaveParticipant>("CharacterSkillSaveParticipant", createMissing, warn);
             FindOrCreate<PersonaStatusManager>("PersonaStatusManager", createMissing, warn);
             FindOrCreate<PersonaSaveAdapter>("PersonaSaveAdapter", createMissing, warn);
             InteractionRuntime interactionRuntime = FindOrCreate<InteractionRuntime>(
@@ -120,15 +123,39 @@ namespace Game.Core
         private void ConfigureCharacterServices(PartyRuntime party, CharacterProgressionService progression, bool warn)
         {
             if (characterStartDefinition == null || party == null || progression == null) return;
-            // Validate both owners before either adopts authored configuration. Bootstrap never resets a session.
+            CharacterSkillSaveParticipant skills = CharacterSkillSaveParticipant.Instance;
+            // Validate all configured owners before any adopts authored configuration. Bootstrap never resets a session.
             if (!progression.CanConfigureStartDefinition(characterStartDefinition, out string message) ||
-                !party.CanConfigureStartDefinition(characterStartDefinition, out message))
+                !party.CanConfigureStartDefinition(characterStartDefinition, out message) ||
+                skills != null && !skills.CanConfigureStartDefinition(characterStartDefinition, out message))
             {
                 if (warn) Debug.LogWarning($"[RuntimeBootstrapper] Character startup configuration rejected: {message}", this);
                 return;
             }
             progression.TryConfigureStartDefinition(characterStartDefinition, out _);
             party.TryConfigureStartDefinition(characterStartDefinition, out _);
+            skills?.ConfigureStartDefinition(characterStartDefinition);
+        }
+
+        private void RegisterExistingLegacyDefinition(CharacterProgressionService progression, bool warn)
+        {
+            if (progression == null) return;
+            CharacterProgressionDefinitionSO definition = legacyCharacterDefinition;
+            if (definition == null)
+            {
+                if (progression.HasRegisteredLegacyDefinition) return;
+#if UNITY_EDITOR
+                // Keep the previous unconfigured Editor-scene compatibility path. Authored
+                // references use the same registration owner in both Editor and Player.
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath("289a48d3275f99649a3f67dbc426837f");
+                definition = UnityEditor.AssetDatabase.LoadAssetAtPath<CharacterProgressionDefinitionSO>(path);
+#else
+                return;
+#endif
+            }
+            // An invalid explicit reference must be rejected, never hidden by Editor lookup.
+            if (!progression.TryRegisterLegacyDefinition(definition, out string message) && warn)
+                Debug.LogWarning($"[RuntimeBootstrapper] Legacy definition registration rejected: {message}", progression);
         }
 
         private GameState ResolveInitialState()

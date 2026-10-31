@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Game.NonCombat.Party;
+using Game.Combat.Data;
 using UnityEngine;
 
 namespace Game.NonCombat.Progress
@@ -14,6 +15,18 @@ namespace Game.NonCombat.Progress
         [SerializeField] private string initialLeaderId;
         [SerializeField] private string[] initialCombatMemberIds = Array.Empty<string>();
         [SerializeField] private string defaultRewardTargetId;
+        [SerializeField] private InitialSkillGrant[] initialSkillGrants = Array.Empty<InitialSkillGrant>();
+
+        [Serializable]
+        internal sealed class InitialSkillGrant
+        {
+            [SerializeField] private string characterId;
+            [SerializeField] private SkillDefinitionSO[] skills = Array.Empty<SkillDefinitionSO>();
+            internal string CharacterId => CharacterIdentity.Normalize(characterId);
+            internal IReadOnlyList<SkillDefinitionSO> Skills => skills ?? Array.Empty<SkillDefinitionSO>();
+        }
+
+        internal IReadOnlyList<InitialSkillGrant> InitialSkillGrants => initialSkillGrants ?? Array.Empty<InitialSkillGrant>();
 
         public IReadOnlyList<CharacterProgressionDefinitionSO> Definitions => Array.AsReadOnly(definitions ?? Array.Empty<CharacterProgressionDefinitionSO>());
         public IReadOnlyList<string> InitialMemberIds => Array.AsReadOnly(initialMemberIds ?? Array.Empty<string>());
@@ -52,6 +65,21 @@ namespace Game.NonCombat.Progress
                 return Failed($"Initial combat lineup must contain 1 to {PartyRuntime.MaxCombatLineupSize} members.", out message);
             if (DefaultRewardTargetId == null || !known.Contains(DefaultRewardTargetId))
                 return Failed("Default Reward EXP target must reference an authored Character ID.", out message);
+
+            HashSet<string> grantCharacters = new(StringComparer.Ordinal);
+            foreach (InitialSkillGrant grant in InitialSkillGrants)
+            {
+                if (grant == null || grant.CharacterId == null || !members.Contains(grant.CharacterId) ||
+                    !grantCharacters.Add(grant.CharacterId) || grant.Skills.Count == 0)
+                    return Failed("Initial skill grants require unique initial Party members and non-empty skills.", out message);
+                HashSet<string> skillKeys = new(StringComparer.Ordinal);
+                HashSet<int> skillIds = new();
+                foreach (SkillDefinitionSO skill in grant.Skills)
+                    if (skill == null || string.IsNullOrWhiteSpace(skill.PersistentKey) ||
+                        skill.OwnershipCategory != SkillOwnershipCategory.Compatibility ||
+                        !skillKeys.Add(skill.PersistentKey.Trim()) || !skillIds.Add(skill.skillId))
+                        return Failed("Initial skills require unique Compatibility skills with persistent keys and runtime IDs.", out message);
+            }
             message = null;
             return true;
         }

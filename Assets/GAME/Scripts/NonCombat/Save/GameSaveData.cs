@@ -6,6 +6,8 @@ namespace Game.NonCombat.Save
     [Serializable]
     public sealed class GameSaveData
     {
+        // Read provenance is operation-local metadata, never part of the persisted schema.
+        [NonSerialized] internal SaveReadProvenance ReadProvenance;
         public SaveHeaderData header = new();
         public QuestSaveData quest = new();
         public InventorySaveData inventory = new();

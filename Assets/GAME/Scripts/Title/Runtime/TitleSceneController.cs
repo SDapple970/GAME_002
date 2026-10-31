@@ -35,6 +35,8 @@ namespace GAME.Title
         private bool _paperButtonBound;
         private bool _transitioning;
         private SaveLoadService _loadCompletionService;
+        private SaveLoadService.NewGameRequest _newGameRequest;
+        private bool _newGameSceneRequested;
 
         private void Awake()
         {
@@ -82,6 +84,8 @@ namespace GAME.Title
 
             _currentStep = TitleRequestStep.None;
             _transitioning = false;
+            _newGameRequest = null;
+            _newGameSceneRequested = false;
             RefreshContinueAvailability();
         }
 
@@ -93,6 +97,18 @@ namespace GAME.Title
             if (!ValidateStartReferences())
                 return;
 
+            SaveLoadService service = SaveLoadService.Instance;
+            if (service == null)
+            {
+                Debug.LogError("[TitleSceneController] New Game requires SaveLoadService.", this);
+                return;
+            }
+            if (!service.TryCreateNewGameRequest(out _newGameRequest, out string message))
+            {
+                Debug.LogError($"[TitleSceneController] New Game selection failed: {message}", this);
+                return;
+            }
+            _newGameSceneRequested = false;
             StartCoroutine(Co_OpenRequestPaper());
         }
 
@@ -174,6 +190,7 @@ namespace GAME.Title
 
         private IEnumerator Co_AcceptAndLoadDungeon()
         {
+            SaveLoadService.NewGameRequest request = _newGameRequest;
             _transitioning = true;
             _currentStep = TitleRequestStep.Accepted;
 
@@ -206,13 +223,17 @@ namespace GAME.Title
                 yield break;
             }
 
-            if (!service.TryResetForNewGame(out string message))
+            if (!ReferenceEquals(request, _newGameRequest) || _newGameSceneRequested)
+                yield break;
+
+            if (!service.TryApplyNewGameRequest(request, out string message))
             {
                 Debug.LogError($"[TitleSceneController] New Game failed: {message}", this);
                 _transitioning = false;
                 yield break;
             }
 
+            _newGameSceneRequested = true;
             LoadDungeonScene(dungeonSceneName);
         }
 

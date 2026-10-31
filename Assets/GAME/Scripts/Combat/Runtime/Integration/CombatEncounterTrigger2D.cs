@@ -48,6 +48,7 @@ namespace Game.Combat.Integration
         private bool _requestInProgress;
         private int _lastRequestFrame = -1;
         private readonly HashSet<int> _playerColliderIds = new();
+        private readonly List<Collider2D> _observedPlayerColliders = new();
         private UnityEngine.Object _reservationOwner;
         private EncounterRuntimeLifecycle _lifecycle;
         private string _activeCompletionId;
@@ -102,6 +103,25 @@ namespace Game.Combat.Integration
             TryStartContact(other, logUnresolvedPlayer: false);
         }
 
+        private void LateUpdate()
+        {
+            if (RuntimeOwner.Lifecycle != EncounterRuntimeLifecycle.RearmPending ||
+                GameStateMachine.Instance?.Is(GameState.Exploration) != true || _trigger == null)
+                return;
+
+            // Physics need not resend an exit suppressed while bodies were locked.
+            // Reconcile only contacts this trigger has actually observed.
+            for (int i = _observedPlayerColliders.Count - 1; i >= 0; i--)
+            {
+                Collider2D other = _observedPlayerColliders[i];
+                if (other != null && other.enabled && other.gameObject.activeInHierarchy &&
+                    _trigger.Distance(other).isOverlapped)
+                    continue;
+                if (other != null) RuntimeOwner.UnregisterPlayerCollider(other);
+                _observedPlayerColliders.RemoveAt(i);
+            }
+        }
+
         // A contact can arrive while another flow is completing its state transition.
         // Keep the player's presence registered and retry only after the canonical entry
         // conditions are valid again; Enter alone cannot observe that recovery.
@@ -119,6 +139,7 @@ namespace Game.Combat.Integration
             }
 
             RuntimeOwner.RegisterPlayerCollider(other);
+            if (!_observedPlayerColliders.Contains(other)) _observedPlayerColliders.Add(other);
 
             // The contact volume can legitimately overlap before the smaller field
             // attack hit box.  Let an attack already in its short windup resolve
@@ -421,6 +442,13 @@ namespace Game.Combat.Integration
                 _armed = encounterGroup.Lifecycle == EncounterRuntimeLifecycle.Idle;
                 return;
             }
+
+            // Preserve contact through formation/lock-generated exits, as the
+            // grouped owner does. A real exploration exit releases this latch.
+            if (_lifecycle == EncounterRuntimeLifecycle.ActiveCombat ||
+                _lifecycle == EncounterRuntimeLifecycle.AwaitingPostCombat ||
+                (_lifecycle == EncounterRuntimeLifecycle.RearmPending && !_explorationObserved))
+                return;
 
             if (collider != null)
                 _playerColliderIds.Remove(collider.GetInstanceID());

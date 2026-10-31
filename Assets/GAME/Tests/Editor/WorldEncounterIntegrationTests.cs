@@ -223,6 +223,30 @@ namespace Game.Tests.Combat
             Assert.That(group.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.RearmPending));
         }
 
+        [TestCase(true)]
+        [TestCase(false)]
+        public void SyntheticCombatExit_DoesNotRearmUntilFreshExplorationExit(bool grouped)
+        {
+            ICombatEncounterRuntimeOwner owner = grouped
+                ? CreateComponent<CombatEncounterGroup>("Group")
+                : CreateTrigger("Standalone");
+            var collider = CreateCollider("PlayerContact");
+            owner.RegisterPlayerCollider(collider);
+            Assert.That(owner.TryReserve(_flow), Is.True);
+            owner.CommitReservation("contact-latch");
+            owner.UnregisterPlayerCollider(collider);
+            Assert.That(owner.HasPlayerPresence, Is.True);
+            var result = Result("contact-latch", CombatEndReason.Abort);
+            Assert.That(owner.TryBeginOutcome(result), Is.True);
+            owner.CompleteOutcome(result, true);
+            owner.UnregisterPlayerCollider(collider);
+            owner.ObserveExploration();
+            Assert.That(owner.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.RearmPending));
+            owner.UnregisterPlayerCollider(collider);
+            Assert.That(owner.Lifecycle, Is.EqualTo(EncounterRuntimeLifecycle.Idle));
+            Assert.That(owner.TryReserve(_flow), Is.True);
+        }
+
         [Test]
         public void RearmPending_WaitsForAllPlayerCollidersToExit()
         {

@@ -233,6 +233,13 @@ namespace Game.Combat.Integration
 
         internal void UnregisterPlayerCollider(Collider2D collider)
         {
+            // Formation/field locking can generate synthetic exits. Only an exit
+            // after exploration resumes may release the encounter's contact latch.
+            if (_lifecycle == EncounterRuntimeLifecycle.ActiveCombat ||
+                _lifecycle == EncounterRuntimeLifecycle.AwaitingPostCombat ||
+                (_lifecycle == EncounterRuntimeLifecycle.RearmPending && !_explorationObserved))
+                return;
+
             if (collider != null)
                 _playerColliderIds.Remove(collider.GetInstanceID());
 

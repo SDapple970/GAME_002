@@ -62,12 +62,50 @@ namespace Game.Tests.Integration
             Assert.That(entry.FinalExchangeRuntimeConfig.HandCardRules, Is.Empty);
             Assert.That(entry.FinalExchangeRuntimeConfig.ClashMaxComparisons, Is.Zero);
             string dungeon = File.ReadAllText(DungeonPath); string template = File.ReadAllText(TemplatePath);
-            foreach (string id in new[] { "1665839071176935759", "1665839071176935761", "1665839071176935766" })
+            foreach (string id in new[] { "1665839071176935759", "1665839071176935761" })
                 Assert.That(dungeon, Does.Contain("addedObject: {fileID: " + id + "}"));
+            Assert.That(dungeon, Does.Not.Contain("addedObject: {fileID: 1665839071176935766}"));
+            Assert.That(dungeon, Does.Not.Contain("--- !u!114 &1665839071176935766"));
             Assert.That(dungeon, Does.Contain("addedObject: {fileID: 1665839071176935757}"));
             Assert.That(template, Does.Contain("addedObject: {fileID: 1665839071176935757}"));
             Assert.That(dungeon, Does.Contain("m_SourcePrefab: {fileID: 100100000, guid: 1bfc52cd235e809449d17d48571f5a38"));
             Assert.That(template, Does.Contain("m_SourcePrefab: {fileID: 100100000, guid: 1bfc52cd235e809449d17d48571f5a38"));
+            try
+            {
+                Scene scene = EditorSceneManager.OpenScene(DungeonPath, OpenSceneMode.Single);
+                GameObject runtime = GameObject.Find("Runtime/Combat/CombatRuntime");
+                Assert.That(runtime, Is.Not.Null);
+                var bp = runtime.GetComponents<CombatBpValidationOptIn>();
+                Assert.That(bp, Has.Length.EqualTo(1));
+                Assert.That(PrefabUtility.IsAddedComponentOverride(bp[0]), Is.False);
+                Assert.That(PrefabUtility.GetCorrespondingObjectFromSource(bp[0]),
+                    Is.SameAs(source.GetComponent<CombatBpValidationOptIn>()));
+                Assert.That(bp[0].enabled, Is.True);
+                var bpData = new SerializedObject(bp[0]);
+                Assert.That(bpData.FindProperty("entryPoint").objectReferenceValue, Is.SameAs(runtime.GetComponent<CombatEntryPoint>()));
+                Assert.That(bpData.FindProperty("orchestrator").objectReferenceValue, Is.SameAs(runtime.GetComponent<CombatFlowOrchestrator>()));
+                Assert.That(bpData.FindProperty("initialPlayerBp").intValue, Is.EqualTo(3));
+                Assert.That(bpData.FindProperty("skillFixtures").arraySize, Is.EqualTo(1));
+                foreach (Type type in new[] { typeof(CombatHandValidationOptIn), typeof(CombatClashSeriesValidationOptIn), typeof(CombatCameraController) })
+                {
+                    Component[] retained = runtime.GetComponents(type);
+                    Assert.That(retained, Has.Length.EqualTo(1), type.Name);
+                    Assert.That(PrefabUtility.IsAddedComponentOverride(retained[0]), Is.True, type.Name);
+                }
+                GameObject[] objects = scene.GetRootGameObjects()
+                    .SelectMany(root => root.GetComponentsInChildren<Transform>(true)).Select(value => value.gameObject).ToArray();
+                Assert.That(objects.Sum(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount), Is.Zero);
+                foreach (Component component in objects.SelectMany(value => value.GetComponents<Component>()))
+                {
+                    if (component == null) continue;
+                    var properties = new SerializedObject(component).GetIterator();
+                    while (properties.Next(true))
+                        if (properties.propertyType == SerializedPropertyType.ObjectReference && properties.objectReferenceValue == null)
+                            Assert.That(properties.objectReferenceInstanceIDValue, Is.Zero,
+                                $"Missing reference: {component.name}/{component.GetType().Name}.{properties.propertyPath}");
+                }
+            }
+            finally { EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single); }
             TestContext.WriteLine("Pending: Production Config disabled/missing Hand-BP-Clash authoring; base registry empty (Dungeon/Template overrides differ); official Character IDs/equipped snapshots, Enemy sources/skills, copies/seed/enhancements and optional Ultimate/AllOut content remain separate from fixtures.");
         }
 
@@ -121,7 +159,10 @@ namespace Game.Tests.Integration
                 }
                 else if (missing == "enemy") Set(_request.EnemyFieldObjects[0].GetComponent<CombatSkillLoadoutComponent>(), "skillIds", new[] { int.MaxValue });
                 else { Set(_entry, "skillDefinitions", Array.Empty<SkillDefinitionSO>()); Invoke(_entry, "Awake"); }
-                LogAssert.Expect(LogType.Error, new Regex("Combat startup rolled back"));
+                if (missing == "registry")
+                    LogAssert.Expect(LogType.Warning, new Regex("Combat start rejected.*Equipped key.*unresolved or ambiguous"));
+                else
+                    LogAssert.Expect(LogType.Error, new Regex("Combat startup rolled back"));
             }
             Assert.That(_entry.StartCombat(_request), Is.False);
             Assert.That(_entry.ActiveSession, Is.Null); Assert.That(_entry.ActiveStateMachine, Is.Null);

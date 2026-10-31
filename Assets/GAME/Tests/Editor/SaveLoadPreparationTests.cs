@@ -303,7 +303,8 @@ namespace Game.Tests.Integration
         public void TitleNewGame_DelegatesRuntimeResetWithoutDeletingSaveOrResettingFeaturesDirectly()
         {
             string titleSource = File.ReadAllText(ProjectPath("Assets/GAME/Scripts/Title/Runtime/TitleSceneController.cs"));
-            Assert.That(titleSource, Does.Contain("service.TryResetForNewGame(out string message)"));
+            Assert.That(titleSource, Does.Contain("service.TryCreateNewGameRequest(out _newGameRequest, out string message)"));
+            Assert.That(titleSource, Does.Contain("service.TryApplyNewGameRequest(request, out string message)"));
             Assert.That(titleSource, Does.Contain("sceneFlow.LoadScene(sceneName)"));
             Assert.That(titleSource, Does.Not.Contain("ResetMissionProgress"));
             Assert.That(titleSource, Does.Not.Contain("File.Delete"));

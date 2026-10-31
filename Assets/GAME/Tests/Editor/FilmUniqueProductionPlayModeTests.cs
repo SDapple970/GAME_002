@@ -47,6 +47,7 @@ namespace Game.Tests.Integration
         private SkillDefinitionSO _filmA;
         private SkillDefinitionSO _filmB;
         private SkillDefinitionSO _unowned;
+        private string _starterKey;
         private Keyboard _keyboard;
         private string _directory;
         private Vector3 _safePosition;
@@ -127,6 +128,8 @@ namespace Game.Tests.Integration
             yield return Wait(() => GameStateMachine.Instance.Current == GameState.Reward, "Reward state");
             CharacterSkillRuntime runtime = CharacterSkillSaveParticipant.Instance.Runtime;
             Assert.That(runtime.GetSharedFilms(), Is.EquivalentTo(new[] { _filmA.PersistentKey, _filmB.PersistentKey }));
+            Assert.That(runtime.GetEquippedSkills(HeroA), Is.EqualTo(new[] { _starterKey }), "Acquiring Film must not auto-equip it or replace the explicit starter.");
+            runtime.TryUnequip(HeroA, _starterKey);
             Assert.That(runtime.GetEquippedSkills(HeroA), Is.Empty);
             Assert.That(CurrencyWallet.Instance.Gold, Is.EqualTo(57));
             Assert.That(CharacterProgressionService.Instance.TryGetState(HeroA, out int level, out _), Is.True);
@@ -317,6 +320,12 @@ namespace Game.Tests.Integration
             CharacterProgressionService.Instance.ConfigureForTests(HeroA, first, second);
             PartyRuntime.Instance.AddMember(HeroA); PartyRuntime.Instance.AddMember(HeroB);
             PartyRuntime.Instance.SetLeader(HeroA); PartyRuntime.Instance.SelectForCombat(HeroA, true);
+            // Official Hand/BP requires an equipped snapshot even before the first Film is won.
+            // This existing compatibility skill is fixture startup, not a Film acquisition bypass.
+            _starterKey = basic.PersistentKey;
+            var skills = CharacterSkillSaveParticipant.Instance.Runtime;
+            skills.TryAcquire(HeroA, _starterKey); skills.TryEquip(HeroA, _starterKey);
+            Assert.That(skills.GetEquippedSkills(HeroA), Is.EqualTo(new[] { _starterKey }));
         }
 
         private SkillDefinitionSO CloneSkill(SkillDefinitionSO source, string key, int id, SkillOwnershipCategory category, string name)
@@ -339,17 +348,22 @@ namespace Game.Tests.Integration
         private void ConfigureSceneInstances()
         {
             CombatEntryPoint entry = One<CombatEntryPoint>();
-            // Test-only in-memory setup: Film equip replaces compatibility skill IDs in the next snapshot.
-            // Keep hand validation active, but derive its cards from that snapshot instead of authored Debug cards.
-            var handFixture = entry.GetComponent<Game.Combat.Debugging.CombatHandValidationOptIn>();
-            Assert.That(handFixture, Is.Not.Null);
-            SerializedObject handData = new(handFixture);
-            handData.FindProperty("playerCardSource").enumValueIndex =
-                (int)Game.Combat.Debugging.CombatHandValidationOptIn.CardSource.SessionSkillSnapshot;
-            // The fixture equips two Films plus one unlocked Unique; draw all three normal cards
-            // deterministically. Existing scene clash classification stays separate from those clones.
-            handData.FindProperty("normalHandCapacity").intValue = 3;
-            handData.ApplyModifiedPropertiesWithoutUndo();
+            // Transient official Runtime configuration replaces Debug-owned snapshot/card setup.
+            // Preserve the former fixture's classification (compatibility skills 1/2 are Clash)
+            // and one card per snapshot skill. Film/Unique definitions remain test-only objects.
+            DebugFreeProductionTestSupport.RemoveDebug(entry.gameObject.scene);
+            var config = Track(DebugFreeProductionTestSupport.EnableCandidate(entry));
+            SerializedObject profile = new(config);
+            profile.FindProperty("normalHandCapacity").intValue = 3;
+            var rules = profile.FindProperty("handCardRules"); rules.arraySize = _registry.Length;
+            for (int i = 0; i < _registry.Length; i++)
+            {
+                var rule = rules.GetArrayElementAtIndex(i);
+                rule.FindPropertyRelative("skill").objectReferenceValue = _registry[i];
+                rule.FindPropertyRelative("kind").intValue = (int)(_registry[i].skillId == 1 || _registry[i].skillId == 2 ? CombatCardKind.Clash : CombatCardKind.Normal);
+                rule.FindPropertyRelative("copies").intValue = 1;
+            }
+            profile.ApplyModifiedPropertiesWithoutUndo();
             SerializedObject data = new(entry); SerializedProperty definitions = data.FindProperty("skillDefinitions");
             definitions.arraySize = _registry.Length;
             for (int i = 0; i < _registry.Length; i++) definitions.GetArrayElementAtIndex(i).objectReferenceValue = _registry[i];

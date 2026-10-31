@@ -286,8 +286,6 @@ namespace Game.Combat.Core
                 return false;
             }
 
-            PersistentSkillCombatLoadoutBridge.ApplyToRequest(request, skillDefinitions, this);
-
             GameStateMachine stateMachine = GameStateMachine.Instance;
             GameFlowController gameFlow = GameFlowController.Instance;
             if (stateMachine == null)
@@ -307,6 +305,16 @@ namespace Game.Combat.Core
                 LogStartRejected($"global GameState is {stateMachine.Current}, not Exploration", request, requestedAllyCount, requestedEnemyCount, 0, 0);
                 return false;
             }
+
+            if (request.FlowMode == CombatFlowMode.StandoffClashChain)
+            {
+                if (!PersistentSkillCombatLoadoutBridge.TryApplyForProduction(request, skillDefinitions, this, out string skillError))
+                {
+                    LogStartRejected(skillError, request, requestedAllyCount, requestedEnemyCount, 0, 0);
+                    return false;
+                }
+            }
+            else PersistentSkillCombatLoadoutBridge.ApplyToRequest(request, skillDefinitions, this);
 
             if (!TryNormalizeRequest(request, out NormalizedCombatStart normalized, out string normalizationError, out GameObject normalizationOffender))
             {

@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5d513bd0dcd545d498353c6c7e1ac5c8, type: 3}
+  m_Name: CharacterStart_AnandSkills_PlaytestV1_Candidate
+  m_EditorClassIdentifier: Assembly-CSharp::Game.NonCombat.Progress.CharacterStartDefinitionSO
+  definitions:
+  - {fileID: 11400000, guid: 65c6507dcbc40984fa36ade50b89e9aa, type: 2}
+  initialMemberIds:
+  - char.anand_de_morte
+  initialLeaderId: char.anand_de_morte
+  initialCombatMemberIds:
+  - char.anand_de_morte
+  defaultRewardTargetId: char.anand_de_morte
+  initialSkillGrants:
+  - characterId: char.anand_de_morte
+    skills:
+    - {fileID: 11400000, guid: 1b95a1b239871014c9e046b94233537e, type: 2}
+    - {fileID: 11400000, guid: 0e7bed18e4f4da84494e294e444296bb, type: 2}

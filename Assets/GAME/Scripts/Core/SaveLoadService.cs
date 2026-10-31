@@ -28,6 +28,15 @@ namespace Game.Core
         private OperationState _operationState;
         private int _operationToken;
         private bool _restoreHadErrors;
+        private NewGameRequest _pendingNewGameRequest;
+
+        // A request belongs to one explicit Title selection, not to a scene or a save file.
+        internal sealed class NewGameRequest
+        {
+            internal readonly SaveLoadService Owner;
+            internal bool Applied;
+            internal NewGameRequest(SaveLoadService owner) { Owner = owner; }
+        }
 
         public OperationState CurrentOperationState => _operationState;
         public string PrimarySavePath => Storage.PrimaryPath;
@@ -56,6 +65,58 @@ namespace Game.Core
         public void Load() => TryLoad(out _);
 
         public bool TryResetForNewGame(out string message)
+        {
+            // Compatibility callers explicitly request a fresh reset on every invocation.
+            // This API has no request identity; Production Title uses the internal request boundary.
+            _pendingNewGameRequest = null;
+            return TryResetRuntimeForNewGame(out message);
+        }
+
+        internal bool TryCreateNewGameRequest(out NewGameRequest request, out string message)
+        {
+            request = null;
+            if (_operationState != OperationState.Idle || GameStateMachine.Instance?.Current != GameState.Title)
+            {
+                message = "New Game selection requires an idle SaveLoadService and the Title game state.";
+                return false;
+            }
+            request = new NewGameRequest(this);
+            _pendingNewGameRequest = request;
+            message = null;
+            return true;
+        }
+
+        internal bool TryApplyNewGameRequest(NewGameRequest request, out string message)
+        {
+            if (request == null || request.Owner != this)
+            {
+                message = "New Game request belongs to a different SaveLoadService or is missing.";
+                return false;
+            }
+            if (request.Applied)
+            {
+                message = "New Game request was already applied; runtime state was preserved.";
+                return true;
+            }
+            if (!ReferenceEquals(request, _pendingNewGameRequest))
+            {
+                message = "New Game request is no longer current.";
+                return false;
+            }
+            if (_operationState != OperationState.Idle || GameStateMachine.Instance?.Current != GameState.Title)
+            {
+                message = "New Game request cannot be applied outside idle Title.";
+                return false;
+            }
+            // Consume before notifying reset owners. Reentrant callbacks cannot start another reset;
+            // a partial failure requires a new explicit selection, rather than replaying a partial reset.
+            _pendingNewGameRequest = null;
+            bool success = TryResetRuntimeForNewGame(out message);
+            request.Applied = success;
+            return success;
+        }
+
+        private bool TryResetRuntimeForNewGame(out string message)
         {
             GameStateMachine stateMachine = GameStateMachine.Instance;
             if (_operationState != OperationState.Idle || stateMachine == null ||
@@ -99,6 +160,9 @@ namespace Game.Core
                 if (!GameSaveDataValidator.TryValidate(snapshot, out message)) return FinishSaveFailure(message);
                 _operationState = OperationState.Writing;
                 if (!Storage.TryWrite(SaveSerializer.ToJson(snapshot), out message)) return FinishSaveFailure(message);
+                // A canonical save now contains explicit equipment lists; old read evidence
+                // must not authorize behavior after a successful re-save.
+                CharacterSkillSaveParticipant.Instance?.InvalidateEquipmentReadProvenance();
                 message = $"Saved {PrimarySavePath}.";
                 Complete(message);
                 OnSaveCompleted?.Invoke(true, message);
@@ -114,6 +178,7 @@ namespace Game.Core
         public bool TryLoad(out string message)
         {
             if (!TryBegin(true, out message)) return false;
+            _pendingNewGameRequest = null;
             _operationState = OperationState.Reading;
             if (!TryReadValidSnapshot(out GameSaveData snapshot, out bool backup, out message)) return Fail(message);
             string targetScene = snapshot.header.activeSceneId;
@@ -146,6 +211,7 @@ namespace Game.Core
         public void RestoreGameSaveDataSnapshot(GameSaveData saveData)
         {
             if (saveData == null) return;
+            _pendingNewGameRequest = null;
             _restoreHadErrors = false;
             foreach (ISaveDataConsumer consumer in Discover<ISaveDataConsumer>())
             {
@@ -182,7 +248,10 @@ namespace Game.Core
             try
             {
                 _operationState = OperationState.Migrating;
-                return GameSaveDataMigrator.TryMigrate(File.ReadAllText(path), out data, out _, out error);
+                // Give the migration owner the original text, not a deserialized/re-serialized
+                // copy: field absence and explicit [] are different source evidence.
+                string originalJson = File.ReadAllText(path);
+                return GameSaveDataMigrator.TryMigrate(originalJson, out data, out _, out error);
             }
             catch (Exception exception) { error = exception.Message; return false; }
         }

@@ -82,7 +82,9 @@ namespace Game.NonCombat.Save
                 return false;
 
             GameSaveDataValidator.Normalize(data);
-            return GameSaveDataValidator.TryValidate(data, out error);
+            if (!GameSaveDataValidator.TryValidate(data, out error)) return false;
+            data.ReadProvenance = SaveReadProvenance.FromOriginal(json, data);
+            return true;
         }
 
         private static void MigrateVersion13(GameSaveData data)

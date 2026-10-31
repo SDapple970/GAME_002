@@ -1,0 +1,13 @@
+fileFormatVersion: 2
+guid: f461f3f5e5c322e4db2ee3bb71d5bfcd
+labels:
+- CopiesFixtureOnly
+- PlaytestV1
+- ProductionWiringPending
+- TestOnly
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

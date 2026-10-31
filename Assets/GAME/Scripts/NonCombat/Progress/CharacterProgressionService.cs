@@ -14,11 +14,38 @@ namespace Game.NonCombat.Progress
         [SerializeField] private List<CharacterProgressionDefinitionSO> definitions = new();
         private readonly Dictionary<string, State> _states = new(StringComparer.Ordinal);
         private CharacterStartDefinitionSO _startDefinition;
+        private CharacterProgressionDefinitionSO _registeredLegacyDefinition;
 
         public string DefaultRewardTargetId => NormalizeId(defaultRewardTargetId);
         public CharacterStartDefinitionSO StartDefinition => _startDefinition;
         public event Action<ExperienceApplyResult> ProgressionChanged;
         public event Action Refreshed;
+
+        // Registration adds authored lookup data only: it never joins a Party, grants skills,
+        // or resets/restates a loaded character's progression.
+        internal bool HasRegisteredLegacyDefinition => FindDefinition("hero.test") != null;
+
+        internal bool TryRegisterLegacyDefinition(CharacterProgressionDefinitionSO definition, out string message)
+        {
+            if (definition == null || definition.CharacterId != "hero.test")
+            { message = "The existing hero.test definition is required."; return false; }
+            if (definition.StartingLevel < 1 || definition.MaximumLevel < definition.StartingLevel)
+            { message = "Legacy definition has an invalid level range."; return false; }
+            for (int level = definition.StartingLevel; level < definition.MaximumLevel; level++)
+                if (!definition.TryGetRequiredExperience(level, out _))
+                { message = "Legacy definition has an invalid experience curve."; return false; }
+            var existing = FindDefinition("hero.test");
+            if (existing != null && existing != definition)
+            { message = "A different definition already owns hero.test."; return false; }
+            if (_states.TryGetValue("hero.test", out State state) && !IsSupportedLegacyState(definition, state.Level, state.Experience))
+            { message = "Loaded hero.test progression is outside the existing definition; raw state was preserved."; return false; }
+            // Compatibility lookup is separate from authored New Game definitions. Do not
+            // seed a new hero state just because a definition is available to a later Load.
+            _registeredLegacyDefinition = definition;
+            if (state != null) state.Definition = definition;
+            message = null;
+            return true;
+        }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics() => Instance = null;
@@ -61,6 +88,7 @@ namespace Game.NonCombat.Progress
                     _states.Add(id, new State { Definition = definition, Level = definition.StartingLevel, Experience = 0 });
                 else if (state.Definition == null)
                 {
+                    if (id == "hero.test" && !IsSupportedLegacyState(definition, state.Level, state.Experience)) continue;
                     NormalizeRestoredState(definition, state.Level, state.Experience, out int level, out int experience);
                     state.Definition = definition; state.Level = level; state.Experience = experience;
                 }
@@ -77,7 +105,10 @@ namespace Game.NonCombat.Progress
 
         public bool TryGetDefinition(string characterId, out CharacterProgressionDefinitionSO definition)
         {
-            definition = FindDefinition(NormalizeId(characterId));
+            string id = NormalizeId(characterId);
+            definition = FindDefinition(id);
+            if (id == "hero.test" && _states.TryGetValue(id, out State state) && state.Definition == null)
+                definition = null;
             return definition != null;
         }
 
@@ -162,6 +193,12 @@ namespace Game.NonCombat.Progress
             foreach (KeyValuePair<string, CharacterProgressionStateSaveData> pair in normalized)
             {
                 CharacterProgressionDefinitionSO definition = FindDefinition(pair.Key);
+                if (pair.Key == "hero.test" && definition != null &&
+                    !IsSupportedLegacyState(definition, pair.Value.level, pair.Value.experience))
+                {
+                    _states[pair.Key] = new State { Definition = null, Level = pair.Value.level, Experience = pair.Value.experience };
+                    continue;
+                }
                 if (definition != null)
                 {
                     NormalizeRestoredState(definition, pair.Value.level, pair.Value.experience, out int level, out int experience);
@@ -195,7 +232,7 @@ namespace Game.NonCombat.Progress
         {
             foreach (CharacterProgressionDefinitionSO definition in definitions)
                 if (definition != null && string.Equals(NormalizeId(definition.CharacterId), id, StringComparison.Ordinal)) return definition;
-            return null;
+            return id == "hero.test" ? _registeredLegacyDefinition : null;
         }
 
         private static void NormalizeRestoredState(CharacterProgressionDefinitionSO definition, int savedLevel, int savedExperience, out int level, out int experience)
@@ -218,6 +255,13 @@ namespace Game.NonCombat.Progress
                 level++;
             }
             experience = 0;
+        }
+
+        private static bool IsSupportedLegacyState(CharacterProgressionDefinitionSO definition, int level, int experience)
+        {
+            if (level < definition.StartingLevel || level > definition.MaximumLevel || experience < 0) return false;
+            if (level == definition.MaximumLevel) return experience == 0;
+            return definition.TryGetRequiredExperience(level, out int required) && experience < required;
         }
 
         private static bool TryApplyToCanonicalState(CharacterProgressionDefinitionSO definition, int currentLevel, int currentExperience, int requested, out int level, out int experience, out int applied)

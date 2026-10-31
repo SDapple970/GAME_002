@@ -8274,6 +8274,7 @@ MonoBehaviour:
   createMissingCoreServices: 1
   logWarnings: 1
   characterStartDefinition: {fileID: 0}
+  legacyCharacterDefinition: {fileID: 11400000, guid: 289a48d3275f99649a3f67dbc426837f, type: 2}
 --- !u!1 &727240670
 GameObject:
   m_ObjectHideFlags: 0
@@ -24619,9 +24620,6 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1665839071176935761}
-    - targetCorrespondingSourceObject: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1665839071176935766}
   m_SourcePrefab: {fileID: 100100000, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
 --- !u!114 &1665839071176935754 stripped
 MonoBehaviour:
@@ -24731,27 +24729,6 @@ MonoBehaviour:
   responderDurability: 3
   maxComparisons: 3
   decisionDurationSeconds: 5
---- !u!114 &1665839071176935766
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1665839071176935756}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4bd31fad07c44e9795d18530d37a6855, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Debugging.CombatBpValidationOptIn
-  entryPoint: {fileID: 1665839071176935754}
-  orchestrator: {fileID: 1665839071176935755}
-  enableValidation: 1
-  maximumBp: 3
-  roundCyclesPerGain: 2
-  maximumInvestment: 3
-  initialPlayerBp: 3
-  skillFixtures: []
-  ultimateSkill: {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
