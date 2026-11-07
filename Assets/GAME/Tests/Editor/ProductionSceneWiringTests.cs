@@ -156,7 +156,9 @@ namespace Game.Tests.Integration
             Assert.That(definitions, Has.None.Null, path);
             int[] registeredIds = definitions.Select(definition => definition.skillId).ToArray();
             Assert.That(registeredIds, Has.All.GreaterThan(0), path);
-            Assert.That(registeredIds, Is.EquivalentTo(new[] { 1, 2, 11, 12 }), path);
+            Assert.That(registeredIds, Is.EquivalentTo(path == ProductionDungeon
+                ? new[] { 1, 2, 11, 12, 10001, 10002, 10003 }
+                : new[] { 1, 2, 11, 12 }), path);
             Assert.That(registeredIds.Distinct().Count(), Is.EqualTo(registeredIds.Length), path);
 
             SkillDefinitionSO basicAttack = definitions.Single(definition => definition.skillId == 1);

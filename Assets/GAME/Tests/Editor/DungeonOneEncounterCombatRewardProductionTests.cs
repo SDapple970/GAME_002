@@ -73,7 +73,9 @@ namespace Game.Tests.Integration
 
             CombatEntryPoint entryPoint = FindAll<CombatEntryPoint>().Single();
             SerializedProperty definitions = new SerializedObject(entryPoint).FindProperty("skillDefinitions");
-            Assert.That(definitions.arraySize, Is.EqualTo(4));
+            Assert.That(definitions.arraySize, Is.EqualTo(7));
+            Assert.That(entryPoint.RegisteredSkillDefinitions.Select(skill => skill.skillId),
+                Is.EqualTo(new[] { 1, 2, 11, 12, 10001, 10002, 10003 }));
             for (int index = 0; index < definitions.arraySize; index++)
                 Assert.That(definitions.GetArrayElementAtIndex(index).objectReferenceValue, Is.Not.Null);
 

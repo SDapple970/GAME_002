@@ -338,13 +338,8 @@ namespace Game.Tests.Integration
                     {
                         var originalConfig = entry.FinalExchangeRuntimeConfig;
                         var originalRegistry = entry.RegisteredSkillDefinitions.ToArray();
-                        Assert.That(originalRegistry.Select(skill => skill.skillId), Is.EqualTo(new[] { 1, 2, 11, 12 }));
-                        var isolatedRegistry = originalRegistry.Concat(new[] {
-                            AssetDatabase.LoadAssetAtPath<SkillDefinitionSO>("Assets/GAME/Data/Skill/Skill_AnandBasic_PlaytestV1.asset"),
-                            AssetDatabase.LoadAssetAtPath<SkillDefinitionSO>("Assets/GAME/Data/Skill/Skill_Zornhau_PlaytestV1.asset"),
-                            AssetDatabase.LoadAssetAtPath<SkillDefinitionSO>("Assets/GAME/Data/Skill/Skill_AngelTheProphecy_PlaytestV1.asset") }).ToArray();
-                        Set(entry, "skillDefinitions", isolatedRegistry); Call(entry, "Awake");
-                        var candidate = EnableCandidate(entry);
+                        Assert.That(originalRegistry.Select(skill => skill.skillId), Is.EqualTo(new[] { 1, 2, 11, 12, 10001, 10002, 10003 }));
+                        Assert.That(originalConfig.EnableProductionHandBp, Is.True);
                         try
                         {
                             Assert.That(entry.StartCombat(request), Is.True);
@@ -363,7 +358,6 @@ namespace Game.Tests.Integration
                         {
                             Set(entry, "finalExchangeRuntimeConfig", originalConfig);
                             Set(entry, "skillDefinitions", originalRegistry); Call(entry, "Awake");
-                            Object.DestroyImmediate(candidate);
                         }
                     }
                     else

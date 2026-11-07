@@ -26,7 +26,7 @@ using static Game.Tests.Integration.DebugFreeProductionTestSupport;
 namespace Game.Tests.Integration
 {
     // Conditional C2A gate: disk Load compatibility and candidate Combat compatibility are distinct.
-    // Negative tests intentionally prove why the authored Scene/config activation must remain pending.
+    // Negative tests retain the pre-activation configuration as an isolated fixture.
     public sealed class ProductionInitializationCompatibilityTests
     {
         private const string StartPath = "Assets/GAME/Data/Character/CharacterStart_AnandDeMorte.asset";
@@ -168,7 +168,7 @@ namespace Game.Tests.Integration
             Assert.That(_registry.Select(skill => skill.skillId).Distinct().Count(), Is.EqualTo(7));
             Assert.That(_registry.Select(skill => skill.PersistentKey).Distinct(StringComparer.Ordinal).Count(), Is.EqualTo(7));
             var config = AssetDatabase.LoadAssetAtPath<FinalCombatRuntimeConfigSO>(ConfigPath);
-            Assert.That(config.EnableProductionHandBp, Is.False);
+            Assert.That(config.EnableProductionHandBp, Is.True);
             Assert.That(config.InitialMp, Is.EqualTo(2)); Assert.That(config.NormalHandCapacity, Is.EqualTo(2)); Assert.That(config.ClashHandCapacity, Is.EqualTo(3));
             Assert.That(config.HandCardRules.Select(rule => rule.Skill.skillId), Is.EqualTo(new[] { 10001, 10002, 1, 2 }));
             Assert.That(config.HandCardRules.Select(rule => rule.Kind), Is.EqualTo(new[] { CombatCardKind.Normal, CombatCardKind.Clash, CombatCardKind.Normal, CombatCardKind.Clash }));
@@ -180,7 +180,7 @@ namespace Game.Tests.Integration
         }
 
         [Test]
-        public void ProtectedSceneConnectionsAndDebug_RemainAtPreActivationBoundary() => AssertProductionConnectionsRemainPending();
+        public void ProtectedSceneConnectionsAndDebug_UseApprovedProductionReferences() => ProductionInitializationConnectionTests.AssertSavedConnections();
 
         [Test]
         public void LegacyRules_ApplyToAnotherEquippedCharacter_AndNewGameStillRestoresAnandTwoThree()
@@ -292,10 +292,10 @@ namespace Game.Tests.Integration
             string legacyPath = AssetDatabase.GetAssetPath(legacy);
             var dungeon = EditorSceneManager.OpenScene(DungeonPath, OpenSceneMode.Single);
             var authoredEntry = dungeon.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<CombatEntryPoint>(true)).Single();
-            Assert.That(authoredEntry.RegisteredSkillDefinitions.Select(skill => skill.skillId), Is.EqualTo(new[] { 1, 2, 11, 12 }));
-            string[] registryPaths = authoredEntry.RegisteredSkillDefinitions.Select(AssetDatabase.GetAssetPath).Concat(new[] {
-                "Assets/GAME/Data/Skill/Skill_AnandBasic_PlaytestV1.asset", "Assets/GAME/Data/Skill/Skill_Zornhau_PlaytestV1.asset", "Assets/GAME/Data/Skill/Skill_AngelTheProphecy_PlaytestV1.asset" }).ToArray();
-            string currentConfigPath = AssetDatabase.GetAssetPath(authoredEntry.FinalExchangeRuntimeConfig);
+            Assert.That(authoredEntry.RegisteredSkillDefinitions.Select(skill => skill.skillId), Is.EqualTo(new[] { 1, 2, 11, 12, 10001, 10002, 10003 }));
+            string[] registryPaths = authoredEntry.RegisteredSkillDefinitions.Select(AssetDatabase.GetAssetPath).ToArray();
+            // Preserve the disabled-config negative cases after the scene activates its approved override.
+            string currentConfigPath = AssetDatabase.GetAssetPath(PrefabUtility.GetCorrespondingObjectFromSource(authoredEntry).FinalExchangeRuntimeConfig);
             var empty = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single); empty.name = "C2ACompatibilityRestart";
             // Close the source scenes before resolving test inputs: cold Editor runs unload assets
             // that are only referenced by managed fixture objects rather than a live Unity owner.

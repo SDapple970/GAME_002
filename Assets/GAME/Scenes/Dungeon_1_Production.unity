@@ -8273,7 +8273,7 @@ MonoBehaviour:
   applyInitialStateOnStart: 1
   createMissingCoreServices: 1
   logWarnings: 1
-  characterStartDefinition: {fileID: 0}
+  characterStartDefinition: {fileID: 11400000, guid: 5b2e29e279d96f64291e0d33e37f39a2, type: 2}
   legacyCharacterDefinition: {fileID: 11400000, guid: 289a48d3275f99649a3f67dbc426837f, type: 2}
 --- !u!1 &727240670
 GameObject:
@@ -24588,8 +24588,12 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 2122203422}
     - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: finalExchangeRuntimeConfig
+      value:
+      objectReference: {fileID: 11400000, guid: 44a8b6f4c6314396953f0792e126d13a, type: 2}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
       propertyPath: skillDefinitions.Array.size
-      value: 4
+      value: 7
       objectReference: {fileID: 0}
     - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
       propertyPath: 'skillDefinitions.Array.data[0]'
@@ -24607,19 +24611,26 @@ PrefabInstance:
       propertyPath: 'skillDefinitions.Array.data[3]'
       value: 
       objectReference: {fileID: 11400000, guid: 1f9d7ebdbd0b7fd48ace84c03839d87e, type: 2}
-    m_RemovedComponents: []
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: 'skillDefinitions.Array.data[4]'
+      value:
+      objectReference: {fileID: 11400000, guid: 1b95a1b239871014c9e046b94233537e, type: 2}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: 'skillDefinitions.Array.data[5]'
+      value:
+      objectReference: {fileID: 11400000, guid: 0e7bed18e4f4da84494e294e444296bb, type: 2}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: 'skillDefinitions.Array.data[6]'
+      value:
+      objectReference: {fileID: 11400000, guid: d58afbdd7afcab242878d3b1354d03ea, type: 2}
+    m_RemovedComponents:
+    - {fileID: 3049129679861795314, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1665839071176935757}
-    - targetCorrespondingSourceObject: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1665839071176935759}
-    - targetCorrespondingSourceObject: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 1665839071176935761}
   m_SourcePrefab: {fileID: 100100000, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
 --- !u!114 &1665839071176935754 stripped
 MonoBehaviour:
@@ -24668,67 +24679,6 @@ MonoBehaviour:
   minOrthoSize: 4
   maxOrthoSize: 8
   combatOffset: {x: 0, y: 0.8, z: 0}
---- !u!114 &1665839071176935759
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1665839071176935756}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bce1360c580248db935ccf2b6f845871, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Debugging.CombatHandValidationOptIn
-  entryPoint: {fileID: 1665839071176935754}
-  orchestrator: {fileID: 1665839071176935755}
-  enableValidation: 1
-  playerCardSource: 1
-  clashSkillDefinitions:
-  - {fileID: 11400000, guid: 762d0613f18cd424eba3e68f2b4e1bf5, type: 2}
-  - {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}
-  fixtureCards:
-  - skill: {fileID: 11400000, guid: 762d0613f18cd424eba3e68f2b4e1bf5, type: 2}
-    kind: 0
-    copies: 4
-  - skill: {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}
-    kind: 1
-    copies: 6
-  normalHandCapacity: 2
-  clashHandCapacity: 3
-  seed: 2303
-  enableEnemyHand: 1
-  enemyCardSource: 1
-  enemyClashSkillDefinitions:
-  - {fileID: 11400000, guid: 3f33bab0ec4af6c4db0b827917ba147d, type: 2}
-  - {fileID: 11400000, guid: 1f9d7ebdbd0b7fd48ace84c03839d87e, type: 2}
-  enemyFixtureCards:
-  - skill: {fileID: 11400000, guid: 3f33bab0ec4af6c4db0b827917ba147d, type: 2}
-    kind: 0
-    copies: 4
-  - skill: {fileID: 11400000, guid: 1f9d7ebdbd0b7fd48ace84c03839d87e, type: 2}
-    kind: 1
-    copies: 6
-  enemySeed: 2304
---- !u!114 &1665839071176935761
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1665839071176935756}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 040a0e4f14ef4872ac50661f4ee830da, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Debugging.CombatClashSeriesValidationOptIn
-  entryPoint: {fileID: 1665839071176935754}
-  orchestrator: {fileID: 1665839071176935755}
-  enableValidation: 1
-  attackerDurability: 3
-  responderDurability: 3
-  maxComparisons: 3
-  decisionDurationSeconds: 5
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

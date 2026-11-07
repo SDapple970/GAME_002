@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using Game.Combat.Adapters;
 using Game.Combat.Core;
+using Game.Combat.Data;
 using Game.Combat.Integration;
 using Game.Combat.Model;
 using Game.Core;
@@ -119,10 +120,12 @@ namespace Game.Tests.Integration
         {
             Application.logMessageReceived += RecordLog;
             yield return null;
-            // Current scene has no approved startup asset. Compatibility remains explicit and unconfigured.
-            Assert.That(PartyRuntime.Instance, Is.Not.Null); Assert.That(PartyRuntime.Instance.StartDefinition, Is.Null);
+            // Verify the real authored startup before installing this two-character fixture.
+            Assert.That(PartyRuntime.Instance, Is.Not.Null);
+            Assert.That(PartyRuntime.Instance.StartDefinition, Is.SameAs(AssetDatabase.LoadAssetAtPath<CharacterStartDefinitionSO>(ProductionInitializationConnectionTests.StartPath)));
             Assert.That(CharacterProgressionService.Instance.TryGetDefinition(HeroA, out _), Is.False);
             PrepareStart(); InstallStart(); AssertInitialParty(); State(HeroA, 1, 0);
+            CharacterSkillSaveParticipant.Instance.ResetForNewGame();
             Player().GetComponent<Rigidbody2D>().gravityScale = 0;
             CombatEncounterGroup group = UnityEngine.Object.FindObjectsByType<CombatEncounterGroup>(FindObjectsSortMode.None).First();
             foreach (Game.Enemies.FieldEnemyPatrolAI2D patrol in group.GetComponentsInChildren<Game.Enemies.FieldEnemyPatrolAI2D>()) patrol.enabled = false;
@@ -162,6 +165,17 @@ namespace Game.Tests.Integration
             _start = Track(ScriptableObject.CreateInstance<CharacterStartDefinitionSO>());
             Set(_start, "definitions", new[] { Definition(HeroA), Definition(HeroB) }); Set(_start, "initialMemberIds", new[] { HeroA, HeroB });
             Set(_start, "initialLeaderId", HeroA); Set(_start, "initialCombatMemberIds", new[] { HeroA }); Set(_start, "defaultRewardTargetId", HeroB);
+            // Both fixture members need explicit equipped snapshots under the active Hand/BP profile.
+            var data = new SerializedObject(_start); var grants = data.FindProperty("initialSkillGrants"); grants.arraySize = 2;
+            for (int i = 0; i < 2; i++)
+            {
+                var grant = grants.GetArrayElementAtIndex(i);
+                grant.FindPropertyRelative("characterId").stringValue = i == 0 ? HeroA : HeroB;
+                var skills = grant.FindPropertyRelative("skills"); skills.arraySize = 2;
+                skills.GetArrayElementAtIndex(0).objectReferenceValue = AssetDatabase.LoadAssetAtPath<SkillDefinitionSO>("Assets/GAME/Data/Skill/Skill_BasicAttack.asset");
+                skills.GetArrayElementAtIndex(1).objectReferenceValue = AssetDatabase.LoadAssetAtPath<SkillDefinitionSO>("Assets/GAME/Data/Skill/Skill_skill2.asset");
+            }
+            data.ApplyModifiedPropertiesWithoutUndo();
         }
         private CharacterProgressionDefinitionSO Definition(string id)
         {
@@ -170,6 +184,18 @@ namespace Game.Tests.Integration
         }
         private void InstallStart()
         {
+            // This older test injects two unapproved characters. Give them fresh fixture
+            // owners instead of attempting to replace the approved Start on a live owner.
+            // The unchanged Production scenes/startup are exercised by ConnectionTests.
+            if (PartyRuntime.Instance.StartDefinition != null && PartyRuntime.Instance.StartDefinition != _start)
+            {
+                UnityEngine.Object.DestroyImmediate(PartyRuntime.Instance);
+                UnityEngine.Object.DestroyImmediate(CharacterProgressionService.Instance);
+                UnityEngine.Object.DestroyImmediate(CharacterSkillSaveParticipant.Instance);
+                new GameObject("TestOnly.B02.Party").AddComponent<PartyRuntime>();
+                new GameObject("TestOnly.B02.Progression").AddComponent<CharacterProgressionService>();
+                new GameObject("TestOnly.B02.Skills").AddComponent<CharacterSkillSaveParticipant>();
+            }
             RuntimeBootstrapper bootstrap = UnityEngine.Object.FindFirstObjectByType<RuntimeBootstrapper>(); Assert.That(bootstrap, Is.Not.Null);
             Set(bootstrap, "characterStartDefinition", _start); Invoke(bootstrap, "BootstrapCoreServices", true, false, false);
         }

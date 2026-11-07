@@ -416,7 +416,7 @@ namespace Game.Tests.Integration
             _gameFlow.EnterExploration();
             var source = AssetDatabase.LoadAssetAtPath<FinalCombatRuntimeConfigSO>(ConfigPath);
             Assert.That(AssetDatabase.AssetPathToGUID(ConfigPath), Is.EqualTo("44a8b6f4c6314396953f0792e126d13a"));
-            Assert.That(source.EnableProductionHandBp, Is.False);
+            Assert.That(source.EnableProductionHandBp, Is.True);
             if (_entry == null)
             {
                 var config = Track(Object.Instantiate(source)); Set(config, "enableProductionHandBp", true);

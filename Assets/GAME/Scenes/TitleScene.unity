@@ -2581,6 +2581,7 @@ MonoBehaviour:
   applyInitialStateOnStart: 1
   createMissingCoreServices: 1
   logWarnings: 1
+  characterStartDefinition: {fileID: 11400000, guid: 5b2e29e279d96f64291e0d33e37f39a2, type: 2}
 --- !u!114 &2105000003
 MonoBehaviour:
   m_ObjectHideFlags: 0

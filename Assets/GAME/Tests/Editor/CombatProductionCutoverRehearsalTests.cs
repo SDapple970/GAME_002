@@ -61,9 +61,20 @@ namespace Game.Tests.Integration
             Assert.That(entry.FinalExchangeRuntimeConfig.EnableProductionHandBp, Is.False);
             Assert.That(entry.FinalExchangeRuntimeConfig.HandCardRules, Is.Empty);
             Assert.That(entry.FinalExchangeRuntimeConfig.ClashMaxComparisons, Is.Zero);
+            var sourceBp = source.GetComponent<CombatBpValidationOptIn>();
+            Assert.That(sourceBp.enabled, Is.True);
+            var bpData = new SerializedObject(sourceBp);
+            Assert.That(bpData.FindProperty("entryPoint").objectReferenceValue, Is.SameAs(entry));
+            Assert.That(bpData.FindProperty("orchestrator").objectReferenceValue, Is.SameAs(source.GetComponent<CombatFlowOrchestrator>()));
+            Assert.That(bpData.FindProperty("initialPlayerBp").intValue, Is.EqualTo(3));
+            Assert.That(bpData.FindProperty("skillFixtures").arraySize, Is.EqualTo(1));
             string dungeon = File.ReadAllText(DungeonPath); string template = File.ReadAllText(TemplatePath);
-            foreach (string id in new[] { "1665839071176935759", "1665839071176935761" })
-                Assert.That(dungeon, Does.Contain("addedObject: {fileID: " + id + "}"));
+            foreach (string sceneText in new[] { dungeon, template })
+                foreach (string id in new[] { "1665839071176935759", "1665839071176935761" })
+                {
+                    Assert.That(sceneText, Does.Not.Contain("addedObject: {fileID: " + id + "}"));
+                    Assert.That(sceneText, Does.Not.Contain("--- !u!114 &" + id));
+                }
             Assert.That(dungeon, Does.Not.Contain("addedObject: {fileID: 1665839071176935766}"));
             Assert.That(dungeon, Does.Not.Contain("--- !u!114 &1665839071176935766"));
             Assert.That(dungeon, Does.Contain("addedObject: {fileID: 1665839071176935757}"));
@@ -72,41 +83,39 @@ namespace Game.Tests.Integration
             Assert.That(template, Does.Contain("m_SourcePrefab: {fileID: 100100000, guid: 1bfc52cd235e809449d17d48571f5a38"));
             try
             {
-                Scene scene = EditorSceneManager.OpenScene(DungeonPath, OpenSceneMode.Single);
-                GameObject runtime = GameObject.Find("Runtime/Combat/CombatRuntime");
-                Assert.That(runtime, Is.Not.Null);
-                var bp = runtime.GetComponents<CombatBpValidationOptIn>();
-                Assert.That(bp, Has.Length.EqualTo(1));
-                Assert.That(PrefabUtility.IsAddedComponentOverride(bp[0]), Is.False);
-                Assert.That(PrefabUtility.GetCorrespondingObjectFromSource(bp[0]),
-                    Is.SameAs(source.GetComponent<CombatBpValidationOptIn>()));
-                Assert.That(bp[0].enabled, Is.True);
-                var bpData = new SerializedObject(bp[0]);
-                Assert.That(bpData.FindProperty("entryPoint").objectReferenceValue, Is.SameAs(runtime.GetComponent<CombatEntryPoint>()));
-                Assert.That(bpData.FindProperty("orchestrator").objectReferenceValue, Is.SameAs(runtime.GetComponent<CombatFlowOrchestrator>()));
-                Assert.That(bpData.FindProperty("initialPlayerBp").intValue, Is.EqualTo(3));
-                Assert.That(bpData.FindProperty("skillFixtures").arraySize, Is.EqualTo(1));
-                foreach (Type type in new[] { typeof(CombatHandValidationOptIn), typeof(CombatClashSeriesValidationOptIn), typeof(CombatCameraController) })
+                foreach (string path in new[] { DungeonPath, TemplatePath })
                 {
-                    Component[] retained = runtime.GetComponents(type);
-                    Assert.That(retained, Has.Length.EqualTo(1), type.Name);
-                    Assert.That(PrefabUtility.IsAddedComponentOverride(retained[0]), Is.True, type.Name);
-                }
-                GameObject[] objects = scene.GetRootGameObjects()
-                    .SelectMany(root => root.GetComponentsInChildren<Transform>(true)).Select(value => value.gameObject).ToArray();
-                Assert.That(objects.Sum(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount), Is.Zero);
-                foreach (Component component in objects.SelectMany(value => value.GetComponents<Component>()))
-                {
-                    if (component == null) continue;
-                    var properties = new SerializedObject(component).GetIterator();
-                    while (properties.Next(true))
-                        if (properties.propertyType == SerializedPropertyType.ObjectReference && properties.objectReferenceValue == null)
-                            Assert.That(properties.objectReferenceInstanceIDValue, Is.Zero,
-                                $"Missing reference: {component.name}/{component.GetType().Name}.{properties.propertyPath}");
+                    Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                    GameObject runtime = GameObject.Find("Runtime/Combat/CombatRuntime");
+                    Assert.That(runtime, Is.Not.Null);
+                    var sceneEntry = runtime.GetComponent<CombatEntryPoint>();
+                    ProductionInitializationConnectionTests.AssertDebugRemovedRuntime(sceneEntry);
+                    DebugFreeProductionTestSupport.AssertClean(scene);
+                    Assert.That(sceneEntry.FlowOrchestrator, Is.SameAs(runtime.GetComponent<CombatFlowOrchestrator>()));
+                    Assert.That(GetField(sceneEntry, "director"), Is.SameAs(runtime.GetComponent<CombatDirector>()));
+                    Assert.That(GetField(sceneEntry.FlowOrchestrator, "entryPoint"), Is.SameAs(sceneEntry));
+                    Assert.That(sceneEntry.FinalExchangeRuntimeConfig.EnableProductionHandBp, Is.EqualTo(path == DungeonPath));
+                    Assert.That(sceneEntry.RegisteredSkillDefinitions.Select(skill => skill.skillId), Is.EqualTo(path == DungeonPath
+                        ? new[] { 1, 2, 11, 12, 10001, 10002, 10003 } : new[] { 1, 2, 11, 12 }));
+                    var camera = runtime.GetComponents<CombatCameraController>();
+                    Assert.That(camera, Has.Length.EqualTo(1));
+                    Assert.That(PrefabUtility.IsAddedComponentOverride(camera[0]), Is.True);
+                    GameObject[] objects = scene.GetRootGameObjects()
+                        .SelectMany(root => root.GetComponentsInChildren<Transform>(true)).Select(value => value.gameObject).ToArray();
+                    Assert.That(objects.Sum(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount), Is.Zero);
+                    foreach (Component component in objects.SelectMany(value => value.GetComponents<Component>()))
+                    {
+                        if (component == null) continue;
+                        var properties = new SerializedObject(component).GetIterator();
+                        while (properties.Next(true))
+                            if (properties.propertyType == SerializedPropertyType.ObjectReference && properties.objectReferenceValue == null)
+                                Assert.That(properties.objectReferenceInstanceIDValue, Is.Zero,
+                                    $"Missing reference: {component.name}/{component.GetType().Name}.{properties.propertyPath}");
+                    }
                 }
             }
             finally { EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single); }
-            TestContext.WriteLine("Pending: Production Config disabled/missing Hand-BP-Clash authoring; base registry empty (Dungeon/Template overrides differ); official Character IDs/equipped snapshots, Enemy sources/skills, copies/seed/enhancements and optional Ultimate/AllOut content remain separate from fixtures.");
+            TestContext.WriteLine("Production/Template Debug removed through scene overrides; source BP fixture retained. Production uses its approved active profile and seven skills; Template retains its disabled profile and four skills.");
         }
 
         [TestCase(false)]

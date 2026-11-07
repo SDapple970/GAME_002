@@ -70,17 +70,21 @@ public sealed class DebugFreeAnandAngelIntegrationTests
         Assert.That(EditorSceneManager.SaveScene(scene, ScenePath), Is.True);
     }
 
-    [TestCase("Assets/GAME/Scenes/Dungeon_1_Production.unity", 3)]
-    [TestCase("Assets/GAME/Scenes/Dungeon_Template.unity", 1)]
+    [TestCase("Assets/GAME/Scenes/Dungeon_1_Production.unity", 0)]
+    [TestCase("Assets/GAME/Scenes/Dungeon_Template.unity", 0)]
     public void OriginalScene_InMemoryRemoval_PreservesPrefabAndAllReferences(string source, int expected)
     {
         string copyPath = AssetDatabase.GenerateUniqueAssetPath("Assets/GAME/Tests/PlayMode/C1_TemporaryRemovalProbe.unity");
         var original = EditorSceneManager.OpenScene(source, OpenSceneMode.Single);
+        var originalEntry = original.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<CombatEntryPoint>(true)).Single();
+        ProductionInitializationConnectionTests.AssertDebugRemovedRuntime(originalEntry);
+        DebugFreeProductionTestSupport.AssertClean(original);
         Assert.That(EditorSceneManager.SaveScene(original, copyPath, true), Is.True);
         var scene = EditorSceneManager.OpenScene(copyPath, OpenSceneMode.Single);
         try
         {
             var entry = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<CombatEntryPoint>(true)).Single();
+            ProductionInitializationConnectionTests.AssertDebugRemovedRuntime(entry);
             Assert.That(PrefabUtility.IsPartOfPrefabInstance(entry), Is.True);
             var prefabEntry = PrefabUtility.GetCorrespondingObjectFromSource(entry);
             Assert.That(prefabEntry.GetComponent<CombatBpValidationOptIn>(), Is.Not.Null);

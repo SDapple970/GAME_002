@@ -260,7 +260,7 @@ namespace Game.Tests.Integration
             yield return Wait(() => SceneManager.GetActiveScene().name == "TitleScene" && GameStateMachine.Instance.Current == GameState.Title, "Title re-entry");
             Assert.That(service.TryResetForNewGame(out string resetMessage), Is.True, resetMessage);
             Assert.That(runtime.GetSharedFilms(), Is.Empty);
-            Assert.That(PartyRuntime.Instance.Members, Is.Empty);
+            Assert.That(PartyRuntime.Instance.Members, Is.EqualTo(new[] { "char.anand_de_morte" }));
             _loadCompleted = false; _loadSucceeded = false;
             service.OnLoadCompleted += HandleLoad;
             Assert.That(service.TryLoad(out string loadMessage), Is.True, loadMessage);
@@ -317,7 +317,11 @@ namespace Game.Tests.Integration
             CharacterProgressionDefinitionSO second = Track(ScriptableObject.CreateInstance<CharacterProgressionDefinitionSO>());
             FilmUniqueProductionIntegrationTests.ConfigureCharacter(first, HeroA, 4, unique, 100);
             FilmUniqueProductionIntegrationTests.ConfigureCharacter(second, HeroB, 4, Array.Empty<SkillDefinitionSO>(), 100);
-            CharacterProgressionService.Instance.ConfigureForTests(HeroA, first, second);
+            var authored = AssetDatabase.LoadAssetAtPath<CharacterStartDefinitionSO>(ProductionInitializationConnectionTests.StartPath);
+            CharacterProgressionService.Instance.ConfigureForTests(HeroA, new[] { first, second }.Concat(authored.Definitions).ToArray());
+            // Keep this Film/Unique scenario's two-character party isolated from authored
+            // New Game content without changing the official startup configuration.
+            PartyRuntime.Instance.RestoreSaveData(new GameSaveData());
             PartyRuntime.Instance.AddMember(HeroA); PartyRuntime.Instance.AddMember(HeroB);
             PartyRuntime.Instance.SetLeader(HeroA); PartyRuntime.Instance.SelectForCombat(HeroA, true);
             // Official Hand/BP requires an equipped snapshot even before the first Film is won.

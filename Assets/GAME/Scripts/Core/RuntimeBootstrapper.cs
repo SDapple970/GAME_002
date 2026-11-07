@@ -40,6 +40,11 @@ namespace Game.Core
         /// </summary>
         public static event Action<Scene> OnInitialStateApplied;
 
+#if UNITY_EDITOR
+        // The authoring host supplies optional lookup data; this owner still performs registration.
+        internal static Func<CharacterProgressionDefinitionSO> EditorLegacyDefinitionResolver { get; set; }
+#endif
+
         private void Awake()
         {
             BootstrapCoreServices(createMissingCoreServices, logWarnings, false);
@@ -145,10 +150,9 @@ namespace Game.Core
             {
                 if (progression.HasRegisteredLegacyDefinition) return;
 #if UNITY_EDITOR
-                // Keep the previous unconfigured Editor-scene compatibility path. Authored
-                // references use the same registration owner in both Editor and Player.
-                string path = UnityEditor.AssetDatabase.GUIDToAssetPath("289a48d3275f99649a3f67dbc426837f");
-                definition = UnityEditor.AssetDatabase.LoadAssetAtPath<CharacterProgressionDefinitionSO>(path);
+                Func<CharacterProgressionDefinitionSO> resolve = EditorLegacyDefinitionResolver;
+                if (resolve == null) return;
+                definition = resolve();
 #else
                 return;
 #endif

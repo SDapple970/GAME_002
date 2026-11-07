@@ -53,7 +53,7 @@ namespace Game.Tests.Integration
         internal static FinalCombatRuntimeConfigSO EnableCandidate(CombatEntryPoint entry)
         {
             var source = AssetDatabase.LoadAssetAtPath<FinalCombatRuntimeConfigSO>(ConfigPath);
-            Assert.That(source.EnableProductionHandBp, Is.False, "The authored candidate stays disabled.");
+            Assert.That(source.EnableProductionHandBp, Is.True, "The approved Production profile is active; fixtures still use an isolated copy.");
             var config = Object.Instantiate(source);
             config.name = "TestOnly.DebugFree." + source.name;
             Set(config, "enableProductionHandBp", true);

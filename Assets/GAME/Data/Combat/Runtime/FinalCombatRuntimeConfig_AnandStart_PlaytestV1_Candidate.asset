@@ -26,7 +26,7 @@ MonoBehaviour:
   stunMentalLoss: 20
   panicThreshold: 0
   overcomeRecoveryMental: 35
-  enableProductionHandBp: 0
+  enableProductionHandBp: 1
   normalHandCapacity: 2
   clashHandCapacity: 3
   handSeed: 0
