@@ -11,6 +11,7 @@ namespace Game.Combat.Core
         public CombatEndReason EndReason { get; private set; } = CombatEndReason.None;
 
         private readonly CombatSession _session;
+        private readonly List<ICombatant> _allOutTargets = new();
         private CombatTurn _presentingTurn;
         private int _presentingTurnIndex = -1;
         private bool _presentationRequested;
@@ -1144,7 +1145,8 @@ namespace Game.Combat.Core
                 _session.FlowMode != CombatFlowMode.StandoffClashChain ||
                 Phase != Phase.ChainDecision || exchange == null ||
                 !exchange.IsApplyOutcomeFinalized || !exchange.IsAllOutCandidate ||
-                !exchange.IsChainActive || !CombatAllOutExecutionPolicy.TryCreateExecutionRequest(
+                !exchange.IsChainActive || !HasCurrentAllOutTargets() ||
+                !CombatAllOutExecutionPolicy.TryCreateExecutionRequest(
                     _session,
                     out CombatSkillExecutionRequest request))
             {
@@ -1180,6 +1182,27 @@ namespace Game.Combat.Core
             finally { _isExecutingAllOut = false; }
         }
 
+        internal bool HasCurrentAllOutTargets()
+        {
+            if (_allOutTargets.Count == 0)
+                return false;
+
+            int livingCount = 0;
+            foreach (ICombatant enemy in _session.Enemies)
+                if (CombatDeclarationPolicy.IsLivingMember(_session, enemy))
+                    livingCount++;
+
+            if (livingCount != _allOutTargets.Count)
+                return false;
+
+            foreach (ICombatant target in _allOutTargets)
+                if (!CombatDeclarationPolicy.IsLivingMember(_session, target) ||
+                    !_session.Enemies.Exists(enemy => ReferenceEquals(enemy, target)))
+                    return false;
+
+            return true;
+        }
+
         internal bool TryRefreshDecisionBoundary(int expectedExchangeVersion)
         {
             if (!HasExpectedExchangeVersion(expectedExchangeVersion) ||
@@ -1192,7 +1215,8 @@ namespace Game.Combat.Core
             CombatExchangeState exchange = _session.ExchangeState;
             if (Phase == Phase.ChainDecision)
             {
-                if (exchange.IsAllOutCandidate && !CombatAllOutPolicy.IsCandidate(_session))
+                if (exchange.IsAllOutCandidate &&
+                    (!HasCurrentAllOutTargets() || !CombatAllOutPolicy.IsCandidate(_session)))
                     return TryEndChain(expectedExchangeVersion);
                 return false;
             }
@@ -2073,6 +2097,15 @@ namespace Game.Combat.Core
                 return;
 
             Phase previous = Phase;
+            if (previous == Phase.ChainDecision)
+                _allOutTargets.Clear();
+
+            // Capture before phase observers can publish or submit the decision.
+            if (next == Phase.ChainDecision && _session?.ExchangeState?.IsAllOutCandidate == true)
+                foreach (ICombatant enemy in _session.Enemies)
+                    if (CombatDeclarationPolicy.IsLivingMember(_session, enemy))
+                        _allOutTargets.Add(enemy);
+
             Phase = next;
             if (_session?.FlowMode == CombatFlowMode.StandoffClashChain)
                 _session.ExchangeState?.AdvanceVersion();

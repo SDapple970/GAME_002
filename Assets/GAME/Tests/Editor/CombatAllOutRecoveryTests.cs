@@ -146,18 +146,42 @@ namespace Game.Tests.Combat
             if (change == "ally-dead") Assert.That(f.State.EndReason, Is.EqualTo(CombatEndReason.Defeat));
         }
 
-        [Test]
-        public void RemovedOneOfManyTargets_RejectsStaleCandidateAndRecovers()
+        [TestCase(false, false)]
+        [TestCase(false, true)]
+        [TestCase(true, false)]
+        [TestCase(true, true)]
+        public void ChangedOneOfManyTargets_RejectsDirectAndUiExecutionAndRecovers(
+            bool afterExchange, bool killTarget)
         {
-            Fixture f = Candidate(2);
-            Actor removed = f.Enemies[1];
-            f.Session.Enemies.Remove(removed);
+            Fixture f = afterExchange ? Create(2) : Candidate(2);
+            if (afterExchange)
+            {
+                f.Enemies[1].SetStunned(true);
+                f.Bind();
+                f.Session.GetCombatState(f.Enemies[0]).SetPosture(2);
+                DriveClash(f);
+            }
+
+            Assert.That(f.Player.ViewState.CanAllOut, Is.True);
+            Actor remaining = f.Enemies[0];
+            Actor changed = f.Enemies[1];
+            if (killTarget)
+                changed.ApplyDamage(100);
+            else
+                f.Session.Enemies.Remove(changed);
+
+            int hp = remaining.HP;
+            int version = f.Session.ExchangeState.Version;
+            Assert.That(f.State.TryExecuteAllOut(version, out CombatSkillExecutionResult result), Is.False);
+            Assert.That(result, Is.Null);
             Assert.That(f.Player.ConfirmAllOut(), Is.False);
-            Assert.That(removed.HP, Is.EqualTo(20));
-            Assert.That(f.Enemies[0].HP, Is.EqualTo(20));
+            Assert.That(changed.HP, Is.EqualTo(killTarget ? 0 : 20));
+            Assert.That(remaining.HP, Is.EqualTo(hp));
+            Assert.That(f.Session.ExchangeState.Version, Is.EqualTo(version));
+
             f.Orchestrator.Tick(0f, 0f);
             Assert.That(f.State.Phase, Is.EqualTo(Phase.Standoff));
-            Assert.That(f.Enemies[0].IsStunned, Is.False);
+            Assert.That(remaining.IsStunned, Is.False);
         }
 
         [TestCase(false)]
