@@ -399,6 +399,7 @@ namespace Game.Tests.Editor
         {
             Fixture fixture = CreateFixture(allyPower: 3, enemyPower: 1, maxPosture: 1);
             ((TestCombatant)fixture.Ally).AddSkill(new TestSkill(99, TargetingRule.AllEnemies, 10));
+            ((TestCombatant)fixture.AllyTwo).AddSkill(new TestSkill(100, TargetingRule.AllEnemies, 10));
             FinalCombatPlayerCommandController controller = new FinalCombatPlayerCommandController();
             fixture.Bind();
             controller.Bind(fixture.Orchestrator, fixture.Session);
@@ -507,7 +508,7 @@ namespace Game.Tests.Editor
         }
 
         [Test]
-        public void AllOut_ExcludesPanickedExecutorAndRejectsWhenNoHealthyExecutorExists()
+        public void AllOut_RejectsWhenAnAllyPanicsAfterTheChoiceOpens()
         {
             Fixture healthyFallback = CreateFixture(allyPower: 3, enemyPower: 1, maxPosture: 1);
             ((TestCombatant)healthyFallback.Ally).AddSkill(new TestSkill(98, TargetingRule.AllEnemies, 10));
@@ -520,9 +521,9 @@ namespace Game.Tests.Editor
             healthyFallback.Orchestrator.AllOutPresentationRequested += result => execution = result;
 
             Assert.That(controller.CancelSelection(), Is.True);
-            Assert.That(controller.ViewState.CanAllOut, Is.True);
-            Assert.That(controller.ConfirmAllOut(), Is.True);
-            Assert.That(execution?.Actor, Is.SameAs(healthyFallback.AllyTwo));
+            Assert.That(controller.ViewState.CanAllOut, Is.False);
+            Assert.That(controller.ConfirmAllOut(), Is.False);
+            Assert.That(execution, Is.Null);
 
             Fixture noneHealthy = CreateFixture(allyPower: 3, enemyPower: 1, maxPosture: 1);
             ((TestCombatant)noneHealthy.Ally).AddSkill(new TestSkill(100, TargetingRule.AllEnemies, 10));

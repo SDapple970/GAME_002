@@ -46,7 +46,7 @@ namespace Game.Tests.Combat
         }
 
         [UnityTest]
-        public IEnumerator AcceptLethal_ActualCompletionAndParticipantExperienceOnce()
+        public IEnumerator TwoAllies_AggregateNumberAndCue_CompleteAndGrantExperienceOnce()
         {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             yield return new EnterPlayMode();
@@ -87,7 +87,17 @@ namespace Game.Tests.Combat
             try
             {
                 Time.timeScale = 0.75f;
-                Fixture f = Create(scenario == "lethal" ? 100 : 4);
+                Fixture f = Create(scenario == "lethal" ? 10 : 4, scenario == "lethal");
+                GameObject numberCanvas = null;
+                if (scenario == "lethal")
+                {
+                    numberCanvas = Track(new GameObject("CombatCanvas", typeof(RectTransform), typeof(Canvas)));
+                    numberCanvas.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+                    GameObject cameraObject = Object("07A.NumberCamera");
+                    cameraObject.tag = "MainCamera";
+                    cameraObject.AddComponent<Camera>().transform.position = new Vector3(0f, 0f, -10f);
+                    Canvas.ForceUpdateCanvases();
+                }
                 yield return OpenCandidate(f);
                 Assert.That(f.Enemy.IsStunned, Is.True);
                 Assert.That(f.Session.GetCombatState(f.Enemy).CurrentPosture, Is.EqualTo(1));
@@ -120,6 +130,7 @@ namespace Game.Tests.Combat
                     f.Orchestrator.Tick(2f, 100f);
                     Assert.That(f.Orchestrator.AllOutDecisionTimeRemaining, Is.EqualTo(remaining));
                     Assert.That(f.Player.ConfirmAllOut(stale), Is.False);
+                    Assert.That(f.State.TryExecuteAllOut(stale.ExchangeVersion, out _), Is.False);
                     Assert.That(f.Binder.ViewState.DecisionKind, Is.Null);
                     GameFlowController.Instance.ResumePreviousState();
                     Assert.That(f.Binder.ViewState.CanAllOut, Is.True);
@@ -133,8 +144,8 @@ namespace Game.Tests.Combat
                     acceptedButton.onClick.Invoke();
                     Assert.That(f.AllOutCues, Is.EqualTo(1));
                     bool applied = f.Session.GetCombatState(f.Enemy).TryGetStatus("06A.status", out CombatStatusRuntime status);
-                    Assert.That(applied, Is.EqualTo(scenario == "survive"));
-                    if (applied) Assert.That(status.StackCount, Is.EqualTo(1));
+                    Assert.That(applied, Is.True);
+                    Assert.That(status.StackCount, Is.EqualTo(1));
                     if (scenario == "survive")
                     {
                         Assert.That(f.Enemy.HP, Is.EqualTo(15));
@@ -146,12 +157,24 @@ namespace Game.Tests.Combat
                         Assert.That(f.Player.SelectTarget(f.Enemy), Is.True);
                         Assert.That(f.Player.Confirm(), Is.True);
                     }
-                    else Assert.That(f.Enemy.IsStunned, Is.True, "Terminal must not recover stun");
+                    else
+                    {
+                        Assert.That(f.Enemy.IsStunned, Is.True, "Terminal must not recover stun");
+                        Assert.That(f.AllOutResult.AllOutExecutions, Has.Count.EqualTo(2));
+                        Assert.That(f.AllOutResult.TargetResults, Has.Count.EqualTo(1));
+                        Assert.That(f.AllOutResult.TargetResults[0].DirectDamageApplied, Is.EqualTo(19));
+                        Assert.That(f.AllOutResult.TargetResults[0].DamageAttempts, Is.EqualTo(2));
+                        Assert.That(f.AllOutResult.AppliedStatusResults, Has.Count.EqualTo(1));
+                        Text[] labels = numberCanvas.GetComponentsInChildren<Text>();
+                        Assert.That(System.Array.FindAll(labels, label => label.text == "-19"), Has.Length.EqualTo(1));
+                        Assert.That(System.Array.Exists(labels, label => label.text == "-10" || label.text == "-9"), Is.False);
+                    }
                 }
 
                 float deadline = Time.realtimeSinceStartup + 10f;
                 while (f.Result == null && Time.realtimeSinceStartup < deadline) yield return null;
                 Assert.That(f.Result, Is.Not.Null);
+                Assert.That(f.Result.CompletionId, Is.EqualTo(f.Session.CompletionId));
                 Assert.That(f.Result.EndReason, Is.EqualTo(scenario == "abort" || scenario == "timeout"
                     ? CombatEndReason.Abort : CombatEndReason.Victory));
                 Assert.That(f.Completions, Is.EqualTo(1));
@@ -162,7 +185,7 @@ namespace Game.Tests.Combat
                 Assert.That(f.Orchestrator.DeclineAllOut(stale), Is.False);
                 Assert.That(Time.timeScale, Is.EqualTo(0.75f));
                 Assert.That(Time.fixedDeltaTime, Is.EqualTo(oldFixed));
-                if (f.Result.IsWin) VerifyRewardOnce(f.Result);
+                if (f.Result.IsWin) VerifyRewardOnce(f.Result, scenario == "lethal");
                 f.Player.Unbind();
                 Assert.That(errors, Is.Empty, string.Join("\n", errors));
             }
@@ -194,7 +217,7 @@ namespace Game.Tests.Combat
             buttons[index].onClick.Invoke();
         }
 
-        private Fixture Create(int allOutDamage)
+        private Fixture Create(int allOutDamage, bool addCompanion)
         {
             Assert.That(GameStateMachine.Instance, Is.Not.Null);
             Assert.That(GameFlowController.Instance, Is.Not.Null);
@@ -222,6 +245,7 @@ namespace Game.Tests.Combat
             Set(f.Entry, "finalExchangeRuntimeConfig", config); Set(f.Entry, "_book", book);
             Set(f.Orchestrator, "entryPoint", f.Entry); Set(f.Director, "entryPoint", f.Entry);
             f.Entry.OnCombatEnded += result => { f.Completions++; f.Result = result; };
+            f.Orchestrator.AllOutPresentationRequested += result => f.AllOutResult = result;
             f.Director.FinalPresentationCueRaised += cue =>
             {
                 if (cue.Kind == CombatFinalPresentationCueKind.AllOut) f.AllOutCues++;
@@ -229,12 +253,17 @@ namespace Game.Tests.Combat
             CombatStartRequest request = new(StartReason.PlayerFirstHit, Side.Allies, 10, 0, null,
                 CombatFlowMode.StandoffClashChain, new CombatRuntimeConfig(10, 10, 1, 0));
             request.AllyFieldObjects.Add(Actor("06A.Ally", new[] { 1, 2, 4 }));
+            if (addCompanion)
+                request.AllyFieldObjects.Add(Actor("07A.Companion", new[] { 2 }));
             request.EnemyFieldObjects.Add(Actor("06A.Enemy", new[] { 3 }));
             Assert.That(f.Entry.StartCombat(request), Is.True);
             f.Session = f.Entry.ActiveSession; f.State = f.Entry.ActiveStateMachine;
             f.Ally = f.Session.Allies[0]; f.Enemy = f.Session.Enemies[0];
-            typeof(CombatSession).GetMethod("RegisterAllyCharacter", BindingFlags.Instance | BindingFlags.NonPublic)
-                .Invoke(f.Session, new object[] { f.Ally, "06A.Hero" });
+            MethodInfo register = typeof(CombatSession)
+                .GetMethod("RegisterAllyCharacter", BindingFlags.Instance | BindingFlags.NonPublic);
+            register.Invoke(f.Session, new object[] { f.Ally, "06A.Hero" });
+            if (addCompanion)
+                register.Invoke(f.Session, new object[] { f.Session.Allies[1], "07A.Companion" });
             f.Attack = book.Get(new SkillId(1)); f.Finisher = book.Get(new SkillId(4));
             f.Player = new FinalCombatPlayerCommandController();
             Assert.That(f.Player.Bind(f.Orchestrator, f.Session), Is.True);
@@ -247,24 +276,33 @@ namespace Game.Tests.Combat
             return f;
         }
 
-        private void VerifyRewardOnce(CombatResult result)
+        private void VerifyRewardOnce(CombatResult result, bool hasCompanion)
         {
             CharacterProgressionService progression = Object("06A.Progression").AddComponent<CharacterProgressionService>();
-            CharacterProgressionDefinitionSO definition = Track(ScriptableObject.CreateInstance<CharacterProgressionDefinitionSO>());
-            Set(definition, "characterId", "06A.Hero"); Set(definition, "startingLevel", 1);
-            Set(definition, "maximumLevel", 3); Set(definition, "experienceRequiredByLevel", new[] { 1000, 1000 });
+            string[] characterIds = hasCompanion ? new[] { "06A.Hero", "07A.Companion" } : new[] { "06A.Hero" };
+            var definitions = new List<CharacterProgressionDefinitionSO>();
+            foreach (string id in characterIds)
+            {
+                var definition = Track(ScriptableObject.CreateInstance<CharacterProgressionDefinitionSO>());
+                Set(definition, "characterId", id); Set(definition, "startingLevel", 1);
+                Set(definition, "maximumLevel", 3); Set(definition, "experienceRequiredByLevel", new[] { 1000, 1000 });
+                definitions.Add(definition);
+            }
             typeof(CharacterProgressionService).GetMethod("ConfigureForTests", BindingFlags.Instance | BindingFlags.NonPublic)
-                .Invoke(progression, new object[] { "06A.Hero", new[] { definition } });
+                .Invoke(progression, new object[] { "06A.Hero", definitions.ToArray() });
             CurrencyWallet wallet = Object("06A.Wallet").AddComponent<CurrencyWallet>();
             RewardService rewards = Object("06A.Rewards").AddComponent<RewardService>();
             Set(rewards, "currencyWallet", wallet); Set(rewards, "characterProgressionService", progression);
-            Assert.That(result.AllyParticipants, Has.Count.EqualTo(1));
+            Assert.That(result.AllyParticipants, Has.Count.EqualTo(characterIds.Length));
             Assert.That(rewards.GrantCombatResult(result).DuplicateBlocked, Is.False);
             Assert.That(rewards.GrantCombatResult(result).DuplicateBlocked, Is.True);
             Assert.That(rewards.CombatGrantLedgerCount, Is.EqualTo(1));
             Assert.That(wallet.Gold, Is.EqualTo(result.TotalGold));
-            Assert.That(progression.TryGetState("06A.Hero", out _, out int experience), Is.True);
-            Assert.That(experience, Is.EqualTo(result.TotalExp));
+            foreach (string id in characterIds)
+            {
+                Assert.That(progression.TryGetState(id, out _, out int experience), Is.True);
+                Assert.That(experience, Is.EqualTo(result.TotalExp));
+            }
         }
 
         private GameObject Actor(string name, int[] skills)
@@ -303,6 +341,7 @@ namespace Game.Tests.Combat
             public ICombatant Ally, Enemy;
             public ISkill Attack, Finisher;
             public CombatResult Result;
+            public CombatSkillExecutionResult AllOutResult;
             public int Completions, AllOutCues;
         }
     }

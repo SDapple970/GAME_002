@@ -218,6 +218,9 @@ namespace Game.Combat.Model
             if (!_statuses.TryGetValue(definition.StatusId, out CombatStatusRuntime status))
                 return true;
 
+            if (!ReferenceEquals(status.Definition, definition))
+                return true;
+
             if (definition.StackPolicy == CombatStatusStackPolicy.Stack)
                 return status.StackCount < definition.MaximumStacks;
 

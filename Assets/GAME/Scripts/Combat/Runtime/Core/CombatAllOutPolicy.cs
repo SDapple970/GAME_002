@@ -6,7 +6,8 @@ namespace Game.Combat.Core
     {
         public static bool IsCandidate(CombatSession session)
         {
-            if (session == null || FinalCombatTerminalPolicy.Evaluate(session) != CombatEndReason.None)
+            if (session == null || session.IsCombatEnded ||
+                FinalCombatTerminalPolicy.Evaluate(session) != CombatEndReason.None)
                 return false;
 
             int livingEnemies = 0;
@@ -25,8 +26,7 @@ namespace Game.Combat.Core
                 return false;
 
             foreach (ICombatant ally in session.Allies)
-                if (CombatDeclarationPolicy.IsActiveMember(session, ally) &&
-                    !CombatDeclarationPolicy.IsPanicked(session, ally))
+                if (CombatAllOutExecutionPolicy.CanParticipate(session, ally))
                     return true;
 
             return false;

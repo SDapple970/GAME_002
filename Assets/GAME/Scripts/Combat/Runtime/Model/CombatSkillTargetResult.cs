@@ -20,16 +20,25 @@ namespace Game.Combat.Model
         }
 
         internal CombatSkillTargetResult(ICombatant target, int hpBefore, int hpAfter,
-            long? directDamageApplied, int? directRecoveryApplied, int? damageAttempts, bool? recoveryAttempted)
+            long? directDamageApplied, int? directRecoveryApplied, int? damageAttempts, bool? recoveryAttempted,
+            int? damageApplied = null)
         {
             Target = target;
             HpBefore = hpBefore;
             HpAfter = hpAfter;
-            DamageApplied = hpBefore > hpAfter ? hpBefore - hpAfter : 0;
+            DamageApplied = damageApplied ?? (hpBefore > hpAfter ? hpBefore - hpAfter : 0);
             DirectDamageApplied = directDamageApplied;
             DirectRecoveryApplied = directRecoveryApplied;
             DamageAttempts = damageAttempts;
             RecoveryAttempted = recoveryAttempted;
         }
+
+        internal CombatSkillTargetResult Combine(CombatSkillTargetResult next) =>
+            new CombatSkillTargetResult(Target, HpBefore, next.HpAfter,
+                DirectDamageApplied + next.DirectDamageApplied,
+                DirectRecoveryApplied + next.DirectRecoveryApplied,
+                DamageAttempts + next.DamageAttempts,
+                RecoveryAttempted | next.RecoveryAttempted,
+                (int)System.Math.Min(int.MaxValue, (long)DamageApplied + next.DamageApplied));
     }
 }

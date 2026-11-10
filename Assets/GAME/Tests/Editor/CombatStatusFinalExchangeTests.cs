@@ -195,6 +195,25 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void ChangedDefinitionWithSameDuration_DoesNotExpireInThatExchange()
+        {
+            Fixture fixture = CreateFixture();
+            CombatStatusDefinitionSO original = CreateStatus(
+                "changing", CombatStatusStackPolicy.Replace, 1, duration: 1, damageModifier: 1);
+            CombatStatusDefinitionSO replacement = CreateStatus(
+                "changing", CombatStatusStackPolicy.Replace, 1, duration: 1, damageModifier: 4);
+            fixture.EnemyState.ApplyStatus(original);
+            TestSkill skill = new TestSkill(1, 1, appliedStatuses: new[] { replacement });
+            fixture.Ally.Add(skill);
+
+            CompleteUnopposedExchange(fixture, skill);
+
+            Assert.That(fixture.EnemyState.TryGetStatus("changing", out CombatStatusRuntime active), Is.True);
+            Assert.That(active.Definition, Is.SameAs(replacement));
+            Assert.That(active.RemainingDuration, Is.EqualTo(1));
+        }
+
+        [Test]
         public void ExpiredStatus_NoLongerChangesLaterDamageAndDoesNotLeakToNewSession()
         {
             Fixture fixture = CreateFixture();

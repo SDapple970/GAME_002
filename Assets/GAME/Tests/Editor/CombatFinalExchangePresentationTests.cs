@@ -667,6 +667,7 @@ namespace Game.Tests.Combat
         {
             Fixture fixture = CreateFixture(allyPower: 3, enemyPower: 1, maxPosture: 1);
             AddSkill(fixture.Ally, 99, 10, TargetingRule.AllEnemies);
+            AddSkill(fixture.AllyTwo, 100, 10, TargetingRule.AllEnemies);
             EnterPlayerChainSlowMotion(fixture, out CombatDirector director, out FinalCombatPlayerCommandController player);
 
             Assert.That(player.ViewState.CanAllOut, Is.True);

@@ -85,10 +85,8 @@ namespace Game.Combat.Core
 
         public string AllOutUnavailableReason => !IsAllOutSelection ? "총공격 후보 없음" :
             GameStateMachine.Instance?.Is(GameState.Paused) == true || Time.timeScale <= 0f ? "일시 정지" :
-            !CombatAllOutPolicy.IsCandidate(_session) ||
-            !_boundStateMachine.HasCurrentAllOutTargets() ? "대상 상태 변경" :
-            !CombatAllOutExecutionPolicy.TryCreateExecutionRequest(_session, out _) ?
-                "행동 가능한 아군의 제작된 AllEnemies 공격 스킬 없음" : null;
+            !_boundStateMachine.HasCurrentAllOutSelection() ? "참가자 또는 대상 상태 변경" :
+            _boundStateMachine.AllOutSkillUnavailableReason;
 
         public CombatDeclarationToken? CurrentDeclarationToken =>
             IsFinalExchangeBound() && _boundStateMachine.Phase == Phase.AttackDeclaration &&
@@ -440,7 +438,7 @@ namespace Game.Combat.Core
                 else if (_boundStateMachine.Phase == Phase.Clash)
                     TickClashSeriesDecision(unscaledDeltaSeconds);
                 else if (IsAllOutSelection && _pendingDecisionRequest != null &&
-                         !_boundStateMachine.HasCurrentAllOutTargets())
+                         !_boundStateMachine.HasCurrentAllOutSelection())
                     EndChain(_pendingDecisionRequest.ExchangeVersion);
                 else if (IsAllOutSelection && _pendingDecisionRequest != null &&
                          unscaledDeltaSeconds > 0f && !float.IsNaN(unscaledDeltaSeconds) &&
@@ -687,38 +685,32 @@ namespace Game.Combat.Core
             int bindingId = _bindingId;
             Side cycleSide = exchange.CurrentAttackSide;
             int cycleId = exchange.DeclarationId;
-            bool executed;
-            CombatSkillExecutionResult result;
             _isExecutingAllOut = true;
             try
             {
-                executed = _boundStateMachine.TryExecuteAllOut(request.ExchangeVersion, out result);
+                bool executed = _boundStateMachine.TryExecuteAllOut(
+                    request.ExchangeVersion, out CombatSkillExecutionResult result);
+                if (bindingId != _bindingId || !executed)
+                    return executed;
+
+                if (_boundStateMachine.Phase != Phase.ExitCombat && cycleId > 0)
+                {
+                    _session.TryRecordCompletedAttackCycle(cycleSide, cycleId, true);
+                    _session.TryRecordCompletedBpAttackCycle(cycleSide, cycleId, true);
+                }
+                _bpCurrentAttackCycleHadSuccessfulExchange = false;
+                _pendingDecisionRequest = null;
+                _allOutDecisionRemaining = 0f;
+                RaiseChainDecisionAccepted();
+                if (bindingId == _bindingId && result != null)
+                    RaiseAllOutPresentation(result);
+                return true;
             }
-            finally { _isExecutingAllOut = false; }
-            if (bindingId != _bindingId)
+            finally
             {
+                _isExecutingAllOut = false;
                 RequestPump();
-                return executed;
             }
-            if (!executed)
-            {
-                if (_boundStateMachine.Phase == Phase.ExitCombat) RequestPump();
-                return false;
-            }
-
-            if (_boundStateMachine.Phase != Phase.ExitCombat && cycleId > 0)
-            {
-                _session.TryRecordCompletedAttackCycle(cycleSide, cycleId, true);
-                _session.TryRecordCompletedBpAttackCycle(cycleSide, cycleId, true);
-            }
-            _bpCurrentAttackCycleHadSuccessfulExchange = false;
-
-            _pendingDecisionRequest = null;
-            _allOutDecisionRemaining = 0f;
-            RaiseChainDecisionAccepted();
-            RaiseAllOutPresentation(result);
-            RequestPump();
-            return true;
         }
 
         public bool DeclineAllOut(CombatExchangeDecisionRequest request)
@@ -1581,10 +1573,13 @@ namespace Game.Combat.Core
                 return;
 
             _terminalCompletionRaised = true;
+            CombatSession completedSession = _session;
+            CombatEndReason reason = _boundStateMachine.EndReason;
+            Action<CombatSession, CombatEndReason, int> handlers = TerminalCompleted;
+            bool hadDecision = _pendingDecisionRequest != null;
             _pendingDecisionRequest = null;
             _allOutDecisionRemaining = 0f;
-            RaiseChainDecisionAccepted();
-            Action<CombatSession, CombatEndReason, int> handlers = TerminalCompleted;
+            if (hadDecision) RaiseChainDecisionAccepted();
             if (handlers == null)
                 return;
 
@@ -1594,8 +1589,8 @@ namespace Game.Combat.Core
                 try
                 {
                     ((Action<CombatSession, CombatEndReason, int>)invocationList[i]).Invoke(
-                        _session,
-                        _boundStateMachine.EndReason,
+                        completedSession,
+                        reason,
                         exchangeVersion);
                 }
                 catch (Exception exception)
@@ -1612,7 +1607,8 @@ namespace Game.Combat.Core
                 return;
 
             Delegate[] invocationList = handlers.GetInvocationList();
-            for (int i = 0; i < invocationList.Length; i++)
+            int bindingId = _bindingId;
+            for (int i = 0; i < invocationList.Length && bindingId == _bindingId; i++)
             {
                 try
                 {

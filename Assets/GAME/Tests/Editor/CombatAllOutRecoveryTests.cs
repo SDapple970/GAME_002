@@ -223,6 +223,215 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void ThreePartyMembers_OnlyEligibleAlliesAtSelectionParticipate()
+        {
+            Fixture f = Create(2);
+            Actor panicked = AddAlly(f);
+            Actor knockedOut = AddAlly(f);
+            f.Session.GetCombatState(panicked).SetMental(0);
+            knockedOut.ApplyDamage(20);
+            f.Enemies[1].ApplyDamage(20);
+            f.Enemies[0].SetStunned(true);
+            f.Bind();
+
+            Assert.That(f.State.TryExecuteAllOut(f.Session.ExchangeState.Version, out var result), Is.True);
+            Assert.That(result.AllOutParticipants, Is.EqualTo(new[] { f.Ally }));
+            Assert.That(result.AllOutExecutions, Has.Count.EqualTo(1));
+            Assert.That(result.TargetResults, Has.Count.EqualTo(1));
+            Assert.That(result.TargetResults[0].Target, Is.SameAs(f.Enemies[0]));
+            Assert.That(f.Session.Allies, Has.Count.EqualTo(3));
+        }
+
+        [Test]
+        public void NoEligibleAlly_WhenRemainingAllyIsPanicked_DoesNotOpenChoice()
+        {
+            Fixture f = Create();
+            Actor knockedOut = AddAlly(f);
+            knockedOut.ApplyDamage(20);
+            f.Session.GetCombatState(f.Ally).SetMental(0);
+            f.Enemies[0].SetStunned(true);
+            f.Bind();
+
+            Assert.That(f.Orchestrator.IsAllOutSelection, Is.False);
+            Assert.That(f.State.TryExecuteAllOut(f.Session.ExchangeState.Version, out _), Is.False);
+            Assert.That(f.Enemies[0].HP, Is.EqualTo(20));
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public void PartyAttacksInFormationOrder_WithIndividualAndCombinedReceipts(int partySize)
+        {
+            Fixture f = Create(2);
+            while (f.Session.Allies.Count < partySize) AddAlly(f);
+            f.Session.GetCombatState(f.Ally).SetMp(0);
+            foreach (Actor enemy in f.Enemies) enemy.SetStunned(true);
+            f.Bind();
+            CombatSkillExecutionResult combined = null;
+            int presentations = 0;
+            f.Orchestrator.AllOutPresentationRequested += result => { combined = result; presentations++; };
+            var choice = f.Orchestrator.PendingDecisionRequest;
+            f.Enemies[0].DamageCallback = () =>
+            {
+                Assert.That(f.Orchestrator.ExecuteAllOut(choice), Is.False);
+                Assert.That(f.State.TryExecuteAllOut(choice.ExchangeVersion, out _), Is.False);
+            };
+
+            Assert.That(f.Player.ConfirmAllOut(choice), Is.True);
+            Assert.That(f.Player.ConfirmAllOut(choice), Is.False);
+            Assert.That(presentations, Is.EqualTo(1));
+            Assert.That(combined.AllOutParticipants, Is.EqualTo(f.Session.Allies));
+            Assert.That(combined.AllOutExecutions, Has.Count.EqualTo(partySize));
+            for (int i = 0; i < partySize; i++)
+            {
+                var execution = combined.AllOutExecutions[i];
+                Assert.That(execution.Actor, Is.SameAs(f.Session.Allies[i]));
+                Assert.That(execution.TargetResults, Has.Count.EqualTo(2));
+                Assert.That(execution.TargetResults[0].DirectDamageApplied, Is.EqualTo(4));
+                Assert.That(execution.AppliedStatusResults, Has.Count.EqualTo(2));
+                Assert.That(f.Session.GetCombatState(execution.Actor).CurrentMp, Is.EqualTo(i == 0 ? 0 : 10));
+            }
+            Assert.That(combined.TargetResults, Has.Count.EqualTo(2));
+            Assert.That(combined.AppliedStatusResults, Has.Count.EqualTo(2 * partySize));
+            for (int i = 0; i < f.Enemies.Count; i++)
+            {
+                var target = combined.TargetResults[i];
+                var state = f.Session.GetCombatState(f.Enemies[i]);
+                Assert.That(target.Target, Is.SameAs(f.Enemies[i]));
+                Assert.That(target.HpBefore, Is.EqualTo(20));
+                Assert.That(target.HpAfter, Is.EqualTo(20 - 4 * partySize));
+                Assert.That(target.DirectDamageApplied, Is.EqualTo(4 * partySize));
+                Assert.That(target.DamageAttempts, Is.EqualTo(partySize));
+                Assert.That(state.CurrentMental, Is.EqualTo(100 - f.Session.RuntimeConfig.DamageMentalLoss));
+                Assert.That(state.TryGetStatus("test.allout", out var status), Is.True);
+                Assert.That(status.StackCount, Is.EqualTo(partySize));
+            }
+        }
+
+        [Test]
+        public void MissingSecondAllySkill_RejectsEntireDecisionAndTimesOut()
+        {
+            Fixture f = Create();
+            Actor missing = AddAlly(f, authoredSkill: false);
+            f.Enemies[0].SetStunned(true);
+            f.Bind();
+            var choice = f.Orchestrator.PendingDecisionRequest;
+            Assert.That(f.Orchestrator.AllOutUnavailableReason, Does.Contain(missing.Id.ToString()));
+            Assert.That(f.Orchestrator.AllOutUnavailableReason, Does.Contain("AllEnemies"));
+            Assert.That(f.State.TryExecuteAllOut(choice.ExchangeVersion, out _), Is.False);
+            Assert.That(f.Player.ConfirmAllOut(choice), Is.False);
+            Assert.That(f.Enemies[0].HP, Is.EqualTo(20));
+            f.Orchestrator.Tick(0f, f.Orchestrator.AllOutDecisionTimeRemaining + 1f);
+            Assert.That(f.State.Phase, Is.EqualTo(Phase.Standoff));
+            Assert.That(f.Orchestrator.IsAllOutSelection, Is.False);
+        }
+
+        [TestCase("remove-ally")]
+        [TestCase("reorder")]
+        [TestCase("remove-dead-enemy")]
+        public void ChangedRoster_RejectsTheWholeSnapshot(string change)
+        {
+            Fixture f = Create(2);
+            Actor second = AddAlly(f);
+            f.Enemies[1].ApplyDamage(20);
+            f.Enemies[0].SetStunned(true);
+            f.Bind();
+            var choice = f.Orchestrator.PendingDecisionRequest;
+            if (change == "remove-ally") f.Session.Allies.Remove(second);
+            if (change == "reorder") f.Session.Allies.Reverse();
+            if (change == "remove-dead-enemy") f.Session.Enemies.Remove(f.Enemies[1]);
+
+            Assert.That(f.State.TryExecuteAllOut(choice.ExchangeVersion, out _), Is.False);
+            Assert.That(f.Player.ConfirmAllOut(choice), Is.False);
+            Assert.That(f.Enemies[0].HP, Is.EqualTo(20));
+            f.Orchestrator.Tick(0f, 0f);
+            Assert.That(f.State.Phase, Is.EqualTo(Phase.Standoff));
+        }
+
+        [Test]
+        public void FirstContributorKillsLastEnemy_NoLaterDamageOrStatusAndOneVictory()
+        {
+            Fixture f = Create(2, damage: 30);
+            AddAlly(f);
+            AddAlly(f);
+            foreach (Actor enemy in f.Enemies) enemy.SetStunned(true);
+            f.Bind();
+            int completions = 0;
+            int acceptances = 0;
+            CombatSkillExecutionResult combined = null;
+            f.Orchestrator.AllOutPresentationRequested += result => combined = result;
+            f.Orchestrator.ChainDecisionAccepted += () => acceptances++;
+            f.Orchestrator.TerminalCompleted += (session, reason, _) =>
+            {
+                Assert.That(session.CompletionId, Is.EqualTo(f.Session.CompletionId));
+                Assert.That(reason, Is.EqualTo(CombatEndReason.Victory));
+                completions++;
+            };
+            Assert.That(f.Player.ConfirmAllOut(), Is.True);
+            f.Orchestrator.AdvanceUntilBlocked();
+            Assert.That(completions, Is.EqualTo(1));
+            Assert.That(acceptances, Is.EqualTo(1));
+            Assert.That(combined.AllOutParticipants, Has.Count.EqualTo(3));
+            Assert.That(combined.AllOutExecutions, Has.Count.EqualTo(1));
+            Assert.That(combined.AppliedStatusResults, Is.Empty);
+            foreach (var target in combined.TargetResults)
+            {
+                Assert.That(target.DamageAttempts, Is.EqualTo(1));
+                Assert.That(target.DirectDamageApplied, Is.EqualTo(20));
+            }
+        }
+
+        [Test]
+        public void FirstContributorKillsOneEnemy_LaterAllyHitsOnlyTheSurvivor()
+        {
+            Fixture f = Create(2);
+            Actor second = AddAlly(f);
+            f.Enemies[0].ApplyDamage(18);
+            foreach (Actor enemy in f.Enemies) enemy.SetStunned(true);
+            f.Bind();
+
+            Assert.That(f.State.TryExecuteAllOut(f.Session.ExchangeState.Version, out var result), Is.True);
+            Assert.That(result.AllOutExecutions, Has.Count.EqualTo(2));
+            Assert.That(result.AllOutExecutions[1].Actor, Is.SameAs(second));
+            Assert.That(result.AllOutExecutions[1].TargetResults, Has.Count.EqualTo(1));
+            Assert.That(result.AllOutExecutions[1].TargetResults[0].Target, Is.SameAs(f.Enemies[1]));
+            Assert.That(result.AppliedStatusResults, Has.Count.EqualTo(2));
+            Assert.That(result.TargetResults[0].DirectDamageApplied, Is.EqualTo(2));
+            Assert.That(result.TargetResults[1].DirectDamageApplied, Is.EqualTo(8));
+        }
+
+        [Test]
+        public void AlliesDefeatedDuringFirstAttack_NoFurtherEffectsAndOneDefeat()
+        {
+            Fixture f = Create(2);
+            Actor second = AddAlly(f);
+            foreach (Actor enemy in f.Enemies) enemy.SetStunned(true);
+            f.Bind();
+            int completions = 0;
+            f.Orchestrator.TerminalCompleted += (_, reason, _) =>
+            {
+                Assert.That(reason, Is.EqualTo(CombatEndReason.Defeat));
+                completions++;
+            };
+            f.Enemies[0].DamageCallback = () =>
+            {
+                f.Ally.ApplyDamage(20);
+                second.ApplyDamage(20);
+            };
+
+            Assert.That(f.Player.ConfirmAllOut(), Is.True);
+            f.Orchestrator.AdvanceUntilBlocked();
+            Assert.That(f.State.EndReason, Is.EqualTo(CombatEndReason.Defeat));
+            Assert.That(completions, Is.EqualTo(1));
+            Assert.That(f.Enemies[0].HP, Is.EqualTo(16));
+            Assert.That(f.Enemies[1].HP, Is.EqualTo(20));
+            Assert.That(f.Session.GetCombatState(f.Enemies[0]).HasStatus("test.allout"), Is.False);
+            var result = CombatResultBuilder.Build(f.Session, f.State.EndReason);
+            Assert.That(result.TotalExp, Is.Zero);
+            Assert.That(result.TotalGold, Is.Zero);
+        }
+
+        [Test]
         public void DamageCallbackAndRecoveryCallback_CannotReenterExecutionOrDecline()
         {
             Fixture f = Candidate(2);
@@ -291,9 +500,19 @@ namespace Game.Tests.Combat
         [Test]
         public void AbortDuringAllOut_StopsLaterTargetsAndAllStatuses()
         {
-            Fixture f = Candidate(2);
+            Fixture f = Create(2);
+            AddAlly(f);
+            foreach (Actor enemy in f.Enemies) enemy.SetStunned(true);
+            f.Bind();
             CombatExchangeDecisionRequest request = f.Orchestrator.PendingDecisionRequest;
-            f.Enemies[0].DamageCallback = () => f.State.ForceExit(CombatEndReason.Abort);
+            int completions = 0;
+            f.Orchestrator.TerminalCompleted += (_, reason, _) =>
+            {
+                Assert.That(reason, Is.EqualTo(CombatEndReason.Abort));
+                completions++;
+            };
+            f.Enemies[0].DamageCallback = () =>
+                Assert.That(f.Orchestrator.TerminateExplicit(CombatEndReason.Abort, request.ExchangeVersion), Is.True);
             Assert.That(f.Player.ConfirmAllOut(request), Is.True);
             Assert.That(f.State.EndReason, Is.EqualTo(CombatEndReason.Abort));
             Assert.That(f.Enemies[0].HP, Is.EqualTo(16));
@@ -301,6 +520,8 @@ namespace Game.Tests.Combat
             Assert.That(f.Session.GetCombatState(f.Enemies[0]).HasStatus("test.allout"), Is.False);
             Assert.That(f.Session.GetCombatState(f.Enemies[1]).HasStatus("test.allout"), Is.False);
             Assert.That(f.Orchestrator.ExecuteAllOut(request), Is.False);
+            f.Orchestrator.AdvanceUntilBlocked();
+            Assert.That(completions, Is.EqualTo(1));
         }
 
         [Test]
@@ -312,22 +533,30 @@ namespace Game.Tests.Combat
             Assert.That(f.Enemies[0].HP, Is.EqualTo(16));
             Assert.That(f.Enemies[1].HP, Is.EqualTo(20));
             Assert.That(f.Session.GetCombatState(f.Enemies[1]).HasStatus("test.allout"), Is.False);
+            Assert.That(f.State.EndReason, Is.EqualTo(CombatEndReason.Abort));
         }
 
         [Test]
         public void SessionSwitchDuringEffect_DoesNotClearOrDamageNewSession()
         {
-            Fixture f = Candidate();
+            Fixture f = Create(2);
+            AddAlly(f);
+            foreach (Actor enemy in f.Enemies) enemy.SetStunned(true);
+            f.Bind();
             Fixture next = Candidate();
             CombatExchangeDecisionRequest stale = f.Orchestrator.PendingDecisionRequest;
             f.Enemies[0].DamageCallback = () =>
                 Assert.That(f.Orchestrator.BindFinalExchange(next.Session, next.State, new ZeroRandom(), new AllyWins()), Is.True);
             Assert.That(f.Player.ConfirmAllOut(stale), Is.True);
+            Assert.That(f.State.EndReason, Is.EqualTo(CombatEndReason.Abort));
+            Assert.That(f.Enemies[1].HP, Is.EqualTo(20));
             Assert.That(next.Enemies[0].HP, Is.EqualTo(20));
             Assert.That(f.Orchestrator.PendingDecisionRequest, Is.Not.Null);
             Assert.That(f.Orchestrator.AllOutDecisionTimeRemaining, Is.GreaterThan(0f));
             Assert.That(f.Orchestrator.ExecuteAllOut(stale), Is.False);
             Assert.That(f.Player.ViewState.DecisionKind, Is.Null);
+            Assert.That(next.State.TryExecuteAllOut(next.Session.ExchangeState.Version, out var result), Is.True);
+            Assert.That(result.AllOutParticipants, Is.EqualTo(new[] { next.Ally }));
         }
 
         [Test]
@@ -453,6 +682,7 @@ namespace Game.Tests.Combat
             SkillDefinitionSO allOutDefinition = Track(ScriptableObject.CreateInstance<SkillDefinitionSO>());
             allOutDefinition.skillId = 2; allOutDefinition.baseDamage = damage;
             allOutDefinition.targeting = TargetingRule.AllEnemies;
+            Set(allOutDefinition, "finalMpCost", 8);
             CombatStatusDefinitionSO status = Track(ScriptableObject.CreateInstance<CombatStatusDefinitionSO>());
             Set(status, "statusId", "test.allout"); Set(status, "stackPolicy", CombatStatusStackPolicy.Stack);
             Set(status, "maximumStacks", 10);
@@ -473,6 +703,15 @@ namespace Game.Tests.Combat
             f.Player = new FinalCombatPlayerCommandController();
             _players.Add(f.Player);
             return f;
+        }
+
+        private static Actor AddAlly(Fixture f, bool authoredSkill = true)
+        {
+            Actor actor = new Actor(f.Session.Allies.Count + 1, Side.Allies, f.Attack);
+            if (authoredSkill) actor.Add(f.AllOut);
+            f.Session.Allies.Add(actor);
+            f.Session.InitializeCombatStates(f.Session.RuntimeConfig);
+            return actor;
         }
 
         private static void DriveClash(Fixture f)
@@ -520,7 +759,7 @@ namespace Game.Tests.Combat
             }
         }
 
-        private sealed class Actor : ICombatant, ICombatantRuntimeStateBinding
+        private sealed class Actor : ICombatant, ICombatantRuntimeStateBinding, ICombatantDamageReceipt
         {
             private readonly List<ISkill> _skills = new();
             private CombatantCombatState _state;
@@ -539,7 +778,15 @@ namespace Game.Tests.Combat
             public Actor(int id, Side side, ISkill skill) { Id = new CombatantId(id); Side = side; Add(skill); }
             public void Add(ISkill skill) => _skills.Add(skill);
             public void BindCombatState(CombatantCombatState state) => _state = state;
-            public void ApplyDamage(int amount) { _state.ApplyDamage(amount); DamageCallback?.Invoke(); }
+            public void ApplyDamage(int amount) => ApplyDamageWithReceipt(amount);
+            public int? ApplyDamageWithReceipt(int amount)
+            {
+                int before = HP;
+                _state.ApplyDamage(amount);
+                int applied = before - HP;
+                DamageCallback?.Invoke();
+                return applied;
+            }
             public void AddStagger(int amount) { }
             public void SetStunned(bool value) { IsStunned = value; }
             public void ResetStaggerIfNeededOnStunEnd() { RecoveryCount++; RecoveryCallback?.Invoke(); }

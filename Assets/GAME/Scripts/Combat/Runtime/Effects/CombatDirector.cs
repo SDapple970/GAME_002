@@ -289,11 +289,12 @@ namespace Game.Combat.Effects
             cameraController?.FocusAction(result.Actor, primaryTarget);
             RaiseFinalCue(CombatFinalPresentationCueKind.AllOut, result.Actor, primaryTarget, result.Skill);
 
-            GameObject actorObject = GetFieldObject(result.Actor);
-            if (actorObject != null)
+            if (result.AllOutExecutions.Count == 0)
+                PlayAllOutActor(result);
+            else
             {
-                PlayCastPresentation(actorObject, result.Skill);
-                PlayAttackTrigger(actorObject, result.Skill);
+                foreach (CombatSkillExecutionResult execution in result.AllOutExecutions)
+                    PlayAllOutActor(execution);
             }
 
             if (result.TargetResults == null)
@@ -317,6 +318,14 @@ namespace Game.Combat.Effects
                 else if (targetResult.DamageApplied > 0)
                     RaiseFinalCue(CombatFinalPresentationCueKind.HitReaction, result.Actor, targetResult.Target, result.Skill);
             }
+        }
+
+        private void PlayAllOutActor(CombatSkillExecutionResult execution)
+        {
+            GameObject actorObject = GetFieldObject(execution.Actor);
+            if (actorObject == null) return;
+            PlayCastPresentation(actorObject, execution.Skill);
+            PlayAttackTrigger(actorObject, execution.Skill);
         }
 
         private void HandleOvercomePresentationRequested(CombatOvercomeResult result)

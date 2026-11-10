@@ -69,6 +69,23 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void SameIdNewDefinition_IsReportedAsChangedEvenWhenStacksAndDurationMatch()
+        {
+            CombatStatusDefinitionSO first = CreateStatus("same-id", CombatStatusStackPolicy.Replace, 1);
+            CombatStatusDefinitionSO replacement = CreateStatus("same-id", CombatStatusStackPolicy.Replace, 1);
+            SetPrivateField(replacement, "damageModifier", 4);
+            CombatSession session = CreateSession(out DummyCombatant ally, out _);
+            CombatantCombatState state = session.GetCombatState(ally);
+            state.ApplyStatus(first);
+
+            Assert.That(state.CanApplyStatus(replacement), Is.True);
+            CombatStatusApplicationResult result = state.ApplyStatus(replacement);
+            Assert.That(result.Changed, Is.True);
+            Assert.That(result.Status.Definition, Is.SameAs(replacement));
+            Assert.That(state.CanApplyStatus(replacement), Is.False);
+        }
+
+        [Test]
         public void SessionIsolation_DoesNotCarryCombatLocalStatusesIntoNewSession()
         {
             CombatStatusDefinitionSO status = CreateStatus("combat-only", CombatStatusStackPolicy.Replace, 1);

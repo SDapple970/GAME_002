@@ -24,6 +24,7 @@ namespace Game.Combat.Model
 
         internal bool Apply(CombatStatusDefinitionSO definition)
         {
+            bool definitionChanged = !object.ReferenceEquals(Definition, definition);
             int previousStacks = StackCount;
             int previousDuration = RemainingDuration;
             Definition = definition;
@@ -43,7 +44,7 @@ namespace Game.Combat.Model
                     break;
             }
 
-            return previousStacks != StackCount || previousDuration != RemainingDuration;
+            return definitionChanged || previousStacks != StackCount || previousDuration != RemainingDuration;
         }
 
         internal bool TryAdvanceCompletedExchange(out bool expired)

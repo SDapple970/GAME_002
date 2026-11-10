@@ -8,7 +8,14 @@ namespace Game.Combat.Actions
         public static bool TryExecute(
             CombatSession session,
             CombatSkillExecutionRequest request,
-            out CombatSkillExecutionResult result)
+            out CombatSkillExecutionResult result) =>
+            TryExecute(session, request, out result, null);
+
+        internal static bool TryExecute(
+            CombatSession session,
+            CombatSkillExecutionRequest request,
+            out CombatSkillExecutionResult result,
+            System.Func<bool> canContinue)
         {
             result = null;
             if (!CanExecuteRequest(session, request))
@@ -29,7 +36,7 @@ namespace Game.Combat.Actions
 
             for (int i = 0; i < request.Targets.Count; i++)
             {
-                if (session.IsCombatEnded)
+                if (session.IsCombatEnded || canContinue?.Invoke() == false)
                     break;
                 ICombatant target = request.Targets[i];
                 if (target.HP <= 0 || !IsCurrentRosterMember(session, target))
@@ -50,7 +57,8 @@ namespace Game.Combat.Actions
                             request.Actor,
                             request.Skill.BaseDamage)
                         : request.Skill.BaseDamage;
-                    for (int hit = 0; hit <= extraHits && target.HP > 0 && !session.IsCombatEnded; hit++)
+                    for (int hit = 0; hit <= extraHits && target.HP > 0 && !session.IsCombatEnded &&
+                        canContinue?.Invoke() != false; hit++)
                     {
                         damageAttempts++;
                         if (target is ICombatantDamageReceipt receiptSource)
@@ -63,7 +71,7 @@ namespace Game.Combat.Actions
                     }
                 }
 
-                if (!session.IsCombatEnded && healing > 0 &&
+                if (!session.IsCombatEnded && healing > 0 && canContinue?.Invoke() != false &&
                     session.TryGetCombatState(target, out CombatantCombatState targetState) && targetState.IsAlive)
                 {
                     recoveryAttempted = true;
@@ -74,7 +82,7 @@ namespace Game.Combat.Actions
                     directDamage, directRecovery, damageAttempts, recoveryAttempted));
             }
 
-            ApplyAuthoredStatuses(session, request, appliedStatuses);
+            ApplyAuthoredStatuses(session, request, appliedStatuses, canContinue);
 
             result = new CombatSkillExecutionResult(
                 request.Actor,
@@ -89,7 +97,8 @@ namespace Game.Combat.Actions
         private static void ApplyAuthoredStatuses(
             CombatSession session,
             CombatSkillExecutionRequest request,
-            System.Collections.Generic.List<CombatStatusApplicationResult> destination)
+            System.Collections.Generic.List<CombatStatusApplicationResult> destination,
+            System.Func<bool> canContinue)
         {
             if (session.IsCombatEnded || !(request.Skill is ICombatStatusEffectProvider provider) ||
                 provider.AppliedStatusEffects == null)
@@ -100,7 +109,9 @@ namespace Game.Combat.Actions
             for (int targetIndex = 0; targetIndex < request.Targets.Count; targetIndex++)
             {
                 ICombatant target = request.Targets[targetIndex];
-                if (session.IsCombatEnded || target.HP <= 0 ||
+                if (session.IsCombatEnded || canContinue?.Invoke() == false)
+                    return;
+                if (target.HP <= 0 ||
                     !IsCurrentRosterMember(session, target) ||
                     !session.TryGetCombatState(target, out CombatantCombatState state) || !state.IsAlive)
                     continue;
@@ -122,7 +133,7 @@ namespace Game.Combat.Actions
             }
         }
 
-        private static bool CanExecuteRequest(
+        internal static bool CanExecuteRequest(
             CombatSession session,
             CombatSkillExecutionRequest request)
         {

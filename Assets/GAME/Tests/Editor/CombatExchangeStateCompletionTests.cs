@@ -529,6 +529,7 @@ namespace Game.Tests.Combat
                 TargetingRule.AllEnemies,
                 0,
                 10);
+            AddSkill(fixture.AllyTwo, 100, TargetingRule.AllEnemies, 0, 1);
             PrepareCounterToApplyOutcome(fixture, attackerWins: true);
             PrepareAftermathDecision(fixture);
             Assert.That(fixture.StateMachine.TryFinalizeApplyOutcome(
@@ -540,6 +541,8 @@ namespace Game.Tests.Combat
 
             Assert.That(result.Actor, Is.SameAs(fixture.Ally));
             Assert.That(result.Skill, Is.SameAs(allOutSkill));
+            Assert.That(result.AllOutParticipants, Has.Count.EqualTo(2));
+            Assert.That(result.AllOutExecutions, Has.Count.EqualTo(1));
             Assert.That(result.TargetResults, Has.Count.EqualTo(1));
             Assert.That(result.TargetResults[0].Target, Is.SameAs(fixture.Enemy));
             Assert.That(result.TargetResults[0].DamageApplied, Is.EqualTo(10));
@@ -574,6 +577,7 @@ namespace Game.Tests.Combat
         {
             Fixture fixture = CreateStartedFixture(maxPosture: 1);
             AddSkill(fixture.Ally, 99, TargetingRule.AllEnemies, 0, 1);
+            AddSkill(fixture.AllyTwo, 100, TargetingRule.AllEnemies, 0, 2);
             PrepareCounterToApplyOutcome(fixture, attackerWins: true);
             PrepareAftermathDecision(fixture);
             Assert.That(fixture.StateMachine.TryFinalizeApplyOutcome(
@@ -583,8 +587,9 @@ namespace Game.Tests.Combat
                 fixture.Exchange.Version,
                 out CombatSkillExecutionResult result), Is.True);
 
-            Assert.That(result.TargetResults[0].DamageApplied, Is.EqualTo(1));
-            Assert.That(fixture.Enemy.HP, Is.EqualTo(9));
+            Assert.That(result.AllOutExecutions, Has.Count.EqualTo(2));
+            Assert.That(result.TargetResults[0].DamageApplied, Is.EqualTo(3));
+            Assert.That(fixture.Enemy.HP, Is.EqualTo(7));
             Assert.That(fixture.StateMachine.EndReason, Is.EqualTo(CombatEndReason.None));
             Assert.That(fixture.StateMachine.Phase, Is.EqualTo(Phase.Standoff));
             Assert.That(fixture.Exchange.IsAllOutCandidate, Is.False);
@@ -595,6 +600,7 @@ namespace Game.Tests.Combat
         {
             Fixture fixture = CreateStartedFixture(maxPosture: 1, includeSecondEnemy: true);
             AddSkill(fixture.Ally, 99, TargetingRule.AllEnemies, 0, 10);
+            AddSkill(fixture.AllyTwo, 100, TargetingRule.AllEnemies, 0, 1);
             fixture.EnemyTwo.SetStunned(true);
             PrepareCounterToApplyOutcome(fixture, attackerWins: true);
             PrepareAftermathDecision(fixture);
