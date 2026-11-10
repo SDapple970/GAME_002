@@ -8,6 +8,7 @@ using Game.Combat.Effects;
 using Game.Combat.Integration;
 using Game.Combat.Model;
 using Game.Core;
+using Game.NonCombat.Progress;
 
 namespace Game.Combat.Core
 {
@@ -451,7 +452,7 @@ namespace Game.Combat.Core
                     $"[CombatEntryPoint] Combat startup rolled back. Reason={request.Reason}, " +
                     $"requestedAllies={requestedAllyCount}, requestedEnemies={requestedEnemyCount}, " +
                     $"validAllies={normalized.Allies.Length}, validEnemies={normalized.Enemies.Length}, " +
-                    $"failure={exception.GetType().Name}: {exception.Message}",
+                    $"failure={exception.GetType().Name}: {exception.Message}\nOriginal exception stack:\n{exception.StackTrace}",
                     this);
                 return false;
             }
@@ -493,11 +494,24 @@ namespace Game.Combat.Core
             for (int i = 0; i < session.Allies.Count; i++)
             {
                 GameObject field = request.AllyFieldObjects[i];
-                if (!request.TryGetAllyCharacterId(field, out string id) || string.IsNullOrWhiteSpace(id) ||
-                    !characterIds.Add(id.Trim()) || !session.TryGetAllyCharacterId(session.Allies[i], out string boundId) ||
-                    boundId != id.Trim() || !request.TryGetAllyLoadoutSnapshot(field, out CombatSkillLoadoutSnapshot snapshot) ||
-                    snapshot.Skills.Count == 0)
-                    throw new InvalidOperationException($"Production Hand/BP ally {i} requires a unique Character ID and an equipped skill snapshot.");
+                bool hasId = request.TryGetAllyCharacterId(field, out string id) && !string.IsNullOrWhiteSpace(id);
+                bool uniqueId = hasId && characterIds.Add(id.Trim());
+                bool hasBoundId = session.TryGetAllyCharacterId(session.Allies[i], out string boundId);
+                bool boundIdMatches = hasId && hasBoundId && boundId == id.Trim();
+                bool hasSnapshot = request.TryGetAllyLoadoutSnapshot(field, out CombatSkillLoadoutSnapshot snapshot);
+                int skillCount = hasSnapshot ? snapshot.Skills.Count : 0;
+                if (!hasId || !uniqueId || !boundIdMatches || !hasSnapshot || skillCount == 0)
+                {
+                    CharacterSkillSaveParticipant skillOwner = CharacterSkillSaveParticipant.Instance;
+                    int equippedCount = skillOwner != null && hasId ? skillOwner.Runtime.GetEquippedSkills(id).Count : -1;
+                    int acquiredCount = skillOwner != null && hasId ? skillOwner.Runtime.GetAcquiredSkills(id).Count : -1;
+                    throw new InvalidOperationException(
+                        $"Production Hand/BP ally {i} requires a unique Character ID and an equipped skill snapshot. " +
+                        $"field={field.name}, hasId={hasId}, uniqueId={uniqueId}, hasBoundId={hasBoundId}, " +
+                        $"boundIdMatches={boundIdMatches}, hasSnapshot={hasSnapshot}, skillCount={skillCount}, " +
+                        $"characterId={(hasId ? id : "<missing>")}, hasSkillOwner={skillOwner != null}, " +
+                        $"equippedCount={equippedCount}, acquiredCount={acquiredCount}.");
+                }
             }
 
             var rules = new Dictionary<SkillDefinitionSO, FinalCombatRuntimeConfigSO.HandCardRule>();

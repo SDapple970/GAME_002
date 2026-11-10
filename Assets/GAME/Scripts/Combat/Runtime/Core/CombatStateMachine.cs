@@ -558,6 +558,7 @@ namespace Game.Combat.Core
                 !series.IsComplete || series.FinalOutcome != CombatClashOutcome.Tie)
                 return false;
 
+            _session.TryBeginNextCardExchange(exchange.DeclarationId);
             exchange.ResetForStandoff();
             _session.StandoffState.Reset();
             SetPhase(Phase.Standoff);
@@ -1069,6 +1070,7 @@ namespace Game.Combat.Core
                 return Phase == Phase.ExitCombat && EndReason == terminalDecision.EndReason;
             }
 
+            _session.TryBeginNextCardExchange(exchange.DeclarationId);
             exchange.BeginChainDecision(authority.Winner);
             SetPhase(Phase.ChainDecision);
             return true;

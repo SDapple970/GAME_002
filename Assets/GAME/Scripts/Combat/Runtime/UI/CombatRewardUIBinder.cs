@@ -199,13 +199,21 @@ namespace Game.Combat.UI
             UnsubscribeFromRewardPanel();
             _subscribedRewardPanel = rewardPanel;
             if (_subscribedRewardPanel != null)
+            {
                 _subscribedRewardPanel.OnClosed += HandleRewardClosed;
+                _subscribedRewardPanel.OnRestartRequested += HandleRestartRequested;
+                _subscribedRewardPanel.OnTitleRequested += HandleTitleRequested;
+            }
         }
 
         private void UnsubscribeFromRewardPanel()
         {
             if (_subscribedRewardPanel != null)
+            {
                 _subscribedRewardPanel.OnClosed -= HandleRewardClosed;
+                _subscribedRewardPanel.OnRestartRequested -= HandleRestartRequested;
+                _subscribedRewardPanel.OnTitleRequested -= HandleTitleRequested;
+            }
 
             _subscribedRewardPanel = null;
         }
@@ -242,9 +250,9 @@ namespace Game.Combat.UI
 
             NotifyDemoMissionCompatibility(result);
 
-            if (rewardService != null)
+            if (IsVictory(result) && rewardService != null)
                 _pendingGrantResult = rewardService.GrantReward(request);
-            else
+            else if (IsVictory(result))
                 WarnMissingRewardService();
 
             // Bind local content before the state router exposes the global Reward root.
@@ -262,16 +270,29 @@ namespace Game.Combat.UI
             TryEnterRewardState(result);
             _lifecycle = CompletionLifecycle.AwaitingClose;
 
-            if (rewardPanel == null)
+            if (rewardPanel == null && result.EndReason != CombatEndReason.Defeat)
                 CompleteRewardFlow();
         }
 
         private void HandleRewardClosed()
         {
-            if (!_ownsEntryPoint || _lifecycle != CompletionLifecycle.AwaitingClose)
+            if (!_ownsEntryPoint || _lifecycle != CompletionLifecycle.AwaitingClose ||
+                _pendingResult?.EndReason == CombatEndReason.Defeat)
                 return;
 
             CompleteRewardFlow();
+        }
+
+        private void HandleRestartRequested() => HandleDefeatChoice(true);
+        private void HandleTitleRequested() => HandleDefeatChoice(false);
+
+        private void HandleDefeatChoice(bool restart)
+        {
+            if (!_ownsEntryPoint || _lifecycle != CompletionLifecycle.AwaitingClose ||
+                _pendingResult?.EndReason != CombatEndReason.Defeat) return;
+            GameFlowController flow = GameFlowController.Instance;
+            bool accepted = flow != null && (restart ? flow.TryRestartDungeonAfterDefeat() : flow.TryReturnToTitleAfterDefeat());
+            if (!accepted) rewardPanel?.ReleaseDefeatChoice();
         }
 
         private void CompleteRewardFlow()
@@ -327,7 +348,7 @@ namespace Game.Combat.UI
                 if (rewardPanel == null)
                 {
                     WarnIfMissingRewardPanel();
-                    CompleteRewardFlow();
+                    if (_pendingResult?.EndReason != CombatEndReason.Defeat) CompleteRewardFlow();
                     return;
                 }
             }

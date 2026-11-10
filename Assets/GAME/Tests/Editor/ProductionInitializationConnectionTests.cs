@@ -452,7 +452,21 @@ namespace Game.Tests.Integration
                 yield return Wait(() => entry.ActiveSession == null && GameStateMachine.Instance.Current == GameState.Reward, "Director completion and Reward");
                 Assert.That(completed, Is.EqualTo(1)); Assert.That(result.EndReason, Is.EqualTo(endReason));
                 var panel = Object.FindFirstObjectByType<RewardUIPanel>(); Assert.That(panel.IsOpen, Is.True);
-                ButtonOf(panel, "closeButton").onClick.Invoke(); Teleport(_safePosition);
+                ButtonOf(panel, "closeButton").onClick.Invoke();
+                if (endReason == CombatEndReason.Defeat)
+                {
+                    yield return null;
+                    Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Reward));
+                    Assert.That(panel.IsOpen, Is.True);
+                    Assert.That(new InputRouter().AllowsExplorationInput(), Is.False);
+                    Assert.That(GameFlowController.Instance.CanRestartDungeon, Is.False);
+                    Assert.That(ButtonOf(panel, "restartButton").interactable, Is.False);
+                    ButtonOf(panel, "titleButton").onClick.Invoke();
+                    yield return Wait(() => SceneManager.GetActiveScene().name == "TitleScene" &&
+                        GameStateMachine.Instance.Current == GameState.Title, "Defeat title");
+                    yield break;
+                }
+                Teleport(_safePosition);
                 yield return Wait(() => GameStateMachine.Instance.Current == GameState.Exploration, "Reward close");
                 yield return new WaitForFixedUpdate();
                 Assert.That(entry.ActiveSession, Is.Null); Assert.That(completed, Is.EqualTo(1));

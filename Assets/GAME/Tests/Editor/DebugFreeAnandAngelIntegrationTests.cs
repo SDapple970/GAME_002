@@ -282,6 +282,8 @@ public sealed class DebugFreeAnandAngelIntegrationTests
         Assert.That(session.GetCombatState(ally).CurrentMp, Is.EqualTo(2));
         Assert.That(session.TryGetHand(ally, out var hand), Is.True);
         AssertSession(session);
+        var initialCards = hand.Hand.Select(card => (card.RuntimeId, card.Kind)).ToArray();
+        int initialExchange = session.CardExchangeIndex;
         var normal = hand.Hand.First(x => x.Kind == CombatCardKind.Normal);
         var flow = entry.FlowOrchestrator;
         Assert.That(flow.SubmitAttackDeclaration(new CombatAttackDeclaration(ally, enemy, normal.Skill, normal.RuntimeId), session.ExchangeState.Version), Is.True);
@@ -295,7 +297,7 @@ public sealed class DebugFreeAnandAngelIntegrationTests
             if (token?.Kind == CombatExchangeDecisionKind.ClashAttack)
             {
                 var clash = hand.Hand.FirstOrDefault(x => x.Kind == CombatCardKind.Clash);
-                if (clash != null) { Assert.That(flow.SubmitClashSeriesSkill(token, clash.Skill, clash.RuntimeId), Is.True); usedClashCards++; }
+                if (clash != null) { Assert.That(flow.SubmitClashSeriesSkill(token, clash.Skill, clash.RuntimeId), Is.True); usedClashCards++; Assert.That(hand.ClashDiscard.Any(card => card.RuntimeId == clash.RuntimeId), Is.True); Assert.That(session.CardExchangeIndex, Is.EqualTo(initialExchange)); }
             }
             yield return null;
         }
@@ -303,7 +305,10 @@ public sealed class DebugFreeAnandAngelIntegrationTests
         Assert.That(usedClashCards, Is.GreaterThan(0));
         Assert.That(session.GetCombatState(ally).CurrentMp, Is.EqualTo(2 - usedClashCards));
         Assert.That(enemy.HP, Is.LessThan(14));
-        Assert.That(hand.ClashDiscard.Count, Is.EqualTo(usedClashCards));
+        Assert.That(hand.ClashDiscard, Is.Empty);
+        Assert.That(hand.NormalDiscard, Is.Empty);
+        Assert.That(session.CardExchangeIndex, Is.EqualTo(initialExchange + 1));
+        Assert.That(hand.Hand.Select(card => (card.RuntimeId, card.Kind)), Is.EquivalentTo(initialCards));
         VerifyBpCalculationContract(session);
         entry.ActiveStateMachine.ForceExit(CombatEndReason.Abort);
         yield return null;
@@ -487,12 +492,23 @@ public sealed class DebugFreeAnandAngelIntegrationTests
         Assert.That(entry.ActiveSession, Is.Null, "Terminal did not complete through actual Director.");
         Assert.That(completed, Is.EqualTo(1)); Assert.That(result.EndReason, Is.EqualTo(victory ? CombatEndReason.Victory : CombatEndReason.Defeat));
         Assert.That(Object.FindFirstObjectByType<QuestRuntime>().GetObjectiveProgress("testonly.debugfree", "angel"), Is.EqualTo(victory ? 1 : 0));
-        Assert.That(RewardService.Instance.GrantLedgerCount, Is.GreaterThan(ledgerBefore));
+        if (victory)
+            Assert.That(RewardService.Instance.GrantLedgerCount, Is.GreaterThan(ledgerBefore));
+        else
+            Assert.That(RewardService.Instance.GrantLedgerCount, Is.EqualTo(ledgerBefore));
         var panel = Object.FindFirstObjectByType<RewardUIPanel>(); Assert.That(panel.IsOpen, Is.True);
         ((Button)new SerializedObject(panel).FindProperty("closeButton").objectReferenceValue).onClick.Invoke();
         deadline = Time.realtimeSinceStartup + 1f;
         while (Time.realtimeSinceStartup < deadline) yield return null;
         Assert.That(entry.ActiveSession, Is.Null); Assert.That(completed, Is.EqualTo(1));
+        if (!victory)
+        {
+            Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Reward));
+            Assert.That(panel.IsOpen, Is.True);
+            Assert.That(GameStateMachine.Instance.AllowsExplorationInput(), Is.False);
+            entry.OnCombatEnded -= OnCombatEnded;
+            yield break;
+        }
         Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Exploration));
         Assert.That(GameStateMachine.Instance.AllowsExplorationInput(), Is.True);
         Assert.That(Object.FindFirstObjectByType<CombatFieldLock>().IsLocked, Is.False);

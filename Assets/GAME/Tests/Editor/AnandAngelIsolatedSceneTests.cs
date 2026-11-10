@@ -208,6 +208,14 @@ public sealed class AnandAngelIsolatedSceneTests
         deadline = Time.realtimeSinceStartup + 1f;
         while (Time.realtimeSinceStartup < deadline) yield return null;
         Assert.That(entry.ActiveSession, Is.Null); Assert.That(completed, Is.EqualTo(1));
+        if (!victory)
+        {
+            Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Reward));
+            Assert.That(panel.IsOpen, Is.True);
+            Assert.That(GameStateMachine.Instance.AllowsExplorationInput(), Is.False);
+            entry.OnCombatEnded -= OnCombatEnded;
+            yield break;
+        }
         Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Exploration));
         Assert.That(GameStateMachine.Instance.AllowsExplorationInput(), Is.True);
         Assert.That(Object.FindFirstObjectByType<CombatFieldLock>().IsLocked, Is.False);

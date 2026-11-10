@@ -21,7 +21,15 @@ namespace Game.Combat.Core
                     return false;
             }
 
-            return livingEnemies > 0;
+            if (livingEnemies == 0)
+                return false;
+
+            foreach (ICombatant ally in session.Allies)
+                if (CombatDeclarationPolicy.IsActiveMember(session, ally) &&
+                    !CombatDeclarationPolicy.IsPanicked(session, ally))
+                    return true;
+
+            return false;
         }
     }
 }

@@ -43,6 +43,7 @@ namespace Game.Combat.Model
         private readonly List<CombatHandCard> _normalDiscard = new();
         private readonly List<CombatHandCard> _clashDiscard = new();
         private readonly List<CombatHandCard> _hand = new();
+        private readonly CombatHandCard[] _fixedHand;
         private readonly CombatHandCard[] _deckSnapshot;
         private readonly int _normalCapacity;
         private readonly int _clashCapacity;
@@ -86,6 +87,7 @@ namespace Game.Combat.Model
             Shuffle(_normalDraw);
             Shuffle(_clashDraw);
             Fill();
+            _fixedHand = _hand.ToArray();
         }
 
         public bool TryFindInHand(ISkill skill, CombatCardKind kind, long? runtimeId,
@@ -113,10 +115,12 @@ namespace Game.Combat.Model
             DiscardPile(card.Kind).Add(card);
         }
 
-        internal void Refill()
+        internal void ResetForNextExchange()
         {
-            RefillCount++;
-            Fill();
+            _hand.Clear();
+            _hand.AddRange(_fixedHand);
+            _normalDiscard.Clear();
+            _clashDiscard.Clear();
         }
 
         private void Fill()

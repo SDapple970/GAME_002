@@ -116,6 +116,163 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void NearSpawn_CapturesAndRestoresExactPlayerPosition()
+        {
+            GameObject player = new("NearSpawnPlayer");
+            GameObject marker = new("NearSpawnMarker");
+            try
+            {
+                marker.transform.position = new Vector3(4f, 5f, 0f);
+                SetField(marker.AddComponent<SceneSpawnPoint>(), "spawnPointId", "near-" + Guid.NewGuid().ToString("N"));
+                SetField(_service, "player", player.transform);
+                Vector3 position = marker.transform.position + new Vector3(0.1f, 0f, 0f);
+                player.transform.position = position;
+
+                GameSaveData save = new();
+                Invoke(_service, "CaptureLocation", save);
+                Assert.That(save.header.playerSpawnId, Is.Empty);
+                player.transform.position = Vector3.zero;
+                Invoke(_service, "RestoreLocation", save);
+                Assert.That(player.transform.position, Is.EqualTo(position));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(marker);
+                UnityEngine.Object.DestroyImmediate(player);
+            }
+        }
+
+        [Test]
+        public void ExactAndDistantSpawn_CaptureCompatibleLocation()
+        {
+            GameObject player = new("SpawnPositionPlayer");
+            GameObject marker = new("SpawnPositionMarker");
+            try
+            {
+                string spawnId = "exact-" + Guid.NewGuid().ToString("N");
+                marker.transform.position = new Vector3(4f, 5f, 0f);
+                SetField(marker.AddComponent<SceneSpawnPoint>(), "spawnPointId", spawnId);
+                SetField(_service, "player", player.transform);
+                player.transform.position = marker.transform.position;
+                GameSaveData exact = new();
+                Invoke(_service, "CaptureLocation", exact);
+                Assert.That(exact.header.playerSpawnId, Is.EqualTo(spawnId));
+                player.transform.position = Vector3.zero;
+                Invoke(_service, "RestoreLocation", exact);
+                Assert.That(player.transform.position, Is.EqualTo(marker.transform.position));
+
+                Vector3 distant = marker.transform.position + Vector3.right * 3f;
+                player.transform.position = distant;
+                GameSaveData far = new();
+                Invoke(_service, "CaptureLocation", far);
+                Assert.That(far.header.playerSpawnId, Is.Empty);
+                player.transform.position = Vector3.zero;
+                Invoke(_service, "RestoreLocation", far);
+                Assert.That(player.transform.position, Is.EqualTo(distant));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(marker);
+                UnityEngine.Object.DestroyImmediate(player);
+            }
+        }
+
+        [Test]
+        public void EncounterHistory_SurvivesAbsentOwnersDiskReloadAndRepeatedReentry()
+        {
+            CombatEncounterGroup first = new GameObject("SceneAEncounter").AddComponent<CombatEncounterGroup>();
+            SetField(first, "encounterId", "scene.a.encounter");
+            GameSaveData cleared = new();
+            cleared.world.clearedEncounterIds.Add("scene.a.encounter");
+            first.RestoreSaveData(cleared);
+            Invoke(_service, "CaptureEncounterStateBeforeSceneChange");
+            Invoke(_service, "CaptureEncounterStateBeforeSceneChange");
+            UnityEngine.Object.DestroyImmediate(first.gameObject);
+
+            CombatEncounterGroup second = new GameObject("SceneBEncounter").AddComponent<CombatEncounterGroup>();
+            SetField(second, "encounterId", "scene.b.encounter");
+            Assert.That(_service.TrySave(out string message), Is.True, message);
+            Assert.That(File.ReadAllText(_primary), Does.Contain("scene.a.encounter"));
+            UnityEngine.Object.DestroyImmediate(second.gameObject);
+            UnityEngine.Object.DestroyImmediate(_serviceObject);
+            _serviceObject = new GameObject("ColdSaveLoadService");
+            _service = _serviceObject.AddComponent<SaveLoadService>();
+            Invoke(_service, "SetStoragePathForTests", _primary);
+            Assert.That(_service.TryLoad(out message), Is.True, message);
+
+            for (int visit = 0; visit < 2; visit++)
+            {
+                first = new GameObject("SceneAEncounter").AddComponent<CombatEncounterGroup>();
+                SetField(first, "encounterId", "scene.a.encounter");
+                Invoke(_service, "ApplyEncounterStateToLoadedScene");
+                GameSaveData observed = new();
+                first.CaptureSaveData(observed);
+                Assert.That(observed.world.clearedEncounterIds, Is.EqualTo(new[] { "scene.a.encounter" }));
+                Invoke(_service, "CaptureEncounterStateBeforeSceneChange");
+                UnityEngine.Object.DestroyImmediate(first.gameObject);
+                Assert.That(_service.CaptureGameSaveDataSnapshot().world.clearedEncounterIds,
+                    Is.EqualTo(new[] { "scene.a.encounter" }));
+            }
+        }
+
+        [Test]
+        public void EncounterHistory_StandaloneTriggerRestoresAfterReentry()
+        {
+            GameObject firstObject = new("StandaloneA");
+            firstObject.AddComponent<BoxCollider2D>();
+            CombatEncounterTrigger2D first = firstObject.AddComponent<CombatEncounterTrigger2D>();
+            SetField(first, "encounterId", "standalone.once");
+            GameSaveData cleared = new();
+            cleared.world.clearedEncounterIds.Add("standalone.once");
+            first.RestoreSaveData(cleared);
+            Invoke(_service, "CaptureEncounterStateBeforeSceneChange");
+            UnityEngine.Object.DestroyImmediate(first.gameObject);
+
+            GameObject restoredObject = new("StandaloneB");
+            restoredObject.AddComponent<BoxCollider2D>();
+            CombatEncounterTrigger2D restored = restoredObject.AddComponent<CombatEncounterTrigger2D>();
+            try
+            {
+                SetField(restored, "encounterId", "standalone.once");
+                Invoke(_service, "ApplyEncounterStateToLoadedScene");
+                GameSaveData observed = new();
+                restored.CaptureSaveData(observed);
+                Assert.That(observed.world.clearedEncounterIds, Does.Contain("standalone.once"));
+                Assert.That(restored.gameObject.activeSelf, Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(restored.gameObject);
+            }
+        }
+
+        [Test]
+        public void EncounterHistory_AuthoritativeSnapshotRewindsAndNewGameClears()
+        {
+            GameStateMachine state = new GameObject("GameStateMachine").AddComponent<GameStateMachine>();
+            Invoke(state, "Awake");
+            GameSaveData dungeonStart = new();
+            dungeonStart.world.clearedEncounterIds.Add("earlier.encounter");
+            _service.RestoreGameSaveDataSnapshot(dungeonStart);
+            CombatEncounterGroup current = new GameObject("CurrentEncounter").AddComponent<CombatEncounterGroup>();
+            SetField(current, "encounterId", "attempt.encounter");
+            GameSaveData attempt = new();
+            attempt.world.clearedEncounterIds.Add("attempt.encounter");
+            current.RestoreSaveData(attempt);
+            Invoke(_service, "CaptureEncounterStateBeforeSceneChange");
+            Assert.That(_service.CaptureGameSaveDataSnapshot().world.clearedEncounterIds,
+                Is.EquivalentTo(new[] { "earlier.encounter", "attempt.encounter" }));
+
+            _service.RestoreGameSaveDataSnapshot(dungeonStart);
+            Assert.That(_service.CaptureGameSaveDataSnapshot().world.clearedEncounterIds,
+                Is.EqualTo(new[] { "earlier.encounter" }));
+            UnityEngine.Object.DestroyImmediate(current.gameObject);
+            Assert.That(state.TrySetState(GameState.Title, "test new game"), Is.True);
+            Assert.That(_service.TryResetForNewGame(out string message), Is.True, message);
+            Assert.That(_service.CaptureGameSaveDataSnapshot().world.clearedEncounterIds, Is.Empty);
+        }
+
+        [Test]
         public void UniqueSavedSpawnId_RestoresMarkerAndMissingIdUsesSavedPosition()
         {
             string spawnId = "save-unique-" + Guid.NewGuid().ToString("N");

@@ -110,7 +110,7 @@ namespace Game.Tests.Integration
         }
 
         [Test]
-        public void ApprovedSpend_ConsumesOnceChargesUltimateAndRefillsOnlyAtCycleBoundary()
+        public void ApprovedSpend_ConsumesOnceChargesUltimateWithoutCycleRefill()
         {
             CombatSession session = Start(out _); InitializeFixture(session);
             var actor = session.Allies[0]; var skill = actor.Skills[0];
@@ -131,9 +131,9 @@ namespace Game.Tests.Integration
             Assert.That(session.TryRecordCompletedAttackCycle(Side.Allies, 1, true), Is.True);
             Assert.That(hand.RefillCount, Is.Zero);
             Assert.That(session.TryRecordCompletedAttackCycle(Side.Enemies, 1, true), Is.True);
-            Assert.That(hand.RefillCount, Is.EqualTo(1));
+            Assert.That(hand.RefillCount, Is.Zero);
             Assert.That(session.TryRecordCompletedAttackCycle(Side.Enemies, 1, true), Is.False);
-            Assert.That(hand.RefillCount, Is.EqualTo(1));
+            Assert.That(hand.RefillCount, Is.Zero);
         }
 
         [Test]

@@ -53,6 +53,7 @@ public sealed class GameInputInstaller : MonoBehaviour
     private bool _actionsEnabled;
     private GameStateMachine _stateMachine;
     private bool _stateMachineSubscribed;
+    private bool _sceneLoadWasInProgress;
 
     private void Awake()
     {
@@ -85,7 +86,13 @@ public sealed class GameInputInstaller : MonoBehaviour
     private void Update()
     {
         if (Instance == this)
+        {
             EnsureStateMachineSubscription();
+            bool loading = SceneFlowController.Instance != null && SceneFlowController.Instance.IsSceneLoadInProgress;
+            if (_sceneLoadWasInProgress && !loading && Actions != null && Router != null && Router.AllowsExplorationInput())
+                ProcessMove(Actions.Gameplay.Move.ReadValue<Vector2>());
+            _sceneLoadWasInProgress = loading;
+        }
     }
 
     private void OnDisable()

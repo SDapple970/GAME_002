@@ -35,6 +35,10 @@ namespace Game.Combat.Actions
                 if (target.HP <= 0 || !IsCurrentRosterMember(session, target))
                     continue;
                 int hpBefore = target.HP;
+                long? directDamage = 0;
+                int damageAttempts = 0;
+                int directRecovery = 0;
+                bool recoveryAttempted = false;
 
                 if (revealsWeakness)
                     session.Knowledge.RevealWeakness(target.Id);
@@ -47,14 +51,27 @@ namespace Game.Combat.Actions
                             request.Skill.BaseDamage)
                         : request.Skill.BaseDamage;
                     for (int hit = 0; hit <= extraHits && target.HP > 0 && !session.IsCombatEnded; hit++)
-                        target.ApplyDamage(damage);
+                    {
+                        damageAttempts++;
+                        if (target is ICombatantDamageReceipt receiptSource)
+                            directDamage += receiptSource.ApplyDamageWithReceipt(damage);
+                        else
+                        {
+                            target.ApplyDamage(damage);
+                            directDamage = null;
+                        }
+                    }
                 }
 
                 if (!session.IsCombatEnded && healing > 0 &&
                     session.TryGetCombatState(target, out CombatantCombatState targetState) && targetState.IsAlive)
-                    targetState.RestoreHp(healing);
+                {
+                    recoveryAttempted = true;
+                    directRecovery = targetState.RestoreHpWithReceipt(healing);
+                }
 
-                targetResults.Add(new CombatSkillTargetResult(target, hpBefore, target.HP));
+                targetResults.Add(new CombatSkillTargetResult(target, hpBefore, target.HP,
+                    directDamage, directRecovery, damageAttempts, recoveryAttempted));
             }
 
             ApplyAuthoredStatuses(session, request, appliedStatuses);

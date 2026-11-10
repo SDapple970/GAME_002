@@ -122,6 +122,45 @@ namespace Game.Tests.Integration
             Assert.That(commands, Is.GreaterThan(0));
         }
 
+        [TestCase(StartReason.PlayerFirstHit)]
+        [TestCase(StartReason.PlayerGotHit)]
+        public void MissingAllyIdentity_ReportsOriginalFailureAndAllowsCleanRetry(StartReason reason)
+        {
+            CombatStartRequest invalid = Request(1, reason, bindIdentity: false);
+            LogAssert.Expect(LogType.Error, new Regex(
+                "Combat startup rolled back.*hasId=False.*hasBoundId=False.*hasSnapshot=False.*skillCount=0" +
+                "[\\s\\S]*Original exception stack:[\\s\\S]*InitializeProductionHandBp"));
+            Assert.That(_entry.StartCombat(invalid), Is.False);
+            Assert.That(_entry.ActiveSession, Is.Null);
+            Assert.That(_entry.ActiveStateMachine, Is.Null);
+            Assert.That(_flow.PendingDecisionRequest, Is.Null);
+            Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Exploration));
+
+            Assert.That(_entry.StartCombat(Request(1, reason)), Is.True);
+            Assert.That(_entry.ActiveSession, Is.Not.Null);
+            Assert.That(_entry.ActiveSession.HasProductionHandBpInitialization, Is.True);
+        }
+
+        [TestCase(StartReason.PlayerFirstHit, false)]
+        [TestCase(StartReason.PlayerGotHit, false)]
+        [TestCase(StartReason.PlayerGotHit, true)]
+        public void EmptyEquippedSkills_ReportsActualOwnerStateAndPreservesRetry(StartReason reason, bool removeAcquisition)
+        {
+            CombatStartRequest request = Request(1, reason);
+            if (removeAcquisition) _skills.Reset();
+            else _skills.TryUnequip("b1.hero.0", _skill.PersistentKey);
+            LogAssert.Expect(LogType.Error, new Regex(
+                "Combat startup rolled back.*hasSnapshot=False.*characterId=b1\\.hero\\.0, hasSkillOwner=True, equippedCount=0, acquiredCount=" +
+                (removeAcquisition ? "0" : "1")));
+            Assert.That(_entry.StartCombat(request), Is.False);
+            Assert.That(_entry.ActiveSession, Is.Null);
+            Assert.That(_skills.GetEquippedSkills("b1.hero.0"), Is.Empty);
+            if (removeAcquisition) _skills.TryAcquire("b1.hero.0", _skill.PersistentKey);
+            _skills.TryEquip("b1.hero.0", _skill.PersistentKey);
+            Assert.That(_entry.StartCombat(request), Is.True);
+            Assert.That(_entry.ActiveSession.HasProductionHandBpInitialization, Is.True);
+        }
+
         [TestCase("bpMaximum")]
         [TestCase("copies")]
         [TestCase("missingIdentity")]

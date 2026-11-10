@@ -282,10 +282,11 @@ namespace Game.Tests.Integration
             Assert.That(hand.Hand.Single().RuntimeId, Is.EqualTo(clashes[2].RuntimeId));
             Assert.That(session.TryRecordCompletedAttackCycle(Side.Allies, 1, true), Is.True);
             Assert.That(session.TryRecordCompletedAttackCycle(Side.Enemies, 1, true), Is.True);
+            Assert.That(session.TryBeginNextCardExchange(1), Is.True);
             AssertDeck(session, 2, 3);
             Assert.That(hand.Hand.Select(card => card.RuntimeId), Is.EquivalentTo(ids));
             Assert.That(hand.NormalDiscard, Is.Empty); Assert.That(hand.ClashDiscard, Is.Empty);
-            Assert.That(hand.RefillCount, Is.EqualTo(1));
+            Assert.That(hand.RefillCount, Is.Zero);
             AssertStart();
             _entry.ActiveStateMachine.ForceExit(CombatEndReason.Abort); Call(_entry, "Update"); _gameFlow.EnterExploration();
             AssertStart(); StartCombat(); AssertDeck(_entry.ActiveSession, 2, 3);

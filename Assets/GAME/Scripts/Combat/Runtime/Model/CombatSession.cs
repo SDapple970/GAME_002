@@ -43,6 +43,18 @@ namespace Game.Combat.Model
         private readonly int[] _lastCompletedAttackCycle = new int[2];
         private int _completedCycleSides;
         private long _nextCardRuntimeId = 1;
+        private int _lastCompletedCardExchangeId;
+        internal event Action<ICombatant, CombatHandCard> CardCommitted;
+
+        internal void NotifyCardCommitted(ICombatant actor, CombatHandCard card)
+        {
+            if (card == null || CardCommitted == null) return;
+            foreach (Action<ICombatant, CombatHandCard> handler in CardCommitted.GetInvocationList())
+            {
+                try { handler(actor, card); }
+                catch (Exception exception) { UnityEngine.Debug.LogException(exception); }
+            }
+        }
 
         public string SkillAcquisitionRecipientCharacterId { get; internal set; }
         public string ProgressionTargetCharacterId { get; internal set; }
@@ -104,6 +116,7 @@ namespace Game.Combat.Model
         public InspirationPool Inspiration { get; }
         public CombatEnvironment Env { get; }
         public int TurnIndex { get; private set; }
+        public int CardExchangeIndex { get; private set; } = 1;
         public StartReason StartReason { get; }
         public Side InitiativeSide { get; }
         public CombatTurn CurrentTurn { get; private set; } = new();
@@ -299,7 +312,7 @@ namespace Game.Combat.Model
                 BpRuntime.RecordAttackCycle(side, cycleId, hadSuccessfulExchange, this);
         }
 
-        /// <summary>One refill only after both sides complete distinct, successful attack cycles.</summary>
+        /// <summary>Records successful attack cycles without changing the fixed hand.</summary>
         public bool TryRecordCompletedAttackCycle(Side side, int cycleId, bool hadSuccessfulExchange)
         {
             if (!HasHandValidation || !Enum.IsDefined(typeof(Side), side) || cycleId <= 0 ||
@@ -316,8 +329,19 @@ namespace Game.Combat.Model
                 return true;
 
             _completedCycleSides = 0;
+            return true;
+        }
+
+        internal bool TryBeginNextCardExchange(int completedDeclarationId)
+        {
+            if (IsCombatEnded || completedDeclarationId <= _lastCompletedCardExchangeId ||
+                completedDeclarationId <= 0 || CombatEndEvaluator.Evaluate(this) != CombatEndReason.None)
+                return false;
+
+            _lastCompletedCardExchangeId = completedDeclarationId;
+            CardExchangeIndex++;
             foreach (CombatHandRuntime hand in _hands.Values)
-                hand.Refill();
+                hand.ResetForNextExchange();
             return true;
         }
 

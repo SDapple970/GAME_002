@@ -1002,10 +1002,10 @@ namespace Game.Tests.Combat
 
             Assert.That(fixture.Panel.IsOpen, Is.True);
             Assert.That(fixture.Wallet.Gold, Is.EqualTo(grants ? 10 : 0));
+            Assert.That(fixture.Service.CombatGrantLedgerCount, Is.EqualTo(grants ? 1 : 0));
         }
 
         [TestCase(CombatEndReason.Victory)]
-        [TestCase(CombatEndReason.Defeat)]
         [TestCase(CombatEndReason.Escape)]
         [TestCase(CombatEndReason.Abort)]
         public void DefaultOutcomes_CloseToExplorationOnce(CombatEndReason reason)
@@ -1024,6 +1024,17 @@ namespace Game.Tests.Combat
 
             Assert.That(fixture.StateMachine.Current, Is.EqualTo(GameState.Exploration));
             Assert.That(explorationTransitions, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Defeat_CloseDoesNotReturnToExploration()
+        {
+            BinderFixture fixture = CreateBinderFixture();
+            Publish(fixture.Entry, CreateResult(CombatEndReason.Defeat));
+            fixture.CloseButton.onClick.Invoke();
+            Assert.That(fixture.StateMachine.Current, Is.EqualTo(GameState.Reward));
+            Assert.That(fixture.Panel.IsOpen, Is.True);
+            Assert.That(fixture.Service.CombatGrantLedgerCount, Is.Zero);
         }
 
         [Test]

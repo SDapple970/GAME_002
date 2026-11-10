@@ -9,6 +9,7 @@ using Game.Combat.Model;
 using Game.Combat.UI;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Game.Tests.Editor
 {
@@ -288,10 +289,18 @@ namespace Game.Tests.Editor
             GameObject uiObject = new GameObject("ProductionHandoffUI");
             _createdObjects.Add(uiObject);
             FinalCombatUIBinder binder = uiObject.AddComponent<FinalCombatUIBinder>();
+            GameObject handoffRoot = new GameObject("HandoffOptions");
+            _createdObjects.Add(handoffRoot);
+            GameObject optionObject = new GameObject("Option", typeof(RectTransform), typeof(Button));
+            _createdObjects.Add(optionObject);
+            GameObject label = new GameObject("Label", typeof(RectTransform), typeof(Text));
+            label.transform.SetParent(optionObject.transform);
+            typeof(FinalCombatUIBinder).GetField("optionButtonPrefab",
+                BindingFlags.Instance | BindingFlags.NonPublic).SetValue(binder, optionObject.GetComponent<Button>());
             typeof(FinalCombatUIBinder).GetField("actorListRoot",
                 BindingFlags.Instance | BindingFlags.NonPublic).SetValue(binder, uiObject);
             typeof(FinalCombatUIBinder).GetField("handoffListRoot",
-                BindingFlags.Instance | BindingFlags.NonPublic).SetValue(binder, uiObject);
+                BindingFlags.Instance | BindingFlags.NonPublic).SetValue(binder, handoffRoot);
             binder.Bind(fixture.Session, fixture.StateMachine, fixture.Orchestrator);
             FinalCombatPlayerCommandController controller =
                 (FinalCombatPlayerCommandController)typeof(FinalCombatUIBinder)
@@ -301,6 +310,12 @@ namespace Game.Tests.Editor
 
             DriveCurrentPlayerNoResponseToChain(fixture, controller);
             Assert.That(controller.ViewState.HandoffCandidates, Is.Empty);
+            Assert.That(handoffRoot.activeSelf, Is.True);
+            Assert.That(controller.GetHandoffUnavailableReason(fixture.AllyTwo), Is.EqualTo("인계 자격 없음"));
+            Button unavailable = handoffRoot.GetComponentInChildren<Button>();
+            Assert.That(unavailable, Is.Not.Null);
+            Assert.That(unavailable.interactable, Is.False);
+            Assert.That(unavailable.GetComponentInChildren<Text>().text, Does.Contain("인계 자격 없음"));
             fixture.Session.BpRuntime.CommitInvestment(fixture.AllyTwo, 1);
             controller.RefreshAvailability();
             Assert.That(controller.ViewState.HandoffCandidates, Does.Contain(fixture.AllyTwo));

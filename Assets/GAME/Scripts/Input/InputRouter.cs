@@ -13,6 +13,8 @@ namespace Game.Input
 
         public bool AllowsExplorationInput()
         {
+            if (SceneFlowController.Instance != null && SceneFlowController.Instance.IsSceneLoadInProgress)
+                return false;
             if (GameStateMachine.Instance == null)
                 return true;
 
@@ -117,6 +119,8 @@ namespace Game.Input
 
         public InteractionDestination ResolveInteractionDestination()
         {
+            if (SceneFlowController.Instance != null && SceneFlowController.Instance.IsSceneLoadInProgress)
+                return InteractionDestination.None;
             if (GameStateMachine.Instance == null)
                 return InteractionDestination.Exploration;
 

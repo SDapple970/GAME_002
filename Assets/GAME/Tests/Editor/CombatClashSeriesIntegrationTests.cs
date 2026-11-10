@@ -30,6 +30,226 @@ namespace Game.Tests.Combat
 
         // Durability, power, costs, and timers here are fixture values, not game balance.
         [Test]
+        public void HpUi_TracksDamageHealingZeroChangeRosterAndNewSession()
+        {
+            Fixture f = CreateFixture(2, 2);
+            GameObject panel = NewUiObject("HpPanel");
+            Text playerHp = NewUiObject("PlayerHp", panel.transform).AddComponent<Text>();
+            Text enemyHp = NewUiObject("EnemyHp", panel.transform).AddComponent<Text>();
+            Text phase = NewUiObject("Phase", panel.transform).AddComponent<Text>();
+            FinalCombatUIBinder binder = _owner.AddComponent<FinalCombatUIBinder>();
+            SetPrivateField(binder, "panelRoot", panel);
+            SetPrivateField(binder, "playerHpText", playerHp);
+            SetPrivateField(binder, "enemyHpText", enemyHp);
+            SetPrivateField(binder, "phaseText", phase);
+            binder.Bind(f.Session, f.State, f.Flow);
+            MethodInfo update = typeof(FinalCombatUIBinder).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(playerHp.text, Does.Contain("10 / 10"));
+            Assert.That(enemyHp.text, Does.Contain("10 / 10"));
+
+            f.Ally.ApplyDamage(3);
+            f.Enemy.ApplyDamage(4);
+            update.Invoke(binder, null);
+            Assert.That(playerHp.text, Does.Contain("7 / 10"));
+            Assert.That(enemyHp.text, Does.Contain("6 / 10"));
+            f.Session.GetCombatState(f.Ally).RestoreHp(2);
+            f.Session.GetCombatState(f.Enemy).RestoreHp(1);
+            update.Invoke(binder, null);
+            Assert.That(playerHp.text, Does.Contain("9 / 10"));
+            Assert.That(enemyHp.text, Does.Contain("7 / 10"));
+            f.Ally.ApplyDamage(0);
+            f.Enemy.ApplyDamage(0);
+            update.Invoke(binder, null);
+            Assert.That(playerHp.text, Does.Contain("9 / 10"));
+            Assert.That(enemyHp.text, Does.Contain("7 / 10"));
+
+            TestCombatant replacement = new TestCombatant(3, Side.Enemies);
+            f.Session.Enemies.Clear();
+            f.Session.Enemies.Add(replacement);
+            f.Session.InitializeCombatStates(f.Session.RuntimeConfig);
+            f.Session.GetCombatState(replacement).ApplyDamage(2);
+            update.Invoke(binder, null);
+            Assert.That(enemyHp.text, Does.Contain("8 / 10"));
+            f.State.ForceExit(CombatEndReason.Abort);
+            Assert.That(phase.text, Does.Contain("전투 종료"));
+            binder.Unbind();
+            Assert.That(panel.activeSelf, Is.False);
+
+            TestCombatant nextAlly = new TestCombatant(4, Side.Allies);
+            TestCombatant nextEnemy = new TestCombatant(5, Side.Enemies);
+            CombatSession next = new CombatSession(StartReason.PlayerFirstHit, Side.Allies,
+                new InspirationPool(10), new CombatEnvironment(), CombatFlowMode.StandoffClashChain,
+                new CombatRuntimeConfig(10, 5, 3, 0, 0f, 10f, 1f));
+            next.Allies.Add(nextAlly);
+            next.Enemies.Add(nextEnemy);
+            CombatStateMachine nextState = new CombatStateMachine(next);
+            CombatFlowOrchestrator nextFlow = _owner.AddComponent<CombatFlowOrchestrator>();
+            Assert.That(nextFlow.BindFinalExchange(next, nextState, new ZeroRandom(), new SkillPowerProvider()), Is.True);
+            binder.Bind(next, nextState, nextFlow);
+            Assert.That(playerHp.text, Does.Contain("10 / 10"));
+            Assert.That(enemyHp.text, Does.Contain("10 / 10"));
+            f.Session.GetCombatState(f.Ally).RestoreHp(1);
+            update.Invoke(binder, null);
+            Assert.That(playerHp.text, Does.Contain("10 / 10"));
+            Assert.That(enemyHp.text, Does.Contain("10 / 10"));
+            binder.Unbind();
+        }
+
+        [Test]
+        public void CardFeedback_OnlySuccessfulCommitUsesActualDuplicateIdAndClearsOnUnbind()
+        {
+            Fixture f = CreateFixture(2, 2);
+            Assert.That(f.Session.TryEnableHandValidation(f.Ally, new[]
+            {
+                new CombatHandEntry(f.AllySkills[0], CombatCardKind.Normal),
+                new CombatHandEntry(f.AllySkills[0], CombatCardKind.Normal)
+            }, 2, 0, 23), Is.True);
+            Assert.That(f.Session.TryGetHand(f.Ally, out CombatHandRuntime hand), Is.True);
+            CombatHandCard first = hand.Hand[0];
+            CombatHandCard second = hand.Hand[1];
+            FinalCombatUIBinder binder = _owner.AddComponent<FinalCombatUIBinder>();
+            binder.Bind(f.Session, f.State, f.Flow);
+            Assert.That(PrivateField<string>(binder, "_cardCommitFeedback"), Is.Null);
+            CombatAttackDeclaration attack = new(f.Ally, f.Enemy, f.AllySkills[0], second.RuntimeId);
+            Assert.That(CombatExchangeCommitPolicy.TryCommit(f.Session, attack, null, out _), Is.True);
+            Assert.That(PrivateField<string>(binder, "_cardCommitFeedback"), Does.Contain($"#{second.RuntimeId}"));
+            Assert.That(hand.Hand[0].RuntimeId, Is.EqualTo(first.RuntimeId));
+            int mp = f.Session.GetCombatState(f.Ally).CurrentMp;
+            Assert.That(CombatExchangeCommitPolicy.TryCommit(f.Session, attack, null, out _), Is.False);
+            Assert.That(f.Session.GetCombatState(f.Ally).CurrentMp, Is.EqualTo(mp));
+            f.Session.NotifyCardCommitted(f.Ally, second);
+            Assert.That(PrivateField<HashSet<long>>(binder, "_shownCommittedCards").Count, Is.EqualTo(1));
+            Assert.That(f.Session.TryBeginNextCardExchange(1), Is.True);
+            Assert.That(hand.Hand[1].RuntimeId, Is.EqualTo(second.RuntimeId));
+            binder.Unbind();
+            Assert.That(PrivateField<string>(binder, "_cardCommitFeedback"), Is.Null);
+            f.Session.NotifyCardCommitted(f.Ally, second);
+            Assert.That(PrivateField<string>(binder, "_cardCommitFeedback"), Is.Null);
+        }
+
+        [Test]
+        public void UiFeedback_SameFrameDrawSurvivesResetAndClearsOnUnbind()
+        {
+            Fixture f = CreateFixture(2, 2);
+            Assert.That(f.Enable(3, 3, 1), Is.True);
+            FinalCombatUIBinder binder = _owner.AddComponent<FinalCombatUIBinder>();
+            binder.Bind(f.Session, f.State, f.Flow);
+            f.DeclareAndApproach();
+            Assert.That(f.Session.ExchangeState.ClashSeries, Is.Null);
+            Assert.That(PrivateField<string>(binder, "_lastClashFeedback"),
+                Is.EqualTo("Clash 최종 결과 · 무승부"));
+            Assert.That(PrivateField<string>(binder, "_lastComparisonFeedback"),
+                Does.Contain("비교 1 · 위력 2:2 · 무승부"));
+            binder.Unbind();
+            Assert.That(PrivateField<string>(binder, "_lastClashFeedback"), Is.Null);
+            Assert.That(PrivateField<string>(binder, "_lastComparisonFeedback"), Is.Null);
+        }
+
+        [Test]
+        public void UiFeedback_SeparatesComparisonFromFinalAndIgnoresDuplicate()
+        {
+            Fixture f = CreateFixture(3, 2);
+            Assert.That(f.Enable(4, 4, 2), Is.True);
+            CombatClashRoundPresentationRequest request = null;
+            f.Flow.ClashRoundPresentationRequested += value => request = value;
+            FinalCombatUIBinder binder = _owner.AddComponent<FinalCombatUIBinder>();
+            binder.Bind(f.Session, f.State, f.Flow);
+            f.DeclareAndApproach();
+            Assert.That(request, Is.Not.Null);
+            Assert.That(PrivateField<string>(binder, "_lastComparisonFeedback"),
+                Does.Contain("비교 1 · 위력 3:2 · 승리"));
+            Assert.That(PrivateField<string>(binder, "_lastClashFeedback"), Is.Null);
+            MethodInfo handler = typeof(FinalCombatUIBinder).GetMethod("HandleClashFeedback",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            handler.Invoke(binder, new object[] { f.Session.ExchangeState.ClashSeries, request.Result });
+            Assert.That(PrivateField<int>(binder, "_lastFeedbackComparison"), Is.EqualTo(1));
+            binder.Unbind();
+        }
+
+        [Test]
+        public void UiFeedback_NewSeriesAndUnbindClearPriorResult()
+        {
+            Fixture f = CreateFixture(2, 2);
+            Assert.That(f.Enable(3, 3, 1), Is.True);
+            FinalCombatUIBinder binder = _owner.AddComponent<FinalCombatUIBinder>();
+            binder.Bind(f.Session, f.State, f.Flow);
+            CombatApproachPresentationRequest approach = null;
+            f.Flow.ApproachPresentationRequested += value => approach = value;
+            void RunExchange()
+            {
+                approach = null;
+                Assert.That(f.Flow.SubmitAttackDeclaration(
+                    new CombatAttackDeclaration(f.Ally, f.Enemy, f.AllySkills[0]),
+                    f.Flow.PendingDecisionRequest.ExchangeVersion), Is.True);
+                Assert.That(f.Flow.SubmitResponse(new CombatResponseDeclaration(f.Enemy, f.EnemySkills[0]),
+                    f.Flow.PendingDecisionRequest.ExchangeVersion), Is.True);
+                Assert.That(approach, Is.Not.Null);
+                Assert.That(approach.TryComplete(), Is.True);
+            }
+            RunExchange();
+            CombatClashSeriesState first = PrivateField<CombatClashSeriesState>(binder, "_feedbackSeries");
+            bool inspected = false;
+            f.Session.ExchangeState.OnStateChanged += _ =>
+            {
+                CombatClashSeriesState current = f.Session.ExchangeState.ClashSeries;
+                if (current == null || ReferenceEquals(current, first) || inspected) return;
+                inspected = true;
+                Assert.That(PrivateField<string>(binder, "_lastClashFeedback"), Is.Null);
+                Assert.That(PrivateField<string>(binder, "_lastComparisonFeedback"), Is.Null);
+            };
+            RunExchange();
+            Assert.That(inspected, Is.True);
+            binder.Unbind();
+            Assert.That(binder.IsBound, Is.False);
+            Assert.That(PrivateField<string>(binder, "_lastClashFeedback"), Is.Null);
+            binder.Bind(f.Session, f.State, f.Flow);
+            Assert.That(PrivateField<string>(binder, "_lastClashFeedback"), Is.Null);
+        }
+
+        [Test]
+        public void BpFeedback_UsesSelectionAndExistingEnhancementAndBalanceRules()
+        {
+            Fixture f = CreateFixture(2, 2, 2);
+            Assert.That(f.Session.TryEnableBpValidation(new CombatBpValidationConfig(3, 1, 3),
+                new[] { new CombatBpEnhancementEntry(f.AllySkills[0], CombatBpEnhancementKind.ExtraHits, 2) }), Is.True);
+            FinalCombatPlayerCommandController player = new FinalCombatPlayerCommandController();
+            Assert.That(player.Bind(f.Flow, f.Session), Is.True);
+            Assert.That(player.GetBpInvestmentUnavailableReason(1), Does.Contain("현재 단계"));
+            Assert.That(player.SelectActor(f.Ally), Is.True);
+            Assert.That(player.SelectSkill(f.AllySkills[0]), Is.True);
+            Assert.That(player.GetBpInvestmentUnavailableReason(1), Is.EqualTo("BP 부족"));
+            Assert.That(player.GetBpInvestmentUnavailableReason(0), Is.Null);
+            Assert.That(f.Session.TryRecordCompletedBpAttackCycle(Side.Allies, 1, true), Is.True);
+            Assert.That(f.Session.TryRecordCompletedBpAttackCycle(Side.Enemies, 1, true), Is.True);
+            Assert.That(player.GetBpInvestmentUnavailableReason(1), Is.Null);
+            Assert.That(player.SelectSkill(f.AllySkills[1]), Is.True);
+            Assert.That(player.GetBpInvestmentUnavailableReason(1), Is.EqualTo("적용 가능한 강화 없음"));
+            player.Unbind();
+        }
+
+        private static T PrivateField<T>(object target, string name)
+        {
+            return (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(target);
+        }
+
+        [Test]
+        public void ClashFeedback_UsesConfirmedOutcomeAndPlayerSide()
+        {
+            Fixture f = CreateFixture(3, 2, 2, 3, 4, 2);
+            MethodInfo format = typeof(FinalCombatUIBinder).GetMethod("FormatClashOutcome",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(format, Is.Not.Null);
+            Assert.That(format.Invoke(null, new object[] { CombatClashOutcome.AttackerWin, f.Ally }),
+                Is.EqualTo("Clash 최종 결과 · 승리"));
+            Assert.That(format.Invoke(null, new object[] { CombatClashOutcome.ResponderWin, f.Ally }),
+                Is.EqualTo("Clash 최종 결과 · 패배"));
+            Assert.That(format.Invoke(null, new object[] { CombatClashOutcome.AttackerWin, f.Enemy }),
+                Is.EqualTo("Clash 최종 결과 · 패배"));
+            Assert.That(format.Invoke(null, new object[] { CombatClashOutcome.Tie, f.Ally }),
+                Is.EqualTo("Clash 최종 결과 · 무승부"));
+        }
+
+        [Test]
         public void ThreeRounds_MentalAndStatusAdvanceOnceAtCompletedExchange()
         {
             Fixture f = CreateFixture(3, 2, 2, 3, 4, 2);
@@ -170,6 +390,16 @@ namespace Game.Tests.Combat
         {
             Fixture f = CreateFixture(2, 2);
             Assert.That(f.Enable(5, 5, 1), Is.True);
+            Assert.That(f.Session.TryEnableHandValidation(f.Ally, new[]
+            {
+                new CombatHandEntry(f.AllySkills[0], CombatCardKind.Normal)
+            }, 1, 0, 23), Is.True);
+            Assert.That(f.Session.TryEnableHandValidation(f.Enemy, new[]
+            {
+                new CombatHandEntry(f.EnemySkills[0], CombatCardKind.Clash)
+            }, 0, 1, 24), Is.True);
+            f.Session.TryGetHand(f.Ally, out CombatHandRuntime allyHand);
+            long cardId = allyHand.Hand[0].RuntimeId;
             CombatClashRoundPresentationRequest round = null;
             int outcomeCount = 0;
             f.Flow.ClashRoundPresentationRequested += value => round = value;
@@ -177,7 +407,11 @@ namespace Game.Tests.Combat
             f.DeclareAndApproach();
 
             Assert.That(round.Result.FinalOutcome, Is.EqualTo(CombatClashOutcome.Tie));
+            Assert.That(allyHand.Hand, Is.Empty);
+            Assert.That(f.Session.CardExchangeIndex, Is.EqualTo(1));
             Assert.That(round.TryComplete(), Is.True);
+            Assert.That(f.Session.CardExchangeIndex, Is.EqualTo(2));
+            Assert.That(allyHand.Hand[0].RuntimeId, Is.EqualTo(cardId));
             Assert.That(f.State.Phase, Is.EqualTo(Phase.Standoff));
             Assert.That(f.Enemy.HP, Is.EqualTo(10));
             Assert.That(f.Ally.HP, Is.EqualTo(10));
@@ -208,6 +442,8 @@ namespace Game.Tests.Combat
         {
             Fixture f = CreateFixture(2, 2);
             Assert.That(f.Enable(3, 3, 3), Is.True);
+            FinalCombatUIBinder binder = _owner.AddComponent<FinalCombatUIBinder>();
+            binder.Bind(f.Session, f.State, f.Flow);
             CombatClashRoundPresentationRequest round = null;
             CombatOutcomePresentationRequest outcome = null;
             f.Flow.ClashRoundPresentationRequested += value => round = value;
@@ -223,6 +459,8 @@ namespace Game.Tests.Combat
             Assert.That(f.Session.GetCombatState(f.Enemy).CurrentMp, Is.EqualTo(enemyMp));
             Assert.That(outcome, Is.Not.Null);
             Assert.That(outcome.ClashResult.Outcome, Is.EqualTo(CombatClashOutcome.Unopposed));
+            Assert.That(PrivateField<string>(binder, "_lastClashFeedback"),
+                Is.EqualTo("Clash 최종 결과 · 승리 (무대응)"));
             Assert.That(outcome.ResponseDeclaration, Is.Null);
             Assert.That(f.Enemy.HP, Is.EqualTo(9));
         }
@@ -269,6 +507,8 @@ namespace Game.Tests.Combat
         {
             Fixture f = CreateFixture(Side.Enemies, 2, 2);
             Assert.That(f.Enable(3, 3, 3), Is.True);
+            FinalCombatUIBinder binder = _owner.AddComponent<FinalCombatUIBinder>();
+            binder.Bind(f.Session, f.State, f.Flow);
             f.Session.GetCombatState(f.Enemy).SetMp(1);
             CombatApproachPresentationRequest approach = null;
             CombatClashRoundPresentationRequest round = null;
@@ -294,6 +534,8 @@ namespace Game.Tests.Combat
 
             Assert.That(f.State.Phase, Is.EqualTo(Phase.Standoff));
             Assert.That(f.Session.ExchangeState.ClashSeries, Is.Null);
+            Assert.That(PrivateField<string>(binder, "_lastClashFeedback"),
+                Is.EqualTo("Clash 최종 결과 · 무승부"));
             Assert.That(f.Enemy.HP, Is.EqualTo(10));
             Assert.That(f.Ally.HP, Is.EqualTo(10));
             Assert.That(f.Session.GetCombatState(f.Enemy).CurrentMp, Is.Zero);
@@ -329,8 +571,8 @@ namespace Game.Tests.Combat
             f.Flow.Tick(0f, 3f);
 
             Assert.That(f.State.Phase, Is.EqualTo(Phase.Standoff));
-            Assert.That(allyHand.NormalDiscard.Count, Is.EqualTo(1));
-            Assert.That(enemyHand.ClashDiscard.Count, Is.EqualTo(1));
+            Assert.That(allyHand.NormalDiscard.Count, Is.Zero);
+            Assert.That(enemyHand.ClashDiscard.Count, Is.Zero);
             Assert.That(f.Session.GetCombatState(f.Ally).CurrentMp, Is.EqualTo(4));
             Assert.That(f.Session.GetCombatState(f.Enemy).CurrentMp, Is.EqualTo(4));
             Assert.That(f.Ally.HP, Is.EqualTo(10));
@@ -693,7 +935,9 @@ namespace Game.Tests.Combat
             Assert.That(currentBp, Is.EqualTo(1));
             Assert.That(f.Session.BpRuntime.ApprovedSpends, Is.Empty);
             yield return null;
-            binder.Unbind();
+            binder.enabled = false;
+            yield return null;
+            Assert.That(binder.IsBound, Is.False);
         }
 
         [Test]

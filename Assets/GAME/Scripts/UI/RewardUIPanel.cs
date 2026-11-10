@@ -8,6 +8,7 @@ using UnityEngine.UI;
 using Game.Combat.Model;
 using Game.NonCombat.Reward;
 using Game.Reward;
+using Game.Core;
 
 namespace Game.UI
 {
@@ -21,6 +22,8 @@ namespace Game.UI
         [FormerlySerializedAs("contentContainer")]
         [SerializeField] private Transform rewardRowRoot;
         [SerializeField] private Button closeButton;
+        [SerializeField] private Button restartButton;
+        [SerializeField] private Button titleButton;
 
         [Header("Legacy / Optional")]
         [SerializeField] private Text titleLegacyText;
@@ -40,6 +43,8 @@ namespace Game.UI
         [SerializeField] private string defeatResultText = "";
 
         public event Action OnClosed;
+        public event Action OnRestartRequested;
+        public event Action OnTitleRequested;
 
         public bool IsOpen => _presentationOpen;
         public bool HasActiveCombatResult => _presentationOpen && _pendingResult != null;
@@ -50,6 +55,7 @@ namespace Game.UI
         private Coroutine _fieldRewardRoutine;
         private bool _presentationOpen;
         private bool _closeRaised;
+        private bool _choicePending;
 
         private void Awake()
         {
@@ -63,11 +69,13 @@ namespace Game.UI
         private void OnEnable()
         {
             BindCloseButton();
+            BindDefeatButtons();
         }
 
         private void OnDisable()
         {
             UnbindCloseButton();
+            UnbindDefeatButtons();
             StopFieldRewardMessage();
         }
 
@@ -84,15 +92,22 @@ namespace Game.UI
         private void Show(CombatResult result, RewardGrantResult grantResult, bool preferGrantResult)
         {
             BindCloseButton();
+            BindDefeatButtons();
             StopFieldRewardMessage();
             _pendingResult = result;
             _presentationOpen = true;
             _closeRaised = false;
+            _choicePending = false;
             ClearRewardRows();
 
             bool isWin = IsVictory(result);
+            bool defeat = IsDefeat(result);
+            bool canRestart = GameFlowController.Instance != null && GameFlowController.Instance.CanRestartDungeon;
+            if (closeButton != null) closeButton.gameObject.SetActive(!defeat);
+            if (restartButton != null) { restartButton.gameObject.SetActive(defeat); restartButton.interactable = canRestart; }
+            if (titleButton != null) { titleButton.gameObject.SetActive(defeat); titleButton.interactable = true; }
             SetText(titleText, titleLegacyText, isWin ? victoryTitle : defeatTitle);
-            SetText(resultText, resultLegacyText, showResultText ? BuildResultText(isWin) : string.Empty);
+            SetText(resultText, resultLegacyText, defeat && !canRestart ? "재시작 불가" : showResultText ? BuildResultText(isWin) : string.Empty);
 
             if (preferGrantResult)
                 AddGrantResultRows(isWin, grantResult);
@@ -161,7 +176,7 @@ namespace Game.UI
 
         private void CloseRewardPanel()
         {
-            if (!_presentationOpen || _closeRaised)
+            if (!_presentationOpen || _closeRaised || IsDefeat(_pendingResult))
                 return;
 
             _closeRaised = true;
@@ -177,6 +192,33 @@ namespace Game.UI
 
             OnClosed?.Invoke();
         }
+
+        private void BindDefeatButtons()
+        {
+            if (restartButton != null) { restartButton.onClick.RemoveListener(RequestRestart); restartButton.onClick.AddListener(RequestRestart); }
+            if (titleButton != null) { titleButton.onClick.RemoveListener(RequestTitle); titleButton.onClick.AddListener(RequestTitle); }
+        }
+
+        private void UnbindDefeatButtons()
+        {
+            if (restartButton != null) restartButton.onClick.RemoveListener(RequestRestart);
+            if (titleButton != null) titleButton.onClick.RemoveListener(RequestTitle);
+        }
+
+        private void RequestRestart() => RequestDefeatChoice(OnRestartRequested, true);
+        private void RequestTitle() => RequestDefeatChoice(OnTitleRequested, false);
+
+        private void RequestDefeatChoice(Action requested, bool restarting)
+        {
+            if (!_presentationOpen || _choicePending || !IsDefeat(_pendingResult) || requested == null ||
+                (restarting && (GameFlowController.Instance == null || !GameFlowController.Instance.CanRestartDungeon))) return;
+            _choicePending = true;
+            requested.Invoke();
+        }
+
+        public void ReleaseDefeatChoice() => _choicePending = false;
+
+        private static bool IsDefeat(CombatResult result) => result != null && result.EndReason == CombatEndReason.Defeat;
 
         private void StopFieldRewardMessage()
         {

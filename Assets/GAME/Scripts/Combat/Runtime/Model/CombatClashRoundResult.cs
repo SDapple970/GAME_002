@@ -11,6 +11,7 @@ namespace Game.Combat.Model
         public int ResponderDurabilityAfter { get; }
         public bool IsComplete { get; }
         public CombatClashOutcome? FinalOutcome { get; }
+        internal CombatClashOutcome ComparisonOutcome { get; }
 
         internal CombatClashRoundResult(
             int comparisonNumber,
@@ -21,7 +22,8 @@ namespace Game.Combat.Model
             int responderDurabilityBefore,
             int responderDurabilityAfter,
             bool isComplete,
-            CombatClashOutcome? finalOutcome)
+            CombatClashOutcome? finalOutcome,
+            CombatClashOutcome comparisonOutcome)
         {
             ComparisonNumber = comparisonNumber;
             AttackerPower = attackerPower;
@@ -32,6 +34,7 @@ namespace Game.Combat.Model
             ResponderDurabilityAfter = responderDurabilityAfter;
             IsComplete = isComplete;
             FinalOutcome = finalOutcome;
+            ComparisonOutcome = comparisonOutcome;
         }
     }
 }

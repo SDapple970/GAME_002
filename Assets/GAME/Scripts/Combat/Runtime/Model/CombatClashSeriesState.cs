@@ -178,13 +178,21 @@ namespace Game.Combat.Model
                     _currentResponse.BpInvestment, CombatBpEnhancementKind.ClashPower));
             int attackerBefore = AttackerDurability;
             int responderBefore = ResponderDurability;
+            CombatClashOutcome comparisonOutcome;
 
             if (attackerPower > responderPower)
+            {
+                comparisonOutcome = CombatClashOutcome.AttackerWin;
                 ResponderDurability = Reduce(ResponderDurability, (long)attackerPower - responderPower);
+            }
             else if (responderPower > attackerPower)
+            {
+                comparisonOutcome = CombatClashOutcome.ResponderWin;
                 AttackerDurability = Reduce(AttackerDurability, (long)responderPower - attackerPower);
+            }
             else
             {
+                comparisonOutcome = CombatClashOutcome.Tie;
                 AttackerDurability--;
                 ResponderDurability--;
             }
@@ -218,7 +226,8 @@ namespace Game.Combat.Model
                 responderBefore,
                 ResponderDurability,
                 IsComplete,
-                FinalOutcome);
+                FinalOutcome,
+                comparisonOutcome);
             return true;
         }
 

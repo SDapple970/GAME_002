@@ -71,6 +71,8 @@ namespace Game.EditorTools
 
         private static readonly Vector3 ProductionStartPosition = new(-39.88f, -6.33f, 0f);
         private static readonly Vector3 ProductionNpcPosition = new(187.105f, 7.698f, 0f);
+        private static readonly Vector3 ProductionNpcBuildingOffset = new(1.965f, -6.462f, 0f);
+        private const string ProductionNpcBuildingPath = "World/Environment/Dungeon1/Architecture/apartment_side_house_inside_1-4_0";
 
         private static readonly EnvironmentRoot[] EnvironmentRoots =
         {
@@ -1147,8 +1149,10 @@ namespace Game.EditorTools
             Transform npcRoot = FindRequired($"Actors/NPCs/{ProductionNpcName}");
             InteractableObject npc = interactables[0];
             Require(npc.transform == npcRoot, "Production NPC interaction is not on the expected NPC root.");
-            Require(Vector3.Distance(npcRoot.position, ProductionNpcPosition) < 0.001f,
-                $"Production NPC position is {npcRoot.position}, expected {ProductionNpcPosition}.");
+            Transform building = FindRequired(ProductionNpcBuildingPath);
+            Vector3 npcOffset = npcRoot.position - building.position;
+            Require(Vector3.Distance(npcOffset, ProductionNpcBuildingOffset) < 0.001f,
+                $"Production NPC offset from its building is {npcOffset}, expected {ProductionNpcBuildingOffset}.");
             Require(npc.PromptText == "F: 대화", "Production NPC prompt does not use the canonical authored label.");
             Require(npc.UsePolicy == InteractionUsePolicy.Repeatable,
                 "Production NPC must preserve the authored repeatable interaction contract.");

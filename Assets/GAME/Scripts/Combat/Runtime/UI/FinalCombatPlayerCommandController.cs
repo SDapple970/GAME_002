@@ -110,20 +110,38 @@ namespace Game.Combat.UI
 
         public bool SelectBpInvestment(int amount)
         {
+            if (_request != null && !HasCurrentPlayerRequest(_request.Kind))
+                return false;
+            if (GetBpInvestmentUnavailableReason(amount) != null)
+                return false;
+
+            _selectedBpInvestment = amount;
+            PublishViewState();
+            return true;
+        }
+
+        internal string GetBpInvestmentUnavailableReason(int amount)
+        {
             if (_request == null || _selectedSkill == null ||
-                !HasCurrentPlayerRequest(_request.Kind) ||
+                !IsCurrentPlayerRequest(_request.Kind) ||
                 _request.Kind != CombatExchangeDecisionKind.Attack &&
                 _request.Kind != CombatExchangeDecisionKind.Response &&
                 _request.Kind != CombatExchangeDecisionKind.ClashAttack &&
                 _request.Kind != CombatExchangeDecisionKind.ClashResponse)
-                return false;
+                return "현재 단계 또는 상태에서 투자 불가";
 
             ICombatant actor = _request.Kind == CombatExchangeDecisionKind.Attack
                 ? GetRequiredAttackActor() : _request.ActingActor;
-            if (!_orchestrator.CanInvestBp(actor, _selectedSkill, amount)) return false;
-            _selectedBpInvestment = amount;
-            PublishViewState();
-            return true;
+            if (_orchestrator.CanInvestBp(actor, _selectedSkill, amount)) return null;
+            CombatBpRuntime bp = _session?.BpRuntime;
+            if (bp == null || actor == null || amount < 0 || amount > bp.Config.MaximumInvestment ||
+                !bp.TryGetBalance(actor, out int balance))
+                return "현재 단계 또는 상태에서 투자 불가";
+            if (!CombatBpEnhancementPolicy.CanInvest(_session, _selectedSkill, amount))
+                return "적용 가능한 강화 없음";
+            if (balance < amount)
+                return "BP 부족";
+            return "현재 단계 또는 상태에서 투자 불가";
         }
 
         public FinalCombatPlayerCommandController(
@@ -607,7 +625,15 @@ namespace Game.Combat.UI
                 return false;
             }
 
-            return _request.Kind == kind && GameStateMachine.Instance?.Is(GameState.Paused) != true;
+            return IsCurrentPlayerRequest(kind);
+        }
+
+        private bool IsCurrentPlayerRequest(CombatExchangeDecisionKind kind)
+        {
+            return _request != null && _request.ActingSide == Side.Allies &&
+                _orchestrator != null && _session != null &&
+                ReferenceEquals(_orchestrator.PendingDecisionRequest, _request) &&
+                _request.Kind == kind && GameStateMachine.Instance?.Is(GameState.Paused) != true;
         }
 
         public void RefreshAvailability()

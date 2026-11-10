@@ -190,6 +190,33 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void FinalizedExchangeRestoresOnlySelectedCardOnceBeforeChain()
+        {
+            Fixture fixture = CreateStartedFixture();
+            Assert.That(fixture.Session.TryEnableHandValidation(fixture.Ally, new[]
+            {
+                new CombatHandEntry(fixture.AllySkill, CombatCardKind.Normal),
+                new CombatHandEntry(fixture.AllySkill, CombatCardKind.Normal)
+            }, 1, 0, 4), Is.True);
+            fixture.Session.TryGetHand(fixture.Ally, out CombatHandRuntime hand);
+            long cardId = hand.Hand[0].RuntimeId;
+            PrepareNoResponseToApplyOutcome(fixture, fixture.Ally, fixture.Enemy, fixture.AllySkill);
+            Assert.That(hand.Hand, Is.Empty);
+            Assert.That(fixture.Session.CardExchangeIndex, Is.EqualTo(1));
+            PrepareAftermathDecision(fixture);
+            int version = fixture.Exchange.Version;
+            int mp = fixture.Session.GetCombatState(fixture.Ally).CurrentMp;
+            Assert.That(fixture.StateMachine.TryFinalizeApplyOutcome(new FinalCombatTerminalPolicy(), version), Is.True);
+            Assert.That(fixture.Session.CardExchangeIndex, Is.EqualTo(2));
+            Assert.That(hand.Hand.Count, Is.EqualTo(1));
+            Assert.That(hand.Hand[0].RuntimeId, Is.EqualTo(cardId));
+            Assert.That(hand.NormalDrawCount, Is.EqualTo(1));
+            Assert.That(fixture.Session.GetCombatState(fixture.Ally).CurrentMp, Is.EqualTo(mp));
+            Assert.That(fixture.StateMachine.TryFinalizeApplyOutcome(new FinalCombatTerminalPolicy(), version), Is.False);
+            Assert.That(fixture.Session.CardExchangeIndex, Is.EqualTo(2));
+        }
+
+        [Test]
         public void ApplyOutcome_NonTerminalEntersChainDecisionAndRejectsDuplicateFinalize()
         {
             Fixture fixture = CreateStartedFixture();

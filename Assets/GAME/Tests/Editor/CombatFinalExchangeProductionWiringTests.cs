@@ -1,7 +1,9 @@
 #if UNITY_INCLUDE_TESTS
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Game.Combat.Actions;
 using Game.Combat.Adapters;
 using Game.Combat.Core;
 using Game.Combat.Data;
@@ -24,6 +26,7 @@ namespace Game.Tests.Combat
     {
         private const string ConfigPath = "Assets/GAME/Data/Combat/Runtime/FinalCombatRuntimeConfig_V1.asset";
         private const string RuntimePrefabPath = "Assets/GAME/Prefabs/CombatRuntime.prefab";
+        private const string ValidationPrefabPath = "Assets/GAME/Tests/PlayMode/CombatRuntime_Validation.prefab";
         private const string UiPrefabPath = "Assets/GAME/Prefabs/UI/ProductionDungeonUI.prefab";
         private const string UltimateFixtureSkillPath = "Assets/GAME/Data/Skill/Skill_skill2.asset";
         private const string TemplateScenePath = "Assets/GAME/Scenes/Dungeon_Template.unity";
@@ -133,6 +136,94 @@ namespace Game.Tests.Combat
             Assert.That(fixture.GetType().GetField("kind",
                 BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(fixture),
                 Is.EqualTo(CombatBpEnhancementKind.ClashPower));
+        }
+
+        [Test]
+        public void ValidationVariant_AppliesClashHandAndBpOnceBeforeFirstDeclaration()
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ValidationPrefabPath);
+            Assert.That(prefab, Is.Not.Null);
+            Assert.That(PrefabUtility.GetPrefabAssetType(prefab), Is.EqualTo(PrefabAssetType.Variant));
+            GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            try
+            {
+                var entry = instance.GetComponent<CombatEntryPoint>();
+                var flow = instance.GetComponent<CombatFlowOrchestrator>();
+                var clash = instance.GetComponents<CombatClashSeriesValidationOptIn>().Single();
+                var hand = instance.GetComponents<CombatHandValidationOptIn>().Single();
+                var bp = instance.GetComponents<CombatBpValidationOptIn>().Single();
+                Assert.That(entry.FinalExchangeRuntimeConfig, Is.SameAs(LoadConfig()));
+                Assert.That(entry.FinalExchangeRuntimeConfig.EnableProductionHandBp, Is.False);
+                Assert.That(entry.RegisteredSkillDefinitions.Select(skill => skill.skillId),
+                    Is.EqualTo(new[] { 1, 2, 11, 12 }));
+
+                var ally = new DummyCombatant(1, Side.Allies, 10, KeywordMask.None, 0);
+                var enemy = new DummyCombatant(2, Side.Enemies, 10, KeywordMask.None, 0);
+                ally.AddSkill(new SoSkill(entry.RegisteredSkillDefinitions[0]));
+                ally.AddSkill(new SoSkill(entry.RegisteredSkillDefinitions[1]));
+                enemy.AddSkill(new SoSkill(entry.RegisteredSkillDefinitions[2]));
+                enemy.AddSkill(new SoSkill(entry.RegisteredSkillDefinitions[3]));
+                var session = new CombatSession(StartReason.PlayerFirstHit, Side.Allies,
+                    new InspirationPool(10), new CombatEnvironment(), CombatFlowMode.StandoffClashChain,
+                    entry.FinalExchangeRuntimeConfig.CreateRuntimeConfig());
+                session.Allies.Add(ally);
+                session.Enemies.Add(enemy);
+                var state = new CombatStateMachine(session);
+                state.Tick();
+                SetField(entry, "<ActiveSession>k__BackingField", session);
+                Assert.That(flow.BindFinalExchange(session, state, new UnityCombatRuleRandomSource()), Is.True);
+                foreach (MonoBehaviour optIn in new MonoBehaviour[] { bp, hand, clash })
+                {
+                    Assert.That(optIn.enabled, Is.True);
+                    Assert.That(Reference(optIn, "entryPoint"), Is.SameAs(entry));
+                    Assert.That(Reference(optIn, "orchestrator"), Is.SameAs(flow));
+                    optIn.GetType().GetMethod("OnEnable", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .Invoke(optIn, null);
+                }
+
+                typeof(CombatEntryPoint).GetMethod("RaiseCombatStarted", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .Invoke(entry, new object[] { session });
+
+                Assert.That(session.ExchangeState.DeclarationId, Is.Zero);
+                Assert.That(flow.IsClashSeriesValidationEnabled, Is.True);
+                Assert.That(hand.WasApplied, Is.True);
+                Assert.That(bp.WasApplied, Is.True);
+                var cardIds = new HashSet<long>();
+                foreach (ICombatant actor in new ICombatant[] { ally, enemy })
+                {
+                    Assert.That(session.TryGetHand(actor, out CombatHandRuntime runtime), Is.True);
+                    Assert.That(runtime.DeckSnapshot.Count(card => card.Kind == CombatCardKind.Normal), Is.EqualTo(4));
+                    Assert.That(runtime.DeckSnapshot.Count(card => card.Kind == CombatCardKind.Clash), Is.EqualTo(6));
+                    foreach (CombatHandCard card in runtime.DeckSnapshot)
+                        Assert.That(cardIds.Add(card.RuntimeId), Is.True);
+                }
+
+                CombatBpRuntime ledger = session.BpRuntime;
+                Assert.That(ledger.TryGetBalance(ally, out int balance), Is.True);
+                Assert.That(balance, Is.EqualTo(3));
+                Assert.That(ledger.ApprovedSpends, Is.Empty);
+                Assert.That(session.UltimateRuntime.TryGetSkill(ally, out ISkill skill), Is.True);
+                Assert.That(skill, Is.SameAs(ally.Skills[1]));
+                Assert.That(session.UltimateRuntime.TryGetStage(ally, out int stage), Is.True);
+                Assert.That(stage, Is.Zero);
+                Assert.That(bp.TryApplyToSession(session), Is.False);
+                Assert.That(session.BpRuntime, Is.SameAs(ledger));
+                Assert.That(ledger.TryGetBalance(ally, out balance), Is.True);
+                Assert.That(balance, Is.EqualTo(3));
+
+                Assert.That(session.TryGetHand(ally, out CombatHandRuntime allyHand), Is.True);
+                CombatHandCard clashCard = allyHand.Hand.First(card => card.Kind == CombatCardKind.Clash);
+                var attack = new CombatAttackDeclaration(ally, enemy, clashCard.Skill, clashCard.RuntimeId, 3);
+                Assert.That(CombatExchangeCommitPolicy.TryCommit(session, attack, null,
+                    CombatCardKind.Clash, out _), Is.True);
+                Assert.That(ledger.ApprovedSpends, Has.Count.EqualTo(1));
+                Assert.That(session.UltimateRuntime.TryGetStage(ally, out stage), Is.True);
+                Assert.That(stage, Is.EqualTo(3));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(instance);
+            }
         }
 
         [Test]

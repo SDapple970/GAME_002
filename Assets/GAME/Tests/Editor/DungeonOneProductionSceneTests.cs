@@ -405,7 +405,9 @@ namespace Game.Tests.Integration
 
             InteractableObject npc = interactables[0];
             Assert.That(GetHierarchyPath(npc.transform), Is.EqualTo("Actors/NPCs/Dungeon1_FirstTalkNpc"));
-            Assert.That(Vector3.Distance(npc.transform.position, new Vector3(187.105f, 7.698f, 0f)), Is.LessThan(0.001f));
+            Transform building = GameObject.Find("World/Environment/Dungeon1/Architecture/apartment_side_house_inside_1-4_0")?.transform;
+            Assert.That(building, Is.Not.Null);
+            Assert.That(Vector3.Distance(npc.transform.position - building.position, new Vector3(1.965f, -6.462f, 0f)), Is.LessThan(0.001f));
             Assert.That(npc.PromptText, Is.EqualTo("F: 대화"));
             Assert.That(npc.InteractionId, Is.EqualTo("dungeon1.npc.first-talk"));
             Assert.That(npc.UsePolicy, Is.EqualTo(InteractionUsePolicy.Repeatable));
@@ -418,6 +420,33 @@ namespace Game.Tests.Integration
             Assert.That(npc.GetComponentInChildren<StoryInteractable2D>(true), Is.Null);
             Assert.That(PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(npc.gameObject), Is.EqualTo(
                 "Assets/GAME/Prefabs/Interaction/ProductionNpcInteraction.prefab"));
+        }
+
+        [Test]
+        public void ProductionDungeonOne_NpcPlacementTracksBuildingAndRejectsIndependentMovement()
+        {
+            EditorSceneManager.OpenScene(DungeonOneProductionMigrationUtility.ProductionScenePath, OpenSceneMode.Single);
+            Transform npc = FindAll<InteractableObject>().Single().transform;
+            Transform building = GameObject.Find("World/Environment/Dungeon1/Architecture/apartment_side_house_inside_1-4_0").transform;
+            Vector3 npcPosition = npc.position;
+            Vector3 buildingPosition = building.position;
+            try
+            {
+                Vector3 translation = new(3f, 2f, 0f);
+                npc.position += translation;
+                building.position += translation;
+                Assert.DoesNotThrow(DungeonOneProductionMigrationUtility.ValidateProductionScene);
+
+                npc.position += Vector3.right;
+                System.InvalidOperationException error = Assert.Throws<System.InvalidOperationException>(
+                    DungeonOneProductionMigrationUtility.ValidateProductionScene);
+                Assert.That(error.Message, Does.Contain("Production NPC offset from its building"));
+            }
+            finally
+            {
+                npc.position = npcPosition;
+                building.position = buildingPosition;
+            }
         }
 
         [Test]

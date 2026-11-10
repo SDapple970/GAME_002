@@ -9,6 +9,7 @@ namespace Game.Core
 
         private GameState _stateBeforePause = GameState.Exploration;
         private bool _hasPausedState;
+        private bool _awaitingDefeatChoice;
 
         private void Awake()
         {
@@ -98,16 +99,40 @@ namespace Game.Core
             if (stateMachine.Is(GameState.Reward))
                 return true;
 
-            return RequestState(GameState.Reward, nameof(TryHandleCombatResult));
+            _awaitingDefeatChoice = result.EndReason == CombatEndReason.Defeat;
+            bool accepted = RequestState(GameState.Reward, nameof(TryHandleCombatResult));
+            if (!accepted) _awaitingDefeatChoice = false;
+            return accepted;
         }
 
         public bool TryHandleRewardClosed()
         {
             GameStateMachine stateMachine = GameStateMachine.Instance;
-            if (stateMachine == null || !stateMachine.Is(GameState.Reward))
+            if (stateMachine == null || !stateMachine.Is(GameState.Reward) || _awaitingDefeatChoice)
                 return false;
 
             return RequestState(GameState.Exploration, nameof(TryHandleRewardClosed));
+        }
+
+        public bool CanRestartDungeon => SceneFlowController.Instance != null && SceneFlowController.Instance.CanRestartDungeon;
+
+        public bool TryRestartDungeonAfterDefeat()
+        {
+            bool accepted = _awaitingDefeatChoice && GameStateMachine.Instance != null && GameStateMachine.Instance.Is(GameState.Reward) &&
+                SceneFlowController.Instance != null && SceneFlowController.Instance.TryRestartDungeon();
+            if (accepted) _awaitingDefeatChoice = false;
+            return accepted;
+        }
+
+        public bool TryReturnToTitleAfterDefeat()
+        {
+            if (!_awaitingDefeatChoice || GameStateMachine.Instance == null || !GameStateMachine.Instance.Is(GameState.Reward) ||
+                SceneFlowController.Instance == null || SceneFlowController.Instance.IsSceneLoadInProgress ||
+                !Application.CanStreamedLevelBeLoaded("TitleScene")) return false;
+            if (!RequestState(GameState.Loading, nameof(TryReturnToTitleAfterDefeat))) return false;
+            _awaitingDefeatChoice = false;
+            SceneFlowController.Instance.LoadScene("TitleScene");
+            return true;
         }
     }
 }

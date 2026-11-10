@@ -74,6 +74,21 @@ namespace Game.Tests.Combat
         }
 
         [Test]
+        public void CancelledDeclarationDoesNotStartNextExchange()
+        {
+            Fixture f = NewFixture();
+            Enable(f, 4);
+            f.Session.TryGetHand(f.Ally, out CombatHandRuntime hand);
+            CombatHandCard card = Find(hand, CombatCardKind.Normal);
+            Assert.That(f.StateMachine.TryDeclareAttack(new CombatAttackDeclaration(
+                f.Ally, f.Enemy, f.AllyNormal, card.RuntimeId), f.Session.ExchangeState.Version), Is.True);
+            Assert.That(f.StateMachine.TryCancelAttackDeclaration(), Is.True);
+            Assert.That(f.Session.CardExchangeIndex, Is.EqualTo(1));
+            Assert.That(hand.TryFindInHand(f.AllyNormal, CombatCardKind.Normal, card.RuntimeId, out _), Is.True);
+            Assert.That(hand.NormalDiscard, Is.Empty);
+        }
+
+        [Test]
         public void ClashSeries_ReusesFirstCards_ThenCommitsNewIdsOnlyOnce()
         {
             Fixture f = NewFixture();
@@ -101,6 +116,7 @@ namespace Game.Tests.Combat
                 out _), Is.True);
             Assert.That(f.Session.GetCombatState(f.Ally).CurrentMp, Is.EqualTo(mpAfterFirst));
             Assert.That(allyHand.NormalDiscard.Count, Is.EqualTo(1));
+            Assert.That(f.Session.CardExchangeIndex, Is.EqualTo(1));
 
             long staleToken = series.CommandToken - 1;
             CombatHandCard nextAttack = Find(allyHand, CombatCardKind.Clash);
@@ -175,7 +191,7 @@ namespace Game.Tests.Combat
         }
 
         [Test]
-        public void DistinctCyclesRefillOnce_AndTerminalBlocksRefill()
+        public void AttackCyclesDoNotRefreshCards_AndTerminalBlocksNextExchange()
         {
             Fixture f = NewFixture();
             Enable(f, 5);
@@ -190,12 +206,13 @@ namespace Game.Tests.Combat
             Assert.That(f.Session.TryRecordCompletedAttackCycle(Side.Enemies, 2, false), Is.False);
             Assert.That(hand.Hand.Count, Is.EqualTo(4));
             Assert.That(f.Session.TryRecordCompletedAttackCycle(Side.Enemies, 2, true), Is.True);
-            Assert.That(hand.Hand.Count, Is.EqualTo(5));
-            Assert.That(hand.RefillCount, Is.EqualTo(1));
+            Assert.That(hand.Hand.Count, Is.EqualTo(4));
+            Assert.That(hand.RefillCount, Is.Zero);
             Assert.That(f.Session.TryRecordCompletedAttackCycle(Side.Enemies, 2, true), Is.False);
             f.Enemy.ApplyDamage(999);
             Assert.That(f.Session.TryRecordCompletedAttackCycle(Side.Allies, 3, true), Is.False);
-            Assert.That(hand.RefillCount, Is.EqualTo(1));
+            Assert.That(f.Session.TryBeginNextCardExchange(3), Is.False);
+            Assert.That(hand.RefillCount, Is.Zero);
         }
 
         [Test]
@@ -240,17 +257,15 @@ namespace Game.Tests.Combat
                 new CombatAttackDeclaration(f.Ally, f.Enemy, f.AllyNormal, initial[0]),
                 null, out _), Is.True);
             string discard = string.Join(",", Ids(hand.NormalDiscard));
-            f.Session.TryRecordCompletedAttackCycle(Side.Allies, 1, true);
-            f.Session.TryRecordCompletedAttackCycle(Side.Enemies, 2, true);
+            Assert.That(f.Session.TryBeginNextCardExchange(1), Is.True);
+            Assert.That(f.Session.TryBeginNextCardExchange(1), Is.False);
             Assert.That(CombatExchangeCommitPolicy.TryCommit(f.Session,
                 new CombatAttackDeclaration(f.Ally, f.Enemy, f.AllyNormal, initial[1]),
                 null, out _), Is.True);
-            f.Session.TryRecordCompletedAttackCycle(Side.Allies, 3, true);
-            f.Session.TryRecordCompletedAttackCycle(Side.Enemies, 4, true);
+            Assert.That(f.Session.TryBeginNextCardExchange(2), Is.True);
             Assert.That(hand.Hand.Count, Is.EqualTo(2));
             Assert.That(hand.NormalDiscard.Count, Is.Zero);
-            Assert.That(Ids(hand.Hand).Contains(initial[0]) ||
-                Ids(hand.Hand).Contains(initial[1]), Is.True);
+            Assert.That(Ids(hand.Hand), Is.EqualTo(initial));
             return $"initial:{string.Join(",", initial)};discard:{discard};refill:{string.Join(",", Ids(hand.Hand))}";
         }
 

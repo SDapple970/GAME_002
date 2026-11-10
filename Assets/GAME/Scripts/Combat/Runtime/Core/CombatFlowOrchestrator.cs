@@ -38,6 +38,7 @@ namespace Game.Combat.Core
         private bool _isExecutingAllOut;
         private bool _isExecutingItem;
         private float _allOutDecisionRemaining;
+        private readonly List<ICombatant> _allOutTargets = new();
         private CombatClashSeriesConfig? _seriesValidationConfig;
         private Func<CombatClashSeriesState, ISkill> _seriesFinalSkillSelector;
         private Func<CombatExchangeDecisionRequest, ISkill> _seriesTimeoutAttackSelector;
@@ -58,6 +59,7 @@ namespace Game.Combat.Core
         public event Action<CombatExchangeDecisionRequest> ChainDecisionRequested;
         public event Action<CombatExchangeDecisionRequest> ClashSeriesDecisionRequested;
         public event Action<CombatClashRoundPresentationRequest> ClashRoundPresentationRequested;
+        internal event Action<CombatClashSeriesState, CombatClashRoundResult> ClashFeedbackAvailable;
         public event Action ClashSeriesValidationEnabled;
         public event Action CombatItemOptionsChanged;
         public event Action<CombatApproachPresentationRequest> ApproachPresentationRequested;
@@ -84,7 +86,7 @@ namespace Game.Combat.Core
 
         public string AllOutUnavailableReason => !IsAllOutSelection ? "총공격 후보 없음" :
             GameStateMachine.Instance?.Is(GameState.Paused) == true || Time.timeScale <= 0f ? "일시 정지" :
-            !CombatAllOutPolicy.IsCandidate(_session) ? "대상 상태 변경" :
+            !CombatAllOutPolicy.IsCandidate(_session) || !HasCurrentAllOutTargets() ? "대상 상태 변경" :
             !CombatAllOutExecutionPolicy.TryCreateExecutionRequest(_session, out _) ?
                 "행동 가능한 아군의 제작된 AllEnemies 공격 스킬 없음" : null;
 
@@ -292,6 +294,7 @@ namespace Game.Combat.Core
                     _seriesAttackCardRuntimeId, null, _seriesAttackBpInvestment, 0, out _))
                 return false;
 
+            NotifyClashFeedback(_session.ExchangeState.ClashSeries, null);
             _seriesAttackSkill = null;
             _seriesAttackCardRuntimeId = null;
             _seriesAttackBpInvestment = 0;
@@ -436,6 +439,8 @@ namespace Game.Combat.Core
                     _boundStateMachine.Tick(deltaSeconds);
                 else if (_boundStateMachine.Phase == Phase.Clash)
                     TickClashSeriesDecision(unscaledDeltaSeconds);
+                else if (IsAllOutSelection && _pendingDecisionRequest != null && !HasCurrentAllOutTargets())
+                    EndChain(_pendingDecisionRequest.ExchangeVersion);
                 else if (IsAllOutSelection && _pendingDecisionRequest != null &&
                          unscaledDeltaSeconds > 0f && !float.IsNaN(unscaledDeltaSeconds) &&
                          !float.IsInfinity(unscaledDeltaSeconds))
@@ -1186,6 +1191,7 @@ namespace Game.Combat.Core
                 }
 
                 TraceClash("RoundCompared");
+                NotifyClashFeedback(series, result);
                 PublishClashRoundPresentation(series, result, attack.Attacker, response.Responder);
                 return false;
             }
@@ -1319,11 +1325,23 @@ namespace Game.Combat.Core
                         request.ClashSeriesToken.Value))
                 {
                     _pendingDecisionRequest = null;
+                    NotifyClashFeedback(_session.ExchangeState.ClashSeries, null);
                     TraceClash("SeriesNoAttackToDraw");
                     RequestPump();
                 }
                 else if (!submitted && GetAvailableClashSeriesSkills(request).Count > 0)
                     SubmitClashSeriesSkill(request, GetAvailableClashSeriesSkills(request)[0]);
+            }
+        }
+
+        private void NotifyClashFeedback(CombatClashSeriesState series, CombatClashRoundResult result)
+        {
+            if (ClashFeedbackAvailable == null) return;
+            foreach (Action<CombatClashSeriesState, CombatClashRoundResult> handler in
+                     ClashFeedbackAvailable.GetInvocationList())
+            {
+                try { handler(series, result); }
+                catch (Exception exception) { Debug.LogException(exception, this); }
             }
         }
 
@@ -1474,6 +1492,10 @@ namespace Game.Combat.Core
             _pendingDecisionRequest = request;
             if (IsAllOutSelection)
             {
+                _allOutTargets.Clear();
+                foreach (ICombatant enemy in _session.Enemies)
+                    if (CombatDeclarationPolicy.IsLivingMember(_session, enemy))
+                        _allOutTargets.Add(enemy);
                 _allOutDecisionRemaining = allOutDecisionDurationSeconds > 0f &&
                     !float.IsNaN(allOutDecisionDurationSeconds) && !float.IsInfinity(allOutDecisionDurationSeconds)
                     ? allOutDecisionDurationSeconds : 10f;
@@ -1481,6 +1503,18 @@ namespace Game.Combat.Core
                     Debug.LogWarning($"[CombatFlowOrchestrator] All-Out unavailable: {AllOutUnavailableReason}", this);
             }
             InvokeDecisionHandlers(handlers, request);
+        }
+
+        private bool HasCurrentAllOutTargets()
+        {
+            int livingCount = 0;
+            foreach (ICombatant enemy in _session.Enemies)
+            {
+                if (!CombatDeclarationPolicy.IsLivingMember(_session, enemy)) continue;
+                livingCount++;
+                if (!_allOutTargets.Contains(enemy)) return false;
+            }
+            return livingCount == _allOutTargets.Count && livingCount > 0;
         }
 
         private void PublishApproachRequest()
@@ -1748,6 +1782,7 @@ namespace Game.Combat.Core
             _seriesDecisionDuration = 0f;
             _seriesDecisionRemaining = 0f;
             _allOutDecisionRemaining = 0f;
+            _allOutTargets.Clear();
             _seriesAttackSkill = null;
             _seriesAttackCardRuntimeId = null;
             _seriesAttackBpInvestment = 0;

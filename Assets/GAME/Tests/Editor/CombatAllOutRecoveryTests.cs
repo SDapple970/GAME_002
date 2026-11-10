@@ -76,25 +76,18 @@ namespace Game.Tests.Combat
         }
 
         [Test]
-        public void InitialAllStunned_OffersBeforeRecoveryAndDeclineRecoversLivingOnlyOnce()
+        public void InitialAllStunned_RecoversWithoutOfferingAnUnusableCandidate()
         {
             Fixture f = Create(2);
             f.Ally.SetStunned(true);
             foreach (Actor enemy in f.Enemies) enemy.SetStunned(true);
             f.Bind();
-            Assert.That(f.State.Phase, Is.EqualTo(Phase.ChainDecision));
-            Assert.That(f.Player.ViewState.CanAllOut, Is.False);
-            Assert.That(f.Ally.IsStunned, Is.True);
-            f.Session.GetCombatState(f.Ally).SetPosture(3);
-            f.Session.GetCombatState(f.Enemies[0]).SetPosture(3);
-            CombatExchangeDecisionRequest request = f.Orchestrator.PendingDecisionRequest;
-            Assert.That(f.Player.DeclineAllOut(request), Is.True);
             Assert.That(f.State.Phase, Is.EqualTo(Phase.Standoff));
+            Assert.That(f.Player.ViewState.CanAllOut, Is.False);
             Assert.That(f.Ally.IsStunned, Is.False);
             Assert.That(f.Session.GetCombatState(f.Ally).CurrentPosture, Is.Zero);
             Assert.That(f.Session.GetCombatState(f.Enemies[0]).CurrentPosture, Is.Zero);
             Assert.That(f.Ally.RecoveryCount, Is.EqualTo(1));
-            Assert.That(f.Orchestrator.DeclineAllOut(request), Is.False);
             f.Orchestrator.AdvanceUntilBlocked();
             Assert.That(f.Ally.RecoveryCount, Is.EqualTo(1));
         }
@@ -154,14 +147,17 @@ namespace Game.Tests.Combat
         }
 
         [Test]
-        public void RemovedOneOfManyTargets_UsesCurrentRosterAndSkipsRemovedActor()
+        public void RemovedOneOfManyTargets_RejectsStaleCandidateAndRecovers()
         {
             Fixture f = Candidate(2);
             Actor removed = f.Enemies[1];
             f.Session.Enemies.Remove(removed);
-            Assert.That(f.Player.ConfirmAllOut(), Is.True);
+            Assert.That(f.Player.ConfirmAllOut(), Is.False);
             Assert.That(removed.HP, Is.EqualTo(20));
-            Assert.That(f.Enemies[0].HP, Is.EqualTo(16));
+            Assert.That(f.Enemies[0].HP, Is.EqualTo(20));
+            f.Orchestrator.Tick(0f, 0f);
+            Assert.That(f.State.Phase, Is.EqualTo(Phase.Standoff));
+            Assert.That(f.Enemies[0].IsStunned, Is.False);
         }
 
         [TestCase(false)]

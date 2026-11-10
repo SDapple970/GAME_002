@@ -127,9 +127,9 @@ namespace Game.Tests.Integration
             Assert.That(hand.RefillCount, Is.Zero);
             Assert.That(session.TryRecordCompletedAttackCycle(Side.Enemies, 1, true), Is.True);
             Assert.That(session.TryRecordCompletedAttackCycle(Side.Enemies, 1, true), Is.False);
-            Assert.That(hand.RefillCount, Is.EqualTo(1)); Assert.That(enemyHand.RefillCount, Is.EqualTo(1));
-            AssertHand(hand, 2, 3); AssertHand(enemyHand, 2, 3);
-            Assert.That(session.BpRuntime.RoundCycleCount, Is.Zero, "Hand refill does not advance the independent BP clock.");
+            Assert.That(hand.RefillCount, Is.Zero); Assert.That(enemyHand.RefillCount, Is.Zero);
+            AssertHand(hand, 1, 3); AssertHand(enemyHand, 2, 2);
+            Assert.That(session.BpRuntime.RoundCycleCount, Is.Zero, "Hand cycle tracking does not advance the independent BP clock.");
         }
 
         [Test]
@@ -219,6 +219,7 @@ namespace Game.Tests.Integration
                 if (stage < 3) Assert.That(_flow.CanExecuteUltimate(_flow.PendingDecisionRequest, actor, target), Is.False);
                 Assert.That(session.TryRecordCompletedAttackCycle(Side.Allies, stage, true), Is.True);
                 Assert.That(session.TryRecordCompletedAttackCycle(Side.Enemies, stage, true), Is.True);
+                Assert.That(session.TryBeginNextCardExchange(stage), Is.True);
             }
             session.GetCombatState(actor).RestoreMp(1);
             var request = _flow.PendingDecisionRequest; int hp = target.HP;

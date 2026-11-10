@@ -4,6 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using Game.Combat.Core;
+using Game.Combat.Adapters;
 using Game.Combat.Data;
 using Game.Combat.Effects;
 using Game.Combat.Environment;
@@ -13,12 +14,93 @@ using Game.Combat.UI;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 
 namespace Game.Tests.Combat
 {
     public sealed class CombatFinalExchangePresentationTests
     {
         private readonly List<GameObject> _createdObjects = new List<GameObject>();
+
+        [UnityTest]
+        public IEnumerator HpNumbers_UseReceiptsDeduplicateAndStopOnUnbind()
+        {
+            yield return new EnterPlayMode();
+            Fixture f = CreateFixture();
+            Assert.That(f.Bind(), Is.True);
+            GameObject canvasObject = new GameObject("CombatCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
+            _createdObjects.Add(canvasObject);
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            GameObject cameraObject = NewObject("HpNumbersCamera");
+            cameraObject.tag = "MainCamera";
+            Camera camera = cameraObject.AddComponent<Camera>();
+            camera.transform.position = new Vector3(0f, 0f, -10f);
+            GameObject targetObject = NewObject("HpNumbersTarget");
+            FieldCombatantAdapter target = new FieldCombatantAdapter(99, Side.Enemies, targetObject, null, 0);
+            CombatDirector director = NewObject("HpNumbersDirector").AddComponent<CombatDirector>();
+            Assert.That(director.BindFinalExchange(f.Orchestrator, f.Session), Is.True);
+            Canvas.ForceUpdateCanvases();
+            MethodInfo show = typeof(CombatDirector).GetMethod("ShowHpNumbers", BindingFlags.Instance | BindingFlags.NonPublic);
+            var targetResult = new CombatSkillTargetResult(target, 10, 9, 4, 3, 1, true);
+            var result = new CombatSkillExecutionResult(f.Ally, f.AllySkill, CombatClashOutcome.AttackerWin,
+                new[] { targetResult }, null);
+            MethodInfo allOut = typeof(CombatDirector).GetMethod("HandleAllOutPresentationRequested", BindingFlags.Instance | BindingFlags.NonPublic);
+            allOut.Invoke(director, new object[] { result });
+            Text[] labels = canvasObject.GetComponentsInChildren<Text>();
+            Assert.That(labels.Length, Is.EqualTo(2));
+            Assert.That(labels[0].text, Is.EqualTo("-4"));
+            Assert.That(labels[1].text, Is.EqualTo("+3"));
+            Assert.That(labels[0].raycastTarget, Is.False);
+            var outcome = new CombatOutcomePresentationRequest(1, 1, null, CombatResponseState.Pending,
+                null, null, null, result, null, null, null, null, null, () => true);
+            MethodInfo normal = typeof(CombatDirector).GetMethod("PlayFinalTargetResults", BindingFlags.Instance | BindingFlags.NonPublic);
+            normal.Invoke(director, new object[] { outcome, f.AllySkill });
+            Assert.That(canvasObject.GetComponentsInChildren<Text>().Length, Is.EqualTo(2));
+            var unknown = new CombatSkillExecutionResult(f.Ally, f.AllySkill, CombatClashOutcome.AttackerWin,
+                new[] { new CombatSkillTargetResult(target, 10, 5) }, null);
+            show.Invoke(director, new object[] { unknown });
+            Assert.That(canvasObject.GetComponentsInChildren<Text>().Length, Is.EqualTo(2));
+            var zero = new CombatSkillExecutionResult(f.Ally, f.AllySkill, CombatClashOutcome.AttackerWin,
+                new[] { new CombatSkillTargetResult(target, 10, 10, 0, 0, 1, false) }, null);
+            show.Invoke(director, new object[] { zero });
+            Assert.That(canvasObject.GetComponentsInChildren<Text>().Length, Is.EqualTo(2));
+            targetObject.SetActive(false);
+            var repeatedValue = new CombatSkillExecutionResult(f.Ally, f.AllySkill, CombatClashOutcome.AttackerWin,
+                new[] { new CombatSkillTargetResult(target, 10, 6, 4, 0, 2, false) }, null);
+            show.Invoke(director, new object[] { repeatedValue });
+            Assert.That(canvasObject.GetComponentsInChildren<Text>().Length, Is.EqualTo(3));
+            GameObject secondObject = NewObject("HpNumbersSecondTarget");
+            secondObject.transform.position = Vector3.right;
+            FieldCombatantAdapter secondTarget = new FieldCombatantAdapter(100, Side.Enemies, secondObject, null, 0);
+            var multipleTargets = new CombatSkillExecutionResult(f.Ally, f.AllySkill, CombatClashOutcome.AttackerWin,
+                new[]
+                {
+                    new CombatSkillTargetResult(target, 10, 6, 4, 0, 2, false),
+                    new CombatSkillTargetResult(secondTarget, 10, 8, 2, 0, 1, false)
+                }, null);
+            show.Invoke(director, new object[] { multipleTargets });
+            Text[] allLabels = canvasObject.GetComponentsInChildren<Text>();
+            Assert.That(allLabels.Length, Is.EqualTo(5));
+            Assert.That(allLabels[4].text, Is.EqualTo("-2"));
+            Assert.That(((RectTransform)allLabels[3].transform).anchoredPosition.x,
+                Is.Not.EqualTo(((RectTransform)allLabels[4].transform).anchoredPosition.x));
+            Time.timeScale = 0f;
+            Vector2 pausedPosition = ((RectTransform)labels[0].transform).anchoredPosition;
+            yield return null;
+            Assert.That(((RectTransform)labels[0].transform).anchoredPosition, Is.EqualTo(pausedPosition));
+            Time.timeScale = 1f;
+            director.UnbindFinalExchange();
+            Assert.That(director.isActiveAndEnabled, Is.True);
+            float startTime = Time.time;
+            float deadline = Time.realtimeSinceStartup + 5f;
+            while (Time.time - startTime < 1.2f && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            Assert.That(Time.time - startTime, Is.GreaterThanOrEqualTo(0.8f), "게임 시간이 진행되어야 합니다.");
+            yield return null;
+            Assert.That(canvasObject.GetComponentsInChildren<Text>().Length, Is.Zero);
+            yield return new ExitPlayMode();
+        }
 
         [TearDown]
         public void TearDown()

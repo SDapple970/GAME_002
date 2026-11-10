@@ -44,20 +44,28 @@ namespace Game.Combat.Model
                 : CombatMentalState.Stable;
         }
 
-        public void ApplyDamage(int amount)
+        public void ApplyDamage(int amount) => ApplyDamageWithReceipt(amount);
+
+        internal int ApplyDamageWithReceipt(int amount)
         {
             if (amount <= 0)
-                return;
+                return 0;
 
-            CurrentHp = Math.Max(0, CurrentHp - amount);
+            int applied = Math.Min(CurrentHp, amount);
+            CurrentHp -= applied;
+            return applied;
         }
 
-        public void RestoreHp(int amount)
+        public void RestoreHp(int amount) => RestoreHpWithReceipt(amount);
+
+        internal int RestoreHpWithReceipt(int amount)
         {
             if (amount <= 0)
-                return;
+                return 0;
 
+            int before = CurrentHp;
             CurrentHp = AddClamped(CurrentHp, amount, MaxHp);
+            return CurrentHp - before;
         }
 
         public bool CanRestoreHp(int amount)

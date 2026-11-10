@@ -8,4 +8,11 @@ namespace Game.Combat.Model
     {
         void BindCombatState(CombatantCombatState state);
     }
+
+    internal interface ICombatantDamageReceipt
+    {
+        // Execute damage once and report only this call's direct mutation, excluding callbacks.
+        // Null means the damage path ran but cannot report an exact amount.
+        int? ApplyDamageWithReceipt(int amount);
+    }
 }

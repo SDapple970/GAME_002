@@ -225,7 +225,8 @@ namespace Game.Core
                 return;
 
             SaveLoadService save = SaveLoadService.Instance;
-            bool restoring = save != null && (save.CurrentOperationState == SaveLoadService.OperationState.WaitingForScene ||
+            bool restoring = SceneFlowController.Instance != null && SceneFlowController.Instance.IsSceneLoadInProgress ||
+                save != null && (save.CurrentOperationState == SaveLoadService.OperationState.WaitingForScene ||
                                              save.CurrentOperationState == SaveLoadService.OperationState.Restoring);
             // Publish scene readiness for adapters that defer until OnLoadCompleted, while
             // the restore coordinator alone releases Loading after participants restore.

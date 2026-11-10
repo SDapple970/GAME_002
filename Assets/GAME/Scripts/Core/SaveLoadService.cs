@@ -7,6 +7,8 @@ using Game.Story;
 using Game.Interaction;
 using Game.Story.Core;
 using Game.NonCombat.Progress;
+using Game.Player;
+using Game.Combat.Integration;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -29,6 +31,8 @@ namespace Game.Core
         private int _operationToken;
         private bool _restoreHadErrors;
         private NewGameRequest _pendingNewGameRequest;
+        // Encounter IDs already belong to the save format's global namespace.
+        private readonly HashSet<string> _clearedEncounterIds = new(StringComparer.Ordinal);
 
         // A request belongs to one explicit Title selection, not to a scene or a save file.
         internal sealed class NewGameRequest
@@ -129,6 +133,7 @@ namespace Game.Core
             _operationState = OperationState.ResettingForNewGame;
             try
             {
+                _clearedEncounterIds.Clear();
                 foreach (INewGameRuntimeReset owner in Discover<INewGameRuntimeReset>())
                     owner.ResetForNewGame();
 
@@ -181,6 +186,8 @@ namespace Game.Core
             _pendingNewGameRequest = null;
             _operationState = OperationState.Reading;
             if (!TryReadValidSnapshot(out GameSaveData snapshot, out bool backup, out message)) return Fail(message);
+            // A disk restore cannot reconstruct the start of the current dungeon attempt.
+            SceneFlowController.Instance?.InvalidateDungeonStartSnapshot();
             string targetScene = snapshot.header.activeSceneId;
             if (!string.IsNullOrWhiteSpace(targetScene) && targetScene != SceneManager.GetActiveScene().name)
             {
@@ -204,6 +211,8 @@ namespace Game.Core
             data.header.applicationVersion = Application.version;
             data.header.activeSceneId = SceneManager.GetActiveScene().name;
             CaptureLocation(data);
+            CaptureEncounterStateBeforeSceneChange();
+            data.world.clearedEncounterIds.AddRange(_clearedEncounterIds.OrderBy(id => id, StringComparer.Ordinal));
             foreach (ISaveDataProvider provider in Discover<ISaveDataProvider>()) provider.CaptureSaveData(data);
             return data;
         }
@@ -213,12 +222,59 @@ namespace Game.Core
             if (saveData == null) return;
             _pendingNewGameRequest = null;
             _restoreHadErrors = false;
+            _clearedEncounterIds.Clear();
+            if (saveData.world?.clearedEncounterIds != null)
+                foreach (string id in saveData.world.clearedEncounterIds)
+                    if (!string.IsNullOrWhiteSpace(id)) _clearedEncounterIds.Add(id);
             foreach (ISaveDataConsumer consumer in Discover<ISaveDataConsumer>())
             {
                 try { consumer.RestoreSaveData(saveData); }
                 catch (Exception exception) { _restoreHadErrors = true; Debug.LogError($"[SaveLoadService] Restore consumer {consumer.GetType().FullName} failed: {exception}", this); }
             }
             RestoreLocation(saveData);
+        }
+
+        internal void CaptureEncounterStateBeforeSceneChange()
+        {
+            GameSaveData state = new();
+            foreach (ISaveDataProvider provider in Discover<ISaveDataProvider>())
+                if (provider is CombatEncounterGroup || provider is CombatEncounterTrigger2D)
+                    provider.CaptureSaveData(state);
+            foreach (string id in state.world.clearedEncounterIds)
+                if (!string.IsNullOrWhiteSpace(id)) _clearedEncounterIds.Add(id);
+        }
+
+        internal void ApplyEncounterStateToLoadedScene()
+        {
+            GameSaveData state = new();
+            state.world.clearedEncounterIds.AddRange(_clearedEncounterIds);
+            foreach (ISaveDataConsumer consumer in Discover<ISaveDataConsumer>())
+            {
+                // Apply known clears only; untouched scene-authored encounters stay untouched.
+                if (consumer is CombatEncounterGroup group && _clearedEncounterIds.Contains(group.EncounterId))
+                    group.RestoreSaveData(state);
+                else if (consumer is CombatEncounterTrigger2D trigger && _clearedEncounterIds.Contains(trigger.EncounterId))
+                    trigger.RestoreSaveData(state);
+            }
+        }
+
+        internal bool TryRestoreDungeonSnapshot(GameSaveData saveData)
+        {
+            if (saveData?.location == null || !saveData.location.hasPositionFallback ||
+                _operationState != OperationState.Idle || ResolvePlayer() == null) return false;
+            try
+            {
+                RestoreGameSaveDataSnapshot(saveData);
+                Transform restoredPlayer = ResolvePlayer();
+                Vector3 expected = new(saveData.location.positionX, saveData.location.positionY, saveData.location.positionZ);
+                return !_restoreHadErrors && restoredPlayer != null &&
+                    (restoredPlayer.position - expected).sqrMagnitude < 0.0001f;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError($"[SaveLoadService] Dungeon snapshot restore failed: {exception}", this);
+                return false;
+            }
         }
 
         internal void SetStoragePathForTests(string primaryPath) => _storage = new AtomicSaveStorage(primaryPath);
@@ -349,7 +405,7 @@ namespace Game.Core
             data.location.positionX = target.position.x; data.location.positionY = target.position.y; data.location.positionZ = target.position.z;
             SceneSpawnPoint nearest = points.OrderBy(point => Vector3.SqrMagnitude(point.transform.position - target.position)).FirstOrDefault();
             bool uniqueId = nearest != null && points.Count(point => point.SpawnPointId == nearest.SpawnPointId) == 1;
-            data.header.playerSpawnId = uniqueId && Vector3.SqrMagnitude(nearest.transform.position - target.position) <= 0.0625f
+            data.header.playerSpawnId = uniqueId && Vector3.SqrMagnitude(nearest.transform.position - target.position) == 0f
                 ? nearest.SpawnPointId
                 : string.Empty;
         }
@@ -374,7 +430,24 @@ namespace Game.Core
 
         private Transform ResolvePlayer()
         {
-            if (player != null) return player;
+            if (player != null)
+            {
+                PlayerInputController assignedController = player.GetComponentInChildren<PlayerInputController>();
+                return assignedController != null ? assignedController.transform : player;
+            }
+
+            // The scene can contain a tagged container as well as the moving Player.
+            // Resolve the active scene's command receiver before the legacy tag fallback.
+            Scene activeScene = SceneManager.GetActiveScene();
+            PlayerInputController[] controllers = FindObjectsByType<PlayerInputController>(FindObjectsSortMode.None)
+                .Where(controller => controller.gameObject.scene == activeScene)
+                .Take(2).ToArray();
+            if (controllers.Length == 1) return controllers[0].transform;
+            if (controllers.Length > 1)
+            {
+                Debug.LogWarning("[SaveLoadService] Multiple active-scene player controllers found; cannot resolve the save location.", this);
+                return null;
+            }
             GameObject found = GameObject.FindGameObjectWithTag("Player");
             return found != null ? found.transform : null;
         }

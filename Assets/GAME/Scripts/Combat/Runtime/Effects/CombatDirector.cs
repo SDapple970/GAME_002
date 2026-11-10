@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using Game.Combat.Actions;
 using UnityEngine;
 using Game.Combat.Adapters;
@@ -9,6 +10,7 @@ using Game.Combat.Data;
 using Game.Combat.Integration;
 using Game.Combat.Model;
 using Game.Core;
+using UnityEngine.UI;
 
 namespace Game.Combat.Effects
 {
@@ -46,6 +48,9 @@ namespace Game.Combat.Effects
         private bool _ownsChainDecisionSlowMotion;
         private float _previousChainDecisionTimeScale = 1f;
         private float _appliedChainDecisionTimeScale = 1f;
+        private readonly HashSet<CombatSkillExecutionResult> _shownNumberResults = new();
+        private readonly List<GameObject> _floatingNumbers = new();
+        private CombatSession _numberSession;
 
         public event Action<CombatFinalPresentationCue> FinalPresentationCueRaised;
 
@@ -60,6 +65,12 @@ namespace Game.Combat.Effects
             }
 
             UnbindFinalExchange();
+            if (!ReferenceEquals(_numberSession, session))
+            {
+                ClearFloatingNumbers();
+                _shownNumberResults.Clear();
+                _numberSession = session;
+            }
             if (orchestrator == null || session == null ||
                 session.FlowMode != CombatFlowMode.StandoffClashChain)
             {
@@ -204,6 +215,7 @@ namespace Game.Combat.Effects
 
         private void OnDisable()
         {
+            ClearFloatingNumbers();
             if (_activeClashRoundRequest != null)
                 TraceClash("DirectorDisabledBeforeCompletion", _activeClashRoundRequest);
             UnbindFinalExchange();
@@ -221,6 +233,7 @@ namespace Game.Combat.Effects
 
         private void OnDestroy()
         {
+            ClearFloatingNumbers();
             UnbindFinalExchange();
         }
 
@@ -267,6 +280,8 @@ namespace Game.Combat.Effects
             RestoreChainDecisionSlowMotion();
             if (_finalSession == null || result?.Actor == null || result.Skill == null)
                 return;
+
+            ShowHpNumbers(result);
 
             ICombatant primaryTarget = result.TargetResults != null && result.TargetResults.Count > 0
                 ? result.TargetResults[0]?.Target
@@ -560,6 +575,7 @@ namespace Game.Combat.Effects
             CombatOutcomePresentationRequest request,
             ISkill skill)
         {
+            ShowHpNumbers(request?.ExecutionResult);
             if (request?.ExecutionResult?.TargetResults != null)
             {
                 for (int i = 0; i < request.ExecutionResult.TargetResults.Count; i++)
@@ -594,6 +610,91 @@ namespace Game.Combat.Effects
                         skill);
                 }
             }
+        }
+
+        private void ShowHpNumbers(CombatSkillExecutionResult execution)
+        {
+            if (!isActiveAndEnabled || _finalSession == null || execution == null ||
+                !_shownNumberResults.Add(execution))
+                return;
+
+            Canvas canvas = null;
+            foreach (Canvas candidate in FindObjectsByType<Canvas>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (!candidate.isActiveAndEnabled || candidate.name != "CombatCanvas" ||
+                    candidate.renderMode != RenderMode.ScreenSpaceOverlay)
+                    continue;
+                if (canvas != null) return;
+                canvas = candidate;
+            }
+            Camera camera = Camera.main;
+            if (canvas == null || camera == null || canvas.transform is not RectTransform canvasRect)
+                return;
+
+            foreach (CombatSkillTargetResult target in execution.TargetResults)
+            {
+                if (target == null || !target.HasDetailedHpAmounts) continue;
+                GameObject fieldObject = GetFieldObject(target.Target);
+                if (fieldObject == null) continue;
+                Vector3 screen = camera.WorldToScreenPoint(fieldObject.transform.position + Vector3.up);
+                if (screen.z <= 0 || !RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                        canvasRect, screen, null, out Vector2 point)) continue;
+                point.x = Mathf.Clamp(point.x, canvasRect.rect.xMin + 80f, canvasRect.rect.xMax - 80f);
+                point.y = Mathf.Clamp(point.y, canvasRect.rect.yMin + 120f, canvasRect.rect.yMax - 60f);
+                if (target.DirectDamageApplied > 0)
+                    CreateHpNumber(canvasRect, point, $"-{target.DirectDamageApplied}", new Color(1f, 0.35f, 0.25f));
+                if (target.DirectRecoveryApplied > 0)
+                    CreateHpNumber(canvasRect, point + Vector2.up * 38f, $"+{target.DirectRecoveryApplied}", new Color(0.35f, 1f, 0.5f));
+            }
+        }
+
+        private void CreateHpNumber(RectTransform parent, Vector2 position, string value, Color color)
+        {
+            GameObject number = new GameObject("CombatHpNumber", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            number.transform.SetParent(parent, false);
+            RectTransform rect = (RectTransform)number.transform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.zero;
+            rect.sizeDelta = new Vector2(160f, 44f);
+            position -= parent.rect.min;
+            rect.anchoredPosition = position;
+            Text label = number.GetComponent<Text>();
+            label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            label.fontSize = 32;
+            label.resizeTextForBestFit = true;
+            label.resizeTextMinSize = 14;
+            label.resizeTextMaxSize = 32;
+            label.fontStyle = FontStyle.Bold;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = color;
+            label.raycastTarget = false;
+            label.text = value;
+            _floatingNumbers.Add(number);
+            StartCoroutine(AnimateHpNumber(number, rect, label, position));
+        }
+
+        private IEnumerator AnimateHpNumber(GameObject number, RectTransform rect, Text label, Vector2 start)
+        {
+            const float duration = 0.8f;
+            float startedAt = Time.time;
+            Color original = label.color;
+            while (number != null && number.activeInHierarchy)
+            {
+                float progress = Mathf.Clamp01((Time.time - startedAt) / duration);
+                rect.anchoredPosition = start + Vector2.up * (32f * progress);
+                label.color = new Color(original.r, original.g, original.b, 1f - progress);
+                if (progress >= 1f) break;
+                yield return null;
+            }
+            _floatingNumbers.Remove(number);
+            if (number != null) Destroy(number);
+        }
+
+        private void ClearFloatingNumbers()
+        {
+            foreach (GameObject number in _floatingNumbers)
+                if (number != null) Destroy(number);
+            _floatingNumbers.Clear();
         }
 
         private static void PlayFinalTargetReaction(

@@ -169,10 +169,33 @@ namespace Game.Tests.Combat
             }, 2, 3, 79), Is.True);
 
             string status = BuildHandStatus(fixture.Session, fixture.Ally);
-            StringAssert.Contains("손패 일반 1 / 합 0", status);
-            StringAssert.Contains("Draw 0+0", status);
-            StringAssert.Contains("Discard 0+0", status);
-            StringAssert.Contains("Refill 0", status);
+            StringAssert.Contains("미사용 일반 1 / 합 0", status);
+            StringAssert.Contains("이번 합 사용 0", status);
+        }
+
+        [Test]
+        public void HandStatus_TracksCommittedCardAndRestoresItsIdentityAtNextExchange()
+        {
+            Fixture fixture = CreateFixture();
+            Assert.That(fixture.Session.TryEnableHandValidation(fixture.Ally, new[]
+            {
+                new CombatHandEntry(fixture.AllyNormal, CombatCardKind.Normal)
+            }, 2, 3, 79), Is.True);
+            Assert.That(fixture.Session.TryGetHand(fixture.Ally, out CombatHandRuntime hand), Is.True);
+            CombatHandCard card = hand.Hand[0];
+            CombatAttackDeclaration attack = new(fixture.Ally, fixture.Enemy, fixture.AllyNormal, card.RuntimeId);
+            Assert.That(CombatExchangeCommitPolicy.TryCommit(fixture.Session, attack, null, out _), Is.True);
+            int mpAfterUse = fixture.Session.GetCombatState(fixture.Ally).CurrentMp;
+            Assert.That(BuildHandStatus(fixture.Session, fixture.Ally), Does.Contain($"일반 {card.Skill.Name} #{card.RuntimeId}"));
+            Assert.That(CombatExchangeCommitPolicy.TryCommit(fixture.Session, attack, null, out _), Is.False);
+            Assert.That(fixture.Session.CardExchangeIndex, Is.EqualTo(1));
+
+            Assert.That(fixture.Session.TryBeginNextCardExchange(1), Is.True);
+            Assert.That(fixture.Session.CardExchangeIndex, Is.EqualTo(2));
+            Assert.That(hand.Hand[0].RuntimeId, Is.EqualTo(card.RuntimeId));
+            Assert.That(BuildHandStatus(fixture.Session, fixture.Ally), Does.Contain("이번 합 사용 0"));
+            Assert.That(BuildHandStatus(fixture.Session, fixture.Ally), Does.Not.Contain($"#{card.RuntimeId}"));
+            Assert.That(fixture.Session.GetCombatState(fixture.Ally).CurrentMp, Is.EqualTo(mpAfterUse));
         }
 
         private Fixture CreateFixture(

@@ -135,6 +135,9 @@ namespace Game.Combat.Core
                 downgraded,
                 attack.BpInvestment,
                 committedResponse?.BpInvestment ?? 0);
+            session.NotifyCardCommitted(attack.Attacker, attackCard);
+            if (committedResponse != null)
+                session.NotifyCardCommitted(committedResponse.Responder, responseCard);
             return true;
         }
 

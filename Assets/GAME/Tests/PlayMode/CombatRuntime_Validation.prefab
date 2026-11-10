@@ -1,0 +1,173 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &4846932881780185308
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: m_Name
+      value: CombatRuntime_Validation
+      objectReference: {fileID: 0}
+    - target: {fileID: 6230029406771623098, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6230029406771623098, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6230029406771623098, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6230029406771623098, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6230029406771623098, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6230029406771623098, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6230029406771623098, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6230029406771623098, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6230029406771623098, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6230029406771623098, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: skillDefinitions.Array.size
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: 'skillDefinitions.Array.data[0]'
+      value:
+      objectReference: {fileID: 11400000, guid: 762d0613f18cd424eba3e68f2b4e1bf5, type: 2}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: 'skillDefinitions.Array.data[1]'
+      value:
+      objectReference: {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: 'skillDefinitions.Array.data[2]'
+      value:
+      objectReference: {fileID: 11400000, guid: 3f33bab0ec4af6c4db0b827917ba147d, type: 2}
+    - target: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      propertyPath: 'skillDefinitions.Array.data[3]'
+      value:
+      objectReference: {fileID: 11400000, guid: 1f9d7ebdbd0b7fd48ace84c03839d87e, type: 2}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6187434679081583622}
+    - targetCorrespondingSourceObject: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 7547045383835301503}
+  m_SourcePrefab: {fileID: 100100000, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+--- !u!114 &4568214937675940495 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8945921886167358035, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+  m_PrefabInstance: {fileID: 4846932881780185308}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5685160719827876854}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87780b0c5573e6345a59272ccf2f5e65, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Core.CombatEntryPoint
+--- !u!1 &5685160719827876854 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 983610231012664106, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+  m_PrefabInstance: {fileID: 4846932881780185308}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &6187434679081583622
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5685160719827876854}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 040a0e4f14ef4872ac50661f4ee830da, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Debugging.CombatClashSeriesValidationOptIn
+  entryPoint: {fileID: 4568214937675940495}
+  orchestrator: {fileID: 7835139545783747164}
+  enableValidation: 1
+  attackerDurability: 3
+  responderDurability: 3
+  maxComparisons: 3
+  decisionDurationSeconds: 5
+--- !u!114 &7547045383835301503
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5685160719827876854}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bce1360c580248db935ccf2b6f845871, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Debugging.CombatHandValidationOptIn
+  entryPoint: {fileID: 4568214937675940495}
+  orchestrator: {fileID: 7835139545783747164}
+  enableValidation: 1
+  playerCardSource: 1
+  clashSkillDefinitions:
+  - {fileID: 11400000, guid: 762d0613f18cd424eba3e68f2b4e1bf5, type: 2}
+  - {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}
+  fixtureCards:
+  - skill: {fileID: 11400000, guid: 762d0613f18cd424eba3e68f2b4e1bf5, type: 2}
+    kind: 0
+    copies: 4
+  - skill: {fileID: 11400000, guid: 6242dada02b12a8468930dc1a8114c3e, type: 2}
+    kind: 1
+    copies: 6
+  normalHandCapacity: 2
+  clashHandCapacity: 3
+  seed: 2303
+  enableEnemyHand: 1
+  enemyCardSource: 1
+  enemyClashSkillDefinitions:
+  - {fileID: 11400000, guid: 3f33bab0ec4af6c4db0b827917ba147d, type: 2}
+  - {fileID: 11400000, guid: 1f9d7ebdbd0b7fd48ace84c03839d87e, type: 2}
+  enemyFixtureCards:
+  - skill: {fileID: 11400000, guid: 3f33bab0ec4af6c4db0b827917ba147d, type: 2}
+    kind: 0
+    copies: 4
+  - skill: {fileID: 11400000, guid: 1f9d7ebdbd0b7fd48ace84c03839d87e, type: 2}
+    kind: 1
+    copies: 6
+  enemySeed: 2304
+--- !u!114 &7835139545783747164 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 3458696486045702784, guid: 1bfc52cd235e809449d17d48571f5a38, type: 3}
+  m_PrefabInstance: {fileID: 4846932881780185308}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5685160719827876854}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87771121262fd914cbcbb2d789f2deda, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Game.Combat.Core.CombatFlowOrchestrator

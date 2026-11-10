@@ -13,6 +13,114 @@ namespace Game.Tests.Combat
 {
     public sealed class CombatBpValidationTests
     {
+        [TestCase(4, 0, 0, 0, 4, 0, 6, 1)]
+        [TestCase(0, 4, 3, 0, 0, 3, 9, 0)]
+        [TestCase(4, 0, 3, 0, 4, 3, 9, 1)]
+        [TestCase(40, 0, 0, 0, 10, 0, 0, 1)]
+        [TestCase(0, 1, 4, 0, 0, 1, 10, 0)]
+        [TestCase(2, 0, 0, 2, 6, 0, 4, 3)]
+        [TestCase(6, 0, 0, 3, 10, 0, 0, 2)]
+        public void Receipts_RecordClampedDirectAmountsAndOnlyExecutedHits(int damage, int priorDamage,
+            int healing, int extraHits, int expectedDamage, int expectedRecovery, int expectedHp, int expectedAttempts)
+        {
+            Fixture f = NewFixture(withReceipt: true);
+            f.AllySkill.BaseDamage = damage;
+            f.Enemy.ApplyDamage(priorDamage);
+            if (healing > 0)
+                EnableBp(f, CombatBpEnhancementKind.Healing, healing);
+            if (extraHits > 0)
+                EnableBp(f, CombatBpEnhancementKind.ExtraHits, extraHits);
+
+            int callbacks = 0;
+            f.Enemy.DamageCallback = () => callbacks++;
+            CombatSkillTargetResult target = ExecuteReceiptFixture(f, healing > 0 || extraHits > 0 ? 1 : 0);
+            Assert.That(target.HpBefore, Is.EqualTo(10 - priorDamage));
+            Assert.That(target.HpAfter, Is.EqualTo(expectedHp));
+            Assert.That(f.Enemy.HP, Is.EqualTo(expectedHp));
+            Assert.That(target.DamageApplied, Is.EqualTo(Math.Max(0, 10 - priorDamage - expectedHp)));
+            Assert.That(target.DirectDamageApplied, Is.EqualTo(expectedDamage));
+            Assert.That(target.DirectRecoveryApplied, Is.EqualTo(expectedRecovery));
+            Assert.That(target.HasDetailedHpAmounts, Is.True);
+            Assert.That(target.DamageAttempts, Is.EqualTo(expectedAttempts));
+            Assert.That(target.RecoveryAttempted, Is.EqualTo(healing > 0));
+            Assert.That(callbacks, Is.EqualTo(expectedAttempts));
+        }
+
+        [TestCase(0, 3, 9, 1)]
+        [TestCase(2, 0, 4, 1)]
+        [TestCase(2, 1, 5, 2)]
+        public void Receipt_ExcludesCallbackHpChanges(int callbackDamage, int callbackHealing,
+            int expectedHp, int expectedCallbacks)
+        {
+            Fixture f = NewFixture(withReceipt: true);
+            f.AllySkill.BaseDamage = 4;
+            CombatantCombatState state = f.Session.GetCombatState(f.Enemy);
+            int callbacks = 0;
+            f.Enemy.DamageCallback = () =>
+            {
+                if (++callbacks != 1) return;
+                if (expectedCallbacks == 2)
+                    Assert.That(((ICombatantDamageReceipt)f.Enemy).ApplyDamageWithReceipt(callbackDamage),
+                        Is.EqualTo(callbackDamage));
+                else
+                    state.ApplyDamage(callbackDamage);
+                state.RestoreHp(callbackHealing);
+            };
+
+            CombatSkillTargetResult target = ExecuteReceiptFixture(f);
+            Assert.That(callbacks, Is.EqualTo(expectedCallbacks));
+            Assert.That(target.HpAfter, Is.EqualTo(expectedHp));
+            Assert.That(target.DamageApplied, Is.EqualTo(10 - expectedHp));
+            Assert.That(target.DirectDamageApplied, Is.EqualTo(4));
+            Assert.That(target.DirectRecoveryApplied, Is.Zero);
+            Assert.That(target.DamageAttempts, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void UnsupportedDamagePath_PreservesCallbackAndDoesNotEstimateAppliedAmount()
+        {
+            Fixture f = NewFixture();
+            f.Enemy.DamageCallback = () => f.Session.GetCombatState(f.Enemy).RestoreHp(1);
+            CombatSkillTargetResult target = ExecuteReceiptFixture(f);
+            Assert.That(target.HpAfter, Is.EqualTo(10));
+            Assert.That(target.DamageApplied, Is.Zero);
+            Assert.That(target.DirectDamageApplied, Is.Null);
+            Assert.That(target.HasDetailedHpAmounts, Is.False);
+            Assert.That(target.DamageAttempts, Is.EqualTo(1));
+
+            CombatSkillTargetResult legacy = new(f.Enemy, 10, 9);
+            Assert.That(legacy.DamageApplied, Is.EqualTo(1));
+            Assert.That(legacy.DirectDamageApplied, Is.Null);
+            Assert.That(legacy.DirectRecoveryApplied, Is.Null);
+        }
+
+        [Test]
+        public void ZeroAdjustedDamage_RecordsAnAttemptWithoutHpChange()
+        {
+            Fixture f = NewFixture(withReceipt: true);
+            CombatStatusDefinitionSO status = CreateStatusFixture();
+            try
+            {
+                typeof(CombatStatusDefinitionSO).GetField("damageModifier", BindingFlags.Instance | BindingFlags.NonPublic)
+                    .SetValue(status, -f.AllySkill.BaseDamage);
+                f.Session.GetCombatState(f.Ally).ApplyStatus(status);
+                CombatSkillTargetResult target = ExecuteReceiptFixture(f);
+                Assert.That(target.DamageAttempts, Is.EqualTo(1));
+                Assert.That(target.DirectDamageApplied, Is.Zero);
+                Assert.That(target.HpAfter, Is.EqualTo(10));
+            }
+            finally { UnityEngine.Object.DestroyImmediate(status); }
+        }
+
+        private static CombatSkillTargetResult ExecuteReceiptFixture(Fixture f, int investment = 0)
+        {
+            var request = new CombatSkillExecutionRequest(f.Ally, f.AllySkill, new[] { f.Enemy }, f.Enemy,
+                CombatClashOutcome.AttackerWin, investment);
+            Assert.That(SkillRunner.TryExecute(f.Session, request, out CombatSkillExecutionResult result), Is.True);
+            Assert.That(result.TargetResults.Count, Is.EqualTo(1));
+            return result.TargetResults[0];
+        }
+
         // Every numeric value here is a validation fixture, not Production balance.
         [Test]
         public void RoundCycles_AreIndependentOfHandRefill_AndExcludeDuplicateEmptyAndInactiveCycles()
@@ -276,7 +384,7 @@ namespace Game.Tests.Combat
         [Test]
         public void AbortDuringDamage_StopsRemainingHitsStatusAndDelayedReplay()
         {
-            Fixture f = NewFixture();
+            Fixture f = NewFixture(withReceipt: true);
             CombatStatusDefinitionSO status = CreateStatusFixture();
             try
             {
@@ -287,6 +395,8 @@ namespace Game.Tests.Combat
                 f.Enemy.DamageCallback = () => f.StateMachine.ForceExit(CombatEndReason.Abort);
                 Assert.That(SkillRunner.TryExecute(f.Session, request, out CombatSkillExecutionResult result), Is.True);
                 Assert.That(f.Enemy.HP, Is.EqualTo(9));
+                Assert.That(result.TargetResults[0].DirectDamageApplied, Is.EqualTo(1));
+                Assert.That(result.TargetResults[0].DamageAttempts, Is.EqualTo(1));
                 Assert.That(result.AppliedStatusResults, Is.Empty);
                 Assert.That(f.Session.GetCombatState(f.Enemy).HasStatus("06b.bp.status"), Is.False);
                 Assert.That(SkillRunner.TryExecute(f.Session, request, out _), Is.False);
@@ -356,10 +466,10 @@ namespace Game.Tests.Combat
                 CombatBpEnhancementKind.ClashPower), Is.Zero);
         }
 
-        private static Fixture NewFixture()
+        private static Fixture NewFixture(bool withReceipt = false)
         {
             Actor ally = new(1, Side.Allies);
-            Actor enemy = new(2, Side.Enemies);
+            Actor enemy = withReceipt ? new ReceiptActor(2, Side.Enemies) : new Actor(2, Side.Enemies);
             Skill allySkill = new(1);
             Skill enemySkill = new(2);
             ally.AddSkill(allySkill);
@@ -441,7 +551,7 @@ namespace Game.Tests.Combat
             public float DesiredTargetDistance => 0f;
             public float MoveSpeed => 0f;
             public float ActionDelayAfterMove => 0f;
-            public int BaseDamage => 1;
+            public int BaseDamage { get; set; } = 1;
             public int BaseStagger => 0;
             public int WeaknessStaggerBonus => 0;
             public int Speed => 1;
@@ -451,7 +561,7 @@ namespace Game.Tests.Combat
             public Skill(int id) => Id = new SkillId(id);
         }
 
-        private sealed class Actor : ICombatant, ICombatantRuntimeStateBinding
+        private class Actor : ICombatant, ICombatantRuntimeStateBinding
         {
             private readonly List<ISkill> _skills = new();
             private CombatantCombatState _state;
@@ -469,10 +579,24 @@ namespace Game.Tests.Combat
             public Actor(int id, Side side) { Id = new CombatantId(id); Side = side; }
             public void AddSkill(ISkill skill) => _skills.Add(skill);
             public void BindCombatState(CombatantCombatState state) => _state = state;
-            public void ApplyDamage(int amount) { _state?.ApplyDamage(amount); DamageCallback?.Invoke(); }
+            public void ApplyDamage(int amount) => ApplyDamageAndNotify(amount);
+
+            protected int? ApplyDamageAndNotify(int amount)
+            {
+                int? applied = _state?.ApplyDamageWithReceipt(amount);
+                DamageCallback?.Invoke();
+                return applied;
+            }
             public void AddStagger(int amount) { }
             public void SetStunned(bool value) => IsStunned = value;
             public void ResetStaggerIfNeededOnStunEnd() { }
+        }
+
+        private sealed class ReceiptActor : Actor, ICombatantDamageReceipt
+        {
+            public ReceiptActor(int id, Side side) : base(id, side) { }
+
+            int? ICombatantDamageReceipt.ApplyDamageWithReceipt(int amount) => ApplyDamageAndNotify(amount);
         }
     }
 }

@@ -8,7 +8,7 @@ namespace Game.Combat.Adapters
     /// 필드 GameObject를 전투 ICombatant로 래핑.
     /// 전투 시작 snapshot과 종료 writeback 사이에는 세션 runtime state를 투영한다.
     /// </summary>
-    public sealed class FieldCombatantAdapter : ICombatant, ICombatantRuntimeStateBinding
+    public sealed class FieldCombatantAdapter : ICombatant, ICombatantRuntimeStateBinding, ICombatantDamageReceipt
     {
         private readonly List<ISkill> _skills = new();
         private readonly HpAccessor _hp;
@@ -53,19 +53,23 @@ namespace Game.Combat.Adapters
             }
         }
 
-        public void ApplyDamage(int amount)
+        public void ApplyDamage(int amount) => ApplyDamageWithReceipt(amount);
+
+        int? ICombatantDamageReceipt.ApplyDamageWithReceipt(int amount) => ApplyDamageWithReceipt(amount);
+
+        private int? ApplyDamageWithReceipt(int amount)
         {
-            if (amount <= 0) return;
+            if (amount <= 0) return 0;
 
             if (_runtimeState != null)
             {
-                _runtimeState.ApplyDamage(amount);
-                return;
+                return _runtimeState.ApplyDamageWithReceipt(amount);
             }
 
             int v = HP - amount;
             if (v < 0) v = 0;
             _hp.SetHp(v);
+            return null;
         }
 
         internal void ApplyRuntimeHpToField()

@@ -60,7 +60,18 @@ namespace Game.Combat.UI
         private int _lastActingBp = -1;
         private int _lastBpRoundCycle = -1;
         private int _lastUltimateStage = -1;
+        private int _lastPlayerHp = -1;
+        private int _lastEnemyHp = -1;
         private int _lastAllOutWiringErrorVersion = -1;
+        private int _displayedExchangeIndex;
+        private string _lastClashFeedback;
+        private string _cardCommitFeedback;
+        private readonly HashSet<long> _shownCommittedCards = new HashSet<long>();
+        private int _commitFeedbackExchange;
+        private string _lastComparisonFeedback;
+        private CombatClashSeriesState _feedbackSeries;
+        private int _lastFeedbackComparison;
+        private bool _showExchangeFeedback;
 
         public bool IsBound => _controller != null && _session != null;
         public PlayerCombatDecisionViewState ViewState => _viewState;
@@ -88,6 +99,7 @@ namespace Game.Combat.UI
             if (!IsBound)
                 return;
 
+            ObserveCombatFeedback();
             ICombatant actor = _viewState.ActingActor ?? _viewState.SelectedActor;
             if (actor != null && _session.TryGetCombatState(actor, out CombatantCombatState state) &&
                 state.CurrentMp != _lastActingMp)
@@ -109,6 +121,9 @@ namespace Game.Combat.UI
             ICombatant player = _viewState.SelectedHandoffTarget ??
                 (_viewState.ActingActor?.Side == Side.Allies ? _viewState.ActingActor : null) ??
                 _viewState.SelectedActor ?? FindFirst(_session.Allies);
+            ICombatant statusEnemy = FindStatusEnemy();
+            if ((player?.HP ?? -1) != _lastPlayerHp || (statusEnemy?.HP ?? -1) != _lastEnemyHp)
+                RefreshStatus();
             if (_session.UltimateRuntime != null &&
                 _session.UltimateRuntime.TryGetStage(player, out int ultimateStage) &&
                 ultimateStage != _lastUltimateStage)
@@ -140,10 +155,15 @@ namespace Game.Combat.UI
             _session = session;
             _stateMachine = stateMachine;
             _orchestrator = orchestrator;
+            _displayedExchangeIndex = session.CardExchangeIndex;
+            _lastClashFeedback = null;
+            _showExchangeFeedback = false;
             _controller = new FinalCombatPlayerCommandController(new SessionHandoffEligibilityProvider());
             _controller.ViewStateChanged += HandleViewStateChanged;
             _stateMachine.OnPhaseChanged += HandlePhaseChanged;
             _session.ExchangeState.OnStateChanged += HandleExchangeStateChanged;
+            _session.CardCommitted += HandleCardCommitted;
+            _orchestrator.ClashFeedbackAvailable += HandleClashFeedback;
             if (!_controller.Bind(orchestrator, session))
             {
                 Unbind();
@@ -151,6 +171,9 @@ namespace Game.Combat.UI
             }
 
             _viewState = _controller.ViewState;
+            TrackClashSeries();
+            if (_feedbackSeries != null)
+                HandleClashFeedback(_feedbackSeries, _orchestrator.PendingClashRoundPresentationRequest?.Result);
             SetVisible(panelRoot, true);
             Render();
         }
@@ -159,8 +182,13 @@ namespace Game.Combat.UI
         {
             if (_stateMachine != null)
                 _stateMachine.OnPhaseChanged -= HandlePhaseChanged;
+            if (_orchestrator != null)
+                _orchestrator.ClashFeedbackAvailable -= HandleClashFeedback;
             if (_session != null)
+            {
                 _session.ExchangeState.OnStateChanged -= HandleExchangeStateChanged;
+                _session.CardCommitted -= HandleCardCommitted;
+            }
             if (_controller != null)
             {
                 _controller.ViewStateChanged -= HandleViewStateChanged;
@@ -175,7 +203,18 @@ namespace Game.Combat.UI
             _lastActingBp = -1;
             _lastBpRoundCycle = -1;
             _lastUltimateStage = -1;
+            _lastPlayerHp = -1;
+            _lastEnemyHp = -1;
             _lastAllOutWiringErrorVersion = -1;
+            _displayedExchangeIndex = 0;
+            _lastClashFeedback = null;
+            _cardCommitFeedback = null;
+            _shownCommittedCards.Clear();
+            _commitFeedbackExchange = 0;
+            _lastComparisonFeedback = null;
+            _feedbackSeries = null;
+            _lastFeedbackComparison = 0;
+            _showExchangeFeedback = false;
             _viewState = PlayerCombatDecisionViewState.Empty;
             ClearDynamicButtons();
             statusListPresenter?.Clear();
@@ -187,12 +226,23 @@ namespace Game.Combat.UI
             if (!IsBound)
                 return;
 
+            ObserveCombatFeedback();
             RefreshStatus();
             Render();
         }
 
         private void HandlePhaseChanged(Phase previous, Phase next)
         {
+            if (next == Phase.ExitCombat)
+            {
+                _cardCommitFeedback = null;
+                _shownCommittedCards.Clear();
+                _feedbackSeries = null;
+                _lastFeedbackComparison = 0;
+                _lastComparisonFeedback = null;
+                _lastClashFeedback = null;
+                _showExchangeFeedback = false;
+            }
             ApplyPhase(next);
             if (previous == Phase.Clash || next == Phase.Clash)
                 TraceClashUi("PhaseChanged");
@@ -201,6 +251,8 @@ namespace Game.Combat.UI
         private void HandleViewStateChanged(PlayerCombatDecisionViewState state)
         {
             _viewState = state ?? PlayerCombatDecisionViewState.Empty;
+            if (_viewState.SelectedCardRuntimeId.HasValue)
+                _showExchangeFeedback = false;
             Render();
             if (_stateMachine?.Phase == Phase.Clash)
                 TraceClashUi("ViewStateChanged");
@@ -208,6 +260,7 @@ namespace Game.Combat.UI
 
         private void HandleExchangeStateChanged(int version)
         {
+            TrackClashSeries();
             RefreshStatus();
             if (_stateMachine?.Phase == Phase.Clash)
                 TraceClashUi("ExchangeStateChanged");
@@ -237,7 +290,7 @@ namespace Game.Combat.UI
             bool automaticPhase = IsAutomaticPresentationPhase(phase);
             bool series = _viewState.DecisionKind == CombatExchangeDecisionKind.ClashAttack ||
                           _viewState.DecisionKind == CombatExchangeDecisionKind.ClashResponse;
-            bool hasRequest = IsBound && _viewState.DecisionKind.HasValue &&
+            bool hasRequest = IsBound && phase != Phase.ExitCombat && _viewState.DecisionKind.HasValue &&
                               (!automaticPhase || phase == Phase.Clash && series);
             bool attack = _viewState.DecisionKind == CombatExchangeDecisionKind.Attack;
             bool response = _viewState.DecisionKind == CombatExchangeDecisionKind.Response;
@@ -254,7 +307,7 @@ namespace Game.Combat.UI
             SetVisible(targetListRoot, hasRequest && (attack || response) && _viewState.SelectableTargets.Count > 0);
             bool allOut = hasRequest && chain && _controller.IsAllOutCandidate;
             SetVisible(handoffListRoot, hasRequest &&
-                (chain && (_viewState.HandoffCandidates.Count > 0 || allOut) ||
+                (chain && (_session.Allies.Count > 1 || allOut) ||
                  attack && (_viewState.SelectableItems.Count > 0 || _viewState.CanOvercome ||
                             _viewState.SelectedSkill != null && _session?.BpRuntime != null) ||
                  response && _viewState.SelectedSkill != null && _session?.BpRuntime != null ||
@@ -418,11 +471,18 @@ namespace Game.Combat.UI
                     ? state.CardAvailability[i]
                     : new CombatSkillAvailability(card.Skill, CombatSkillUnavailableReason.InvalidPhase);
                 string kind = card.Kind == CombatCardKind.Clash ? "[합]" : "[일반]";
-                string label = $"{kind} {card.Skill.Name} · ID {card.RuntimeId} · " +
-                    $"MP {CombatMpCostResolver.Resolve(card.Skill)} " +
-                    (availability.IsAvailable ? "ON" : $"OFF ({GetUnavailableReason(availability.Reason)})");
+                bool selected = state.SelectedCardRuntimeId == card.RuntimeId;
+                string label = $"{(selected ? "▶ 선택 · " : string.Empty)}{kind} {card.Skill.Name} · ID {card.RuntimeId}\n" +
+                    $"MP {CombatMpCostResolver.Resolve(card.Skill)} · " +
+                    (!availability.IsAvailable ? $"사용 불가: {GetUnavailableReason(availability.Reason)}" : selected ? "확정 전" : "사용 가능");
                 Button button = CreateOption(host.transform, label);
                 if (button == null) continue;
+                if (selected)
+                {
+                    ColorBlock colors = button.colors;
+                    colors.disabledColor = new Color(0.25f, 0.65f, 0.85f, 1f);
+                    button.colors = colors;
+                }
                 button.interactable = availability.IsAvailable &&
                     state.SelectedCardRuntimeId != card.RuntimeId;
                 if (availability.IsAvailable)
@@ -438,11 +498,11 @@ namespace Game.Combat.UI
             if (host == null || _session?.BpRuntime == null ||
                 _viewState.SelectedSkill == null || _controller == null) return;
 
-            ICombatant actor = _viewState.ActingActor ?? _viewState.SelectedActor;
             CombatBpRuntime bp = _session.BpRuntime;
             for (int amount = 0; amount <= bp.Config.MaximumInvestment; amount++)
             {
-                bool available = _orchestrator.CanInvestBp(actor, _viewState.SelectedSkill, amount);
+                string reason = _controller.GetBpInvestmentUnavailableReason(amount);
+                bool available = reason == null;
                 int magnitude = 0;
                 CombatBpEnhancementKind kind = CombatBpEnhancementKind.None;
                 if (amount > 0 && CombatBpEnhancementPolicy.TryGetProfile(_session,
@@ -451,7 +511,7 @@ namespace Game.Combat.UI
                         _viewState.SelectedSkill, amount, kind);
                 string effect = amount == 0 ? "기본 효과" : DescribeBpEffect(kind, magnitude);
                 string label = $"BP {amount} · {effect} " +
-                    (available ? "ON" : "OFF (BP 부족 또는 강화 없음)");
+                    (available ? "ON" : $"OFF ({reason})");
                 Button button = CreateOption(host.transform, label);
                 if (button == null) continue;
                 button.interactable = available && amount != _controller.SelectedBpInvestment;
@@ -664,25 +724,31 @@ namespace Game.Combat.UI
                 return;
 
             Phase phase = _stateMachine != null ? _stateMachine.Phase : Phase.EnterCombat;
-            SetText(phaseText, GetPhaseTitle(phase, _viewState.DecisionKind));
+            SetText(phaseText, $"{_session.CardExchangeIndex}합 · {GetPhaseTitle(phase, _viewState.DecisionKind)}");
             string context = GetContextMessage(phase, _viewState,
                 _orchestrator?.ClashSeriesDecisionTimeRemaining ?? 0f);
             if (_controller.IsAllOutCandidate)
                 context = $"적 전원 기절 · 총공격 수락 / 거절\n남은 시간 {_orchestrator.AllOutDecisionTimeRemaining:0.0}초" +
                     (_controller.AllOutUnavailableReason is string reason ? $"\n선택 불가: {reason}" : string.Empty);
             CombatClashSeriesState series = _session.ExchangeState.ClashSeries;
+            if (!string.IsNullOrEmpty(_cardCommitFeedback) && phase != Phase.ExitCombat)
+                context += $"\n{_cardCommitFeedback}";
+            if (!string.IsNullOrEmpty(_lastComparisonFeedback) && phase == Phase.Clash)
+                context += $"\n{_lastComparisonFeedback}";
+            if (!string.IsNullOrEmpty(_lastClashFeedback) && phase != Phase.ExitCombat)
+                context += $"\n{_lastClashFeedback}";
+            if (_showExchangeFeedback && phase != Phase.ExitCombat && _session.HasHandValidation)
+                context += $"\n{_displayedExchangeIndex}합 시작 · 기존 카드 사용 상태 초기화";
             if (phase == Phase.Clash && series != null)
             {
-                CombatClashRoundResult round = _orchestrator?.PendingClashRoundPresentationRequest?.Result;
-                context += $"\n합 {series.ComparisonCount}: 공격측 강인도 {series.AttackerDurability}, " +
-                           $"대응측 강인도 {series.ResponderDurability}";
-                if (round != null)
-                    context += $"\n합 위력 {round.AttackerPower} : {round.ResponderPower}";
+                context += $"\n강인도 {series.AttackerDurability} : {series.ResponderDurability}";
             }
             ICombatant player = _viewState.SelectedHandoffTarget ??
                 (_viewState.ActingActor?.Side == Side.Allies ? _viewState.ActingActor : null) ??
                 _viewState.SelectedActor ?? FindFirst(_session.Allies);
             ICombatant enemy = FindStatusEnemy();
+            _lastPlayerHp = player?.HP ?? -1;
+            _lastEnemyHp = enemy?.HP ?? -1;
             string playerName = _session.TryGetAllyCharacterId(player, out string characterId)
                 ? characterId : "PLAYER";
             context += $"\n{BuildHandStatus(_session, player)}";
@@ -705,6 +771,95 @@ namespace Game.Combat.UI
             statusListPresenter?.Render(_session);
         }
 
+        private void ObserveCombatFeedback()
+        {
+            if (!IsBound)
+                return;
+
+            bool changed = false;
+            TrackClashSeries();
+
+            if (_session.CardExchangeIndex != _displayedExchangeIndex)
+            {
+                _displayedExchangeIndex = _session.CardExchangeIndex;
+                _cardCommitFeedback = null;
+                _shownCommittedCards.Clear();
+                _commitFeedbackExchange = _displayedExchangeIndex;
+                _showExchangeFeedback = true;
+                changed = true;
+            }
+            else if (_showExchangeFeedback && _stateMachine.Phase == Phase.Clash)
+            {
+                _showExchangeFeedback = false;
+                changed = true;
+            }
+            if (changed)
+                RefreshStatus();
+        }
+
+        private void HandleCardCommitted(ICombatant actor, CombatHandCard card)
+        {
+            if (!IsBound || _stateMachine.Phase == Phase.ExitCombat || actor?.Side != Side.Allies || card == null)
+                return;
+            ObserveCombatFeedback();
+            if (_commitFeedbackExchange != _session.CardExchangeIndex)
+            {
+                _commitFeedbackExchange = _session.CardExchangeIndex;
+                _shownCommittedCards.Clear();
+            }
+            if (!_shownCommittedCards.Add(card.RuntimeId)) return;
+            _cardCommitFeedback = $"사용 확정 · {card.Skill.Name} #{card.RuntimeId}";
+            RefreshStatus();
+        }
+
+        private void TrackClashSeries()
+        {
+            if (_stateMachine?.Phase == Phase.ExitCombat) return;
+            CombatClashSeriesState series = _session?.ExchangeState.ClashSeries;
+            if (series == null || ReferenceEquals(series, _feedbackSeries)) return;
+            _feedbackSeries = series;
+            _lastFeedbackComparison = 0;
+            _lastComparisonFeedback = null;
+            _lastClashFeedback = null;
+        }
+
+        private void HandleClashFeedback(CombatClashSeriesState series, CombatClashRoundResult result)
+        {
+            if (!IsBound || _stateMachine.Phase == Phase.ExitCombat || series == null ||
+                !ReferenceEquals(series, _session.ExchangeState.ClashSeries))
+                return;
+            TrackClashSeries();
+            ICombatant attacker = _session.ExchangeState.CurrentDeclaration?.Attacker;
+            bool changed = false;
+            if (result != null && result.ComparisonNumber > _lastFeedbackComparison)
+            {
+                _lastFeedbackComparison = result.ComparisonNumber;
+                string comparison = FormatClashOutcome(result.ComparisonOutcome, attacker)
+                    .Replace("Clash 최종 결과 · ", string.Empty);
+                _lastComparisonFeedback = $"비교 {result.ComparisonNumber} · 위력 {result.AttackerPower}:{result.ResponderPower} · {comparison}";
+                changed = true;
+            }
+            if (series.IsComplete && series.FinalOutcome.HasValue && _lastClashFeedback == null)
+            {
+                _lastClashFeedback = FormatClashOutcome(series.FinalOutcome.Value, attacker);
+                changed = true;
+            }
+            if (changed) RefreshStatus();
+        }
+
+        private static string FormatClashOutcome(CombatClashOutcome outcome, ICombatant attacker)
+        {
+            if (outcome == CombatClashOutcome.Tie)
+                return "Clash 최종 결과 · 무승부";
+            if (attacker == null)
+                return "Clash 최종 결과 · 진영 정보 없음";
+            if (outcome == CombatClashOutcome.Unopposed)
+                return attacker.Side == Side.Allies
+                    ? "Clash 최종 결과 · 승리 (무대응)" : "Clash 최종 결과 · 패배 (무대응)";
+            bool playerWon = (outcome == CombatClashOutcome.AttackerWin) == (attacker.Side == Side.Allies);
+            return playerWon ? "Clash 최종 결과 · 승리" : "Clash 최종 결과 · 패배";
+        }
+
         // Presentation reads the session-owned hand only; it never infers card membership from skills.
         private static string BuildHandStatus(CombatSession session, ICombatant player)
         {
@@ -724,10 +879,20 @@ namespace Game.Combat.UI
                     normalCount++;
             }
 
-            return $"손패 일반 {normalCount} / 합 {clashCount} · " +
-                $"Draw {hand.NormalDrawCount}+{hand.ClashDrawCount} · " +
-                $"Discard {hand.NormalDiscard.Count}+{hand.ClashDiscard.Count} · " +
-                $"Refill {hand.RefillCount}";
+            string used = FormatUsedCards(hand.NormalDiscard, hand.ClashDiscard);
+            return $"미사용 일반 {normalCount} / 합 {clashCount} · " +
+                $"이번 합 사용 {hand.NormalDiscard.Count + hand.ClashDiscard.Count}" +
+                (used.Length > 0 ? $" ({used})" : string.Empty);
+        }
+
+        private static string FormatUsedCards(IReadOnlyList<CombatHandCard> normal, IReadOnlyList<CombatHandCard> clash)
+        {
+            List<string> names = new List<string>();
+            foreach (CombatHandCard card in normal)
+                names.Add($"일반 {card.Skill.Name} #{card.RuntimeId}");
+            foreach (CombatHandCard card in clash)
+                names.Add($"합 {card.Skill.Name} #{card.RuntimeId}");
+            return string.Join(", ", names);
         }
 
         private string FormatResources(string label, ICombatant actor)
@@ -779,11 +944,13 @@ namespace Game.Combat.UI
 
         private static string GetPhaseTitle(Phase phase, CombatExchangeDecisionKind? decisionKind)
         {
+            if (phase == Phase.ExitCombat)
+                return "전투 종료";
             if (decisionKind == CombatExchangeDecisionKind.Response)
                 return "대응 선택";
             if (decisionKind == CombatExchangeDecisionKind.ClashAttack ||
                 decisionKind == CombatExchangeDecisionKind.ClashResponse)
-                return "반복 합 스킬 선택";
+                return "다음 비교 스킬 선택";
             if (decisionKind == CombatExchangeDecisionKind.Chain || phase == Phase.ChainDecision)
                 return "연계 선택";
 
@@ -807,8 +974,10 @@ namespace Game.Combat.UI
         private static string GetContextMessage(
             Phase phase, PlayerCombatDecisionViewState viewState, float remainingSeconds)
         {
+            if (phase == Phase.ExitCombat)
+                return "전투가 종료되었습니다.";
             if (viewState?.ClashSeriesToken.HasValue == true)
-                return $"다음 합 스킬을 선택하세요. 남은 시간 {remainingSeconds:0.0}초" +
+                return $"다음 비교에 사용할 스킬을 선택하세요. 남은 시간 {remainingSeconds:0.0}초" +
                        (viewState.DecisionKind == CombatExchangeDecisionKind.ClashResponse
                            ? " · 대응할 수 없으면 무대응을 선택하세요." : string.Empty);
             if (phase == Phase.Approach)

@@ -4,12 +4,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Game.Combat.Integration;
 using Game.Core;
 using Game.Daily;
 using Game.Interaction;
 using Game.NonCombat.Inventory;
 using Game.NonCombat.Save;
 using Game.Quest;
+using Game.Player;
 using Game.Reward;
 using Game.Story;
 using Game.Story.Core;
@@ -76,7 +78,7 @@ namespace Game.Tests.Integration
             CalendarService calendar = CalendarService.Instance;
             QuestRuntime questRuntime = UnityEngine.Object.FindFirstObjectByType<QuestRuntime>();
             InteractionRuntime interaction = InteractionRuntime.Instance;
-            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            GameObject player = UnityEngine.Object.FindFirstObjectByType<PlayerInputController>()?.gameObject;
             Assert.That(new UnityEngine.Object[] { wallet, inventory, rewards, calendar, questRuntime, interaction, player }, Has.None.Null);
 
             QuestDefinitionSO definition = GetOnlyAuthoredDefinition(questRuntime);
@@ -95,6 +97,10 @@ namespace Game.Tests.Integration
             yield return ChooseStoryFlagBranch();
             AssertFlagState();
             StoryFlagManager originalFlagOwner = StoryFlagManager.Instance;
+            CombatEncounterGroup clearedEncounter = FindEncounter("dungeon1.encounter.01");
+            GameSaveData encounterSeed = new();
+            encounterSeed.world.clearedEncounterIds.Add(clearedEncounter.EncounterId);
+            clearedEncounter.RestoreSaveData(encounterSeed);
 
             Vector3 savedPosition = player.transform.position + new Vector3(2.5f, 0f, 0f);
             player.transform.position = savedPosition;
@@ -120,6 +126,7 @@ namespace Game.Tests.Integration
             yield return StartNewGameFromTitle();
             yield return WaitForSceneAndState(DungeonSceneName, GameState.Exploration);
             AssertNewGameRuntimeIsClean(questId);
+            AssertEncounterCleared("dungeon1.encounter.01", false);
             Assert.That(StoryFlagManager.Instance.HasFlag("b01.choice"), Is.False);
             Assert.That(StoryFlagManager.Instance.HasBool("b01.false"), Is.False);
             Assert.That(StoryFlagManager.Instance.HasInt("b01.zero"), Is.False);
@@ -164,6 +171,7 @@ namespace Game.Tests.Integration
             }
 
             Assert.That(_loadSucceeded, Is.True);
+            AssertEncounterCleared("dungeon1.encounter.01", true);
             Assert.That(_flagConditionsAtLoadCompleted, Is.True);
             Assert.That(StoryFlagManager.Instance, Is.Not.SameAs(originalFlagOwner));
             AssertFlagState();
@@ -177,7 +185,7 @@ namespace Game.Tests.Integration
             calendar = CalendarService.Instance;
             questRuntime = UnityEngine.Object.FindFirstObjectByType<QuestRuntime>();
             interaction = InteractionRuntime.Instance;
-            player = GameObject.FindGameObjectWithTag("Player");
+            player = UnityEngine.Object.FindFirstObjectByType<PlayerInputController>()?.gameObject;
 
             Assert.That(wallet.Gold, Is.EqualTo(15));
             Assert.That(inventory.GetCount("sav03.token"), Is.EqualTo(3));
@@ -215,7 +223,64 @@ namespace Game.Tests.Integration
             AssertCanonicalCoreServices();
             Assert.That(File.ReadAllText(_primaryPath), Is.EqualTo(savedJson));
 
+            SceneFlowController.Instance.LoadScene("TitleScene");
+            yield return WaitForSceneAndState("TitleScene", GameState.Title);
+            SceneFlowController.Instance.LoadScene(DungeonSceneName);
+            yield return WaitForSceneAndState(DungeonSceneName, GameState.Exploration);
+            AssertEncounterCleared("dungeon1.encounter.01", true);
+
             yield return new ExitPlayMode();
+        }
+
+        [UnityTest]
+        public IEnumerator EncounterClear_LeaveSaveAndRestore_ReappliesOnSceneReentry()
+        {
+            EditorSceneManager.OpenScene(TitleScenePath, OpenSceneMode.Single);
+            yield return new EnterPlayMode();
+            yield return null;
+            SaveLoadService service = SaveLoadService.Instance;
+            PrepareTemporaryStorage(service);
+            yield return StartNewGameFromTitle();
+            yield return WaitForSceneAndState(DungeonSceneName, GameState.Exploration);
+
+            GameSaveData cleared = new();
+            cleared.world.clearedEncounterIds.Add("dungeon1.encounter.01");
+            FindEncounter("dungeon1.encounter.01").RestoreSaveData(cleared);
+            SceneFlowController.Instance.LoadScene("TitleScene");
+            yield return WaitForSceneAndState("TitleScene", GameState.Title);
+
+            // The build contains no second playable scene. Exercise a save in the
+            // unloaded scene using Title as a test-only stand-in for exploration.
+            GameFlowController.Instance.EnterExploration();
+            Assert.That(service.TrySave(out string message), Is.True, message);
+            Assert.That(File.ReadAllText(_primaryPath), Does.Contain("dungeon1.encounter.01"));
+            Assert.That(GameStateMachine.Instance.TrySetState(GameState.Title, "test reset"), Is.True);
+            Assert.That(service.TryResetForNewGame(out message), Is.True, message);
+            Assert.That(service.CaptureGameSaveDataSnapshot().world.clearedEncounterIds, Is.Empty);
+            Assert.That(service.TryLoad(out message), Is.True, message);
+
+            for (int visit = 0; visit < 2; visit++)
+            {
+                SceneFlowController.Instance.LoadScene(DungeonSceneName);
+                yield return WaitForSceneAndState(DungeonSceneName, GameState.Exploration);
+                AssertEncounterCleared("dungeon1.encounter.01", true);
+                SceneFlowController.Instance.LoadScene("TitleScene");
+                yield return WaitForSceneAndState("TitleScene", GameState.Title);
+            }
+            yield return new ExitPlayMode();
+        }
+
+        private static CombatEncounterGroup FindEncounter(string id)
+        {
+            return UnityEngine.Object.FindObjectsByType<CombatEncounterGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .Single(item => item.EncounterId == id);
+        }
+
+        private static void AssertEncounterCleared(string id, bool expected)
+        {
+            GameSaveData observed = new();
+            FindEncounter(id).CaptureSaveData(observed);
+            Assert.That(observed.world.clearedEncounterIds.Contains(id), Is.EqualTo(expected));
         }
 
         private void HandleLoadCompleted(bool succeeded, string _)
@@ -404,7 +469,10 @@ namespace Game.Tests.Integration
             Assert.That(CurrencyWallet.Instance.Gold, Is.Zero);
             Assert.That(InventoryService.Instance.GetCount("sav03.token"), Is.Zero);
             Assert.That(CalendarService.Instance.CurrentDay, Is.EqualTo(1));
-            Assert.That(UnityEngine.Object.FindFirstObjectByType<QuestRuntime>().GetQuestStatus(questId), Is.EqualTo(QuestStatus.Inactive));
+            QuestRuntime quest = UnityEngine.Object.FindFirstObjectByType<QuestRuntime>();
+            Assert.That(quest.GetQuestStatus(questId), Is.EqualTo(QuestStatus.Active));
+            Assert.That(quest.TryGetDefinition(questId, out QuestDefinitionSO definition), Is.True);
+            Assert.That(quest.GetObjectiveProgress(questId, definition.Objectives[0].ObjectiveId), Is.Zero);
             Assert.That(InteractionRuntime.Instance.IsConsumed("sav03.loot", InteractionUsePolicy.PersistentOnce), Is.False);
         }
 
