@@ -10,6 +10,7 @@ using Game.Combat.Editor;
 using Game.Enemies;
 using Game.NonCombat.Inventory;
 using Game.NonCombat.Progress;
+using Game.Combat.Model;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -245,8 +246,30 @@ namespace Game.EditorTools
             {
                 HashSet<int> ids = new(registryOwner.RegisteredSkillDefinitions.Where(value => value != null).Select(value => value.skillId));
                 foreach (CombatSkillLoadoutComponent loadout in components.OfType<CombatSkillLoadoutComponent>())
+                {
+                    report.AppendLine($"\n### All-Out loadout evidence: {Hierarchy(loadout.transform)}");
+                    bool candidate = false;
                     foreach (int id in loadout.SkillIds ?? Array.Empty<int>())
+                    {
                         if (!ids.Contains(id)) report.AppendLine($"- UNRESOLVED skill {id}: {Hierarchy(loadout.transform)} (local registry; prefab scene overrides may supply it)");
+                        foreach (SkillDefinitionSO skill in registryOwner.RegisteredSkillDefinitions.Where(value => value != null && value.skillId == id))
+                        {
+                            if (!IsAllOutSkill(skill))
+                                continue;
+                            candidate = true;
+                            string assetPath = AssetDatabase.GetAssetPath(skill);
+                            report.AppendLine($"- CANDIDATE skill {id}, key '{skill.PersistentKey}', asset {assetPath}; non-production path: {IsNonProductionPath(assetPath)}");
+                            report.AppendLine($"  - combat trigger '{skill.CombatAnimationTrigger}'; cast VFX {skill.CastVfxPrefab != null}; impact VFX {skill.ImpactVfxPrefab != null}; cast SFX {skill.CastSfx != null}; impact SFX {skill.ImpactSfx != null}");
+                            Animator animator = loadout.GetComponentInChildren<Animator>(true);
+                            bool trigger = animator != null && animator.runtimeAnimatorController != null &&
+                                animator.parameters.Any(parameter => parameter.type == AnimatorControllerParameterType.Trigger &&
+                                    parameter.name == skill.CombatAnimationTrigger);
+                            report.AppendLine($"  - local Animator trigger present: {trigger}; verify runtime field object and presentation manually");
+                        }
+                    }
+                    if (!candidate) report.AppendLine("- NO eligible authored AllEnemies attack in this serialized loadout.");
+                }
+                report.AppendLine("- All-Out loadouts above include all local actors, including enemies. Runtime party, equipment snapshots and asset approval require separate verification.");
                 foreach (EnemySourceComponent source in components.OfType<EnemySourceComponent>())
                     if (source.Definition == null) report.AppendLine($"- MISSING Enemy definition: {Hierarchy(source.transform)}");
                 foreach (var group in components.OfType<Game.Combat.Integration.CombatEncounterGroup>())
@@ -285,6 +308,10 @@ namespace Game.EditorTools
                 }
             }
         }
+
+        internal static bool IsAllOutSkill(SkillDefinitionSO skill) =>
+            skill != null && skill.tag == SkillTag.Attack &&
+            skill.targeting == TargetingRule.AllEnemies && skill.baseDamage > 0;
 
         private static string ReferenceLabel(UnityEngine.Object reference)
         {

@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.IO;
 using Game.EditorTools;
+using Game.Combat.Data;
+using Game.Combat.Model;
 using Game.NonCombat.Progress;
 using NUnit.Framework;
 using UnityEditor;
@@ -73,7 +75,27 @@ namespace Game.Tests.Integration
             CombatProductionDataAudit.Run();
             string report = File.ReadAllText("Logs/CBT-R2-07-ContentAudit.md");
             Assert.That(report, Does.Contain("characterStartDefinition").And.Contain("CombatItemUseAdapter"));
+            Assert.That(report, Does.Contain("All-Out loadout evidence").And.Contain("NO eligible authored AllEnemies attack"));
+            Assert.That(report, Does.Contain("asset approval require separate verification"));
             for (int i = 0; i < paths.Length; i++) Assert.That(File.ReadAllBytes(paths[i]), Is.EqualTo(before[i]), paths[i]);
+        }
+
+        [Test]
+        public void AllOutCandidate_RequiresDamagingAreaAttack()
+        {
+            var skill = Create<SkillDefinitionSO>();
+            skill.tag = SkillTag.Attack;
+            skill.targeting = TargetingRule.AllEnemies;
+            skill.baseDamage = 1;
+            Assert.That(CombatProductionDataAudit.IsAllOutSkill(skill), Is.True);
+            skill.baseDamage = 0;
+            Assert.That(CombatProductionDataAudit.IsAllOutSkill(skill), Is.False);
+            skill.baseDamage = 1;
+            skill.targeting = TargetingRule.SingleEnemy;
+            Assert.That(CombatProductionDataAudit.IsAllOutSkill(skill), Is.False);
+            skill.targeting = TargetingRule.AllEnemies;
+            skill.tag = SkillTag.Utility;
+            Assert.That(CombatProductionDataAudit.IsAllOutSkill(skill), Is.False);
         }
 
         private T Create<T>() where T : ScriptableObject

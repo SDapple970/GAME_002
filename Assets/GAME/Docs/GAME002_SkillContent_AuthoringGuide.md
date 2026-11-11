@@ -213,3 +213,13 @@ Dungeon_1_Production (예시 구조; 실제 이름은 콘텐츠에 맞춤)
 `CombatStatusDefinitionSO`의 `damageModifier`, `clashModifier`, `postureModifier`는 signed 정수이며 기본값 0이다. 기존 Stack/Refresh/Replace 및 maximumStacks를 재사용한다. 피해 보정은 SkillRunner, 합은 기존 Clash 입력/Resolver, 체간과 duration은 기존 StateMachine 규칙 안에서 처리한다.
 상태 보유자가 참여한 정상 완료 Exchange마다 duration을 1회 감소한다. 그 Exchange에서 새 적용/변경된 상태는 즉시 효과를 내지만 해당 종료의 감소는 면제한다. stale/취소/중복 완료는 tick하지 않는다. UntilRemoved 및 Explicit duration 0은 비만료 호환 계약이다. Disease/Quirk·Party 영구 버프·새 MP/Mental 보정으로 확장하지 않는다.
 `CombatantCombatState.StatusSnapshots` → `FinalCombatStatusListPresenter` → `FinalCombatUIBinder.statusListPresenter`가 읽기 전용 표시 경로다. 실제 Production 상태 SO·Presenter 배치 완료를 자동 가정하지 않는다. 근거: CBT_STATUS_02C_PlayMode.xml 1/1 및 CBT_PARTY_05_Regression.xml의 동일 격리 상태 테스트 PASS(기존 실행).
+
+## CBT-R2-07B 총공격 콘텐츠 계약
+
+07A 기준으로 선택 시점의 생존·비기절·비Panic 아군을 편성 순서로 확정한다. 명단이나 자격이 바뀌면 기존 선택을 거부한다. 각 예정자는 실제 전투 snapshot에서 보유한 Attack / AllEnemies / baseDamage 양수 스킬이 필요하며, 하나라도 없으면 전체 수락이 차단된다. 각 아군의 보유 목록에서 첫 적격 스킬을 사용한다. 전투 전체 참가자와 실제 실행자는 구분되며 적이 먼저 전멸하면 이후 아군은 실행하지 않는다.
+
+현재 스킬 정의에는 총공격 전용 태그나 SO가 없다. 일반 광역 공격도 조건에 맞으면 사용된다. 전용 콘텐츠와 일반 스킬을 분리할지, 별도 공식·배율·연출 및 비용을 도입할지는 기획 승인 항목이다. 현재 실행은 각 authored 피해와 기존 SkillRunner의 상태·피해 보정을 사용하며 별도 총공격 MP/BP 비용을 부과하지 않는다. 기존 Skill_skill2는 정식 총공격으로 승인된 근거가 아니다.
+
+제작 시 각 참가자의 적격 스킬이 Production CombatEntryPoint Registry에 등록되고 실제 loadout 또는 장착 snapshot에 포함되는지 확인한다. skillId와 persistentKey의 중복·누락을 기존 validator로 검사한다. 전투 trigger와 실제 field Animator의 trigger, Cast/Impact VFX와 SFX 참조를 확인한다. 빈 표현 참조와 감사 통과는 콘텐츠 승인을 의미하지 않는다.
+
+GAME > Verification > Audit Combat Production Data는 저장된 Scene/Prefab의 로컬 Registry와 loadout별 후보 및 표현 참조를 보고한다. 적 loadout도 포함되며 동적 파티·장착 snapshot, Prefab override의 실제 런타임 바인딩과 Animator 동작은 Production Play Mode에서 별도 확인한다. 07 이전 검증 보고서의 단일 실행자 서술은 당시 기록으로 보존한다.
