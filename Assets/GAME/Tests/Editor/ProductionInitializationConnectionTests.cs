@@ -94,6 +94,91 @@ namespace Game.Tests.Integration
         }
 
         [Test]
+        public void OfficialStart_InitialSkillsRemainRegisteredAndDrawable()
+        {
+            var start = AssetDatabase.LoadAssetAtPath<CharacterStartDefinitionSO>(StartPath);
+            Assert.That(start.TryValidate(out string error), Is.True, error);
+            var grant = start.InitialSkillGrants.Single(value => value.CharacterId == Anand);
+            Assert.That(grant.Skills.Select(skill => skill.PersistentKey), Is.EqualTo(new[] { Basic, Zorn }),
+                "Approved initial acquisition/equipment must not silently lose its authored skills.");
+            var scene = EditorSceneManager.OpenScene(DungeonPath, OpenSceneMode.Single);
+            var entry = InScene<CombatEntryPoint>(scene).Single();
+            foreach (var skill in grant.Skills)
+            {
+                Assert.That(entry.RegisteredSkillDefinitions, Does.Contain(skill), skill.PersistentKey);
+                Assert.That(entry.FinalExchangeRuntimeConfig.HandCardRules.Count(rule => rule.Skill == skill && rule.Copies > 0),
+                    Is.EqualTo(1), skill.PersistentKey);
+            }
+            foreach (string id in start.InitialCombatMemberIds)
+                Assert.That(start.InitialSkillGrants.Count(value => value.CharacterId == id && value.Skills.Count > 0),
+                    Is.EqualTo(1), "Every official initial combat member needs an explicit authored grant: " + id);
+        }
+
+        [UnityTest]
+        public IEnumerator DirectDungeon_EmptyEquipment_RejectsSnapshotWithoutGrantOrStateLeak()
+        {
+            EditorSceneManager.OpenScene(DungeonPath, OpenSceneMode.Single);
+            yield return new EnterPlayMode();
+            yield return RunUninitializedDungeon();
+            yield return new ExitPlayMode();
+        }
+
+        private IEnumerator RunUninitializedDungeon()
+        {
+            yield return null;
+            PrepareStorage(); FreezePlayer();
+            _safePosition = Player().transform.position + new Vector3(30, 30, 0);
+            Teleport(_safePosition);
+            var runtime = CharacterSkillSaveParticipant.Instance.Runtime;
+            Assert.That(PartyRuntime.Instance.StartDefinition,
+                Is.SameAs(AssetDatabase.LoadAssetAtPath<CharacterStartDefinitionSO>(StartPath)));
+            Assert.That(runtime.GetEquippedSkills(Anand), Is.EquivalentTo(new[] { Basic, Zorn }));
+            runtime.Reset(); // Keep testing the mandatory combat guard with deliberately empty state.
+            Assert.That(runtime.GetAcquiredSkills(Anand), Is.Empty);
+            Assert.That(runtime.GetEquippedSkills(Anand), Is.Empty);
+            var player = Player();
+            var request = new CombatStartRequest(StartReason.PlayerGotHit, Side.Enemies, 10, 3, null, CombatFlowMode.StandoffClashChain);
+            request.AllyFieldObjects.Add(player);
+            request.EnemyFieldObjects.Add(Group().GetActiveEnemies().First());
+            Assert.That(new CharacterPartyCombatAdapter().TryBindSinglePlayerRequest(request, player,
+                PartyRuntime.Instance, CharacterProgressionService.Instance, out string error), Is.True, error);
+            var entry = Object.FindFirstObjectByType<CombatEntryPoint>();
+            Assert.That(PersistentSkillCombatLoadoutBridge.TryApplyForProduction(request,
+                entry.RegisteredSkillDefinitions, entry, out error), Is.True, error);
+            Assert.That(request.TryGetAllyLoadoutSnapshot(player, out _), Is.False,
+                "No equipped skills means no snapshot; the bridge must not manufacture a fallback.");
+            LogAssert.Expect(LogType.Error, new Regex("Combat startup rolled back[\\s\\S]*hasSnapshot=False, skillCount=0[\\s\\S]*equippedCount=0, acquiredCount=0"));
+            Assert.That(entry.StartCombat(request), Is.False);
+            Assert.That(entry.ActiveSession, Is.Null);
+            Assert.That(runtime.GetAcquiredSkills(Anand), Is.Empty);
+            Assert.That(runtime.GetEquippedSkills(Anand), Is.Empty);
+            Assert.That(GameStateMachine.Instance.Current, Is.EqualTo(GameState.Exploration));
+            Assert.That(new InputRouter().AllowsExplorationInput(), Is.True);
+            Assert.That(Object.FindFirstObjectByType<CombatFieldLock>().IsLocked, Is.False);
+            Assert.That(Object.FindFirstObjectByType<CombatCameraController>().IsInCombatMode, Is.False);
+            Assert.That(File.Exists(SaveLoadService.Instance.PrimarySavePath), Is.False,
+                "A failed combat start must not write a save or grant skills.");
+        }
+
+        [UnityTest]
+        public IEnumerator DirectDungeon_EditorPlay_GrantsSkillsAndSupportsRepeatedCombat()
+        {
+            EditorSceneManager.OpenScene(DungeonPath, OpenSceneMode.Single);
+            yield return new EnterPlayMode();
+            yield return null;
+            PrepareStorage(); FreezePlayer();
+            _safePosition = Player().transform.position + new Vector3(30, 30, 0);
+            Teleport(_safePosition);
+            AssertCharacter(Anand, new[] { Basic, Zorn }, 1, 0);
+            Assert.That(File.Exists(SaveLoadService.Instance.PrimarySavePath), Is.False);
+            yield return ContactAndFinish(Anand, 2, 3);
+            AssertCharacter(Anand, new[] { Basic, Zorn }, 1, 0);
+            yield return ContactAndFinish(Anand, 2, 3, CombatEndReason.Victory, true);
+            Assert.That(File.Exists(SaveLoadService.Instance.PrimarySavePath), Is.False);
+            yield return new ExitPlayMode();
+        }
+
+        [Test]
         public void SavedConnections_KeepCanonicalOwnersLegacyLookupEnemiesAndPrefabInheritance() => AssertSavedConnections();
 
         // Explicit C2B authoring command. Ordinary tests never save protected source scenes.
@@ -325,7 +410,7 @@ namespace Game.Tests.Integration
             Assert.That(CharacterProgressionService.Instance.TryGetDefinition("hero.test", out var legacy), Is.True);
             Assert.That(AssetDatabase.GetAssetPath(legacy), Is.EqualTo("Assets/GAME/Data/Test/CP_TestHero.asset"));
             Assert.That(CharacterProgressionService.Instance.TryGetState("hero.test", out _, out _), Is.False);
-            Assert.That(CharacterSkillSaveParticipant.Instance.Runtime.GetAcquiredSkills(Anand), Is.Empty);
+            Assert.That(CharacterSkillSaveParticipant.Instance.Runtime.GetAcquiredSkills(Anand), Is.EquivalentTo(new[] { Basic, Zorn }));
             bool cold = ColdRole() == "read";
             if (cold) Assert.That(File.ReadAllText(ColdPrefix + "WriterPid.txt"), Is.Not.EqualTo(System.Diagnostics.Process.GetCurrentProcess().Id.ToString()));
             foreach (string variant in new[] { "known", "missing", "empty", "unknown", "mixed", "AnandInitial", "AnandChanged" })
@@ -388,7 +473,16 @@ namespace Game.Tests.Integration
             yield return new ExitPlayMode();
         }
 
-        private IEnumerator RunTerminal(string variant, CombatEndReason reason)
+        [UnityTest]
+        public IEnumerator AnandSave_ProductionCardButtons_ExecuteSkillAndCompleteVictory()
+        {
+            EditorSceneManager.OpenScene(DungeonPath, OpenSceneMode.Single);
+            yield return new EnterPlayMode();
+            yield return RunTerminal("AnandInitial", CombatEndReason.Victory, true);
+            yield return new ExitPlayMode();
+        }
+
+        private IEnumerator RunTerminal(string variant, CombatEndReason reason, bool useCardButtons = false)
         {
             yield return null;
             PrepareStorage(); FreezePlayer();
@@ -396,10 +490,10 @@ namespace Game.Tests.Integration
             File.WriteAllText(SaveLoadService.Instance.PrimarySavePath, RawSave(variant, _safePosition));
             Assert.That(SaveLoadService.Instance.TryLoad(out string error), Is.True, error);
             yield return ContactAndFinish(variant == "known" ? "hero.test" : Anand,
-                variant == "known" ? 4 : 2, variant == "known" ? 6 : 3, reason);
+                variant == "known" ? 4 : 2, variant == "known" ? 6 : 3, reason, useCardButtons);
         }
 
-        private IEnumerator ContactAndFinish(string id, int normal, int clash, CombatEndReason endReason = CombatEndReason.Abort)
+        private IEnumerator ContactAndFinish(string id, int normal, int clash, CombatEndReason endReason = CombatEndReason.Abort, bool useCardButtons = false)
         {
             var entry = Object.FindFirstObjectByType<CombatEntryPoint>();
             int completed = 0; CombatResult result = null;
@@ -435,10 +529,16 @@ namespace Game.Tests.Integration
                     else foreach (var enemy in session.Enemies) enemy.ApplyDamage(enemy.HP - 1);
                     float deadline = Time.realtimeSinceStartup + 30;
                     var flow = entry.FlowOrchestrator;
+                    int cardButtonSubmissions = 0;
                     while (entry.ActiveSession != null && Time.realtimeSinceStartup < deadline)
                     {
                         var token = flow.PendingDecisionRequest;
-                        if (token?.Kind == CombatExchangeDecisionKind.Response) flow.SubmitNoResponse(token);
+                        if (useCardButtons && token?.ActingSide == Side.Allies &&
+                            (token.Kind == CombatExchangeDecisionKind.Attack || token.Kind == CombatExchangeDecisionKind.Response))
+                        {
+                            if (ConfirmAuthoredCardThroughUi(token.Kind, ally)) cardButtonSubmissions++;
+                        }
+                        else if (token?.Kind == CombatExchangeDecisionKind.Response) flow.SubmitNoResponse(token);
                         else if (token?.Kind == CombatExchangeDecisionKind.ClashResponse) flow.SubmitClashSeriesNoResponse(token);
                         else if (entry.ActiveStateMachine.Phase == Phase.ChainDecision) flow.EndChain(session.ExchangeState.Version);
                         else if (entry.ActiveStateMachine.Phase == Phase.Standoff && session.ExchangeState.CurrentAttackSide == Side.Allies && session.TryGetHand(ally, out var attackHand))
@@ -448,6 +548,7 @@ namespace Game.Tests.Integration
                         }
                         yield return null;
                     }
+                    if (useCardButtons) Assert.That(cardButtonSubmissions, Is.GreaterThan(0), "Select and confirm an authored card through the real saved Binder buttons.");
                 }
                 yield return Wait(() => entry.ActiveSession == null && GameStateMachine.Instance.Current == GameState.Reward, "Director completion and Reward");
                 Assert.That(completed, Is.EqualTo(1)); Assert.That(result.EndReason, Is.EqualTo(endReason));
@@ -476,6 +577,34 @@ namespace Game.Tests.Integration
                 Assert.That(Time.timeScale, Is.EqualTo(1));
             }
             finally { entry.OnCombatEnded -= observe; }
+        }
+
+        private static bool ConfirmAuthoredCardThroughUi(CombatExchangeDecisionKind kind, ICombatant ally)
+        {
+            var binder = Object.FindFirstObjectByType<Game.Combat.UI.FinalCombatUIBinder>();
+            if (binder == null || binder.ViewState.DecisionKind != kind) return false;
+            var fields = new SerializedObject(binder);
+            GameObject Root(string name) => (GameObject)fields.FindProperty(name).objectReferenceValue;
+            if (kind == CombatExchangeDecisionKind.Attack && binder.ViewState.SelectedActor == null)
+            {
+                var actor = Root("actorListRoot").GetComponentsInChildren<Button>()
+                    .FirstOrDefault(button => button.interactable && button.GetComponentInChildren<Text>()?.text == ally.Id.Value.ToString());
+                if (actor == null) return false;
+                actor.onClick.Invoke();
+            }
+            var card = Root("skillListRoot").GetComponentsInChildren<Button>()
+                .FirstOrDefault(button => button.interactable && button.GetComponentInChildren<Text>()?.text.Contains("· ID ") == true);
+            if (card == null) return false;
+            card.onClick.Invoke();
+            Assert.That(binder.ViewState.SelectedCardRuntimeId.HasValue, Is.True);
+            var target = Root("targetListRoot").GetComponentsInChildren<Button>().FirstOrDefault(button => button.interactable);
+            Assert.That(target, Is.Not.Null);
+            target.onClick.Invoke();
+            Assert.That(binder.ViewState.CanConfirm, Is.True);
+            var confirm = (Button)fields.FindProperty("confirmButton").objectReferenceValue;
+            Assert.That(confirm.gameObject.activeInHierarchy && confirm.interactable, Is.True);
+            confirm.onClick.Invoke();
+            return true;
         }
 
         private void PrepareStorage()

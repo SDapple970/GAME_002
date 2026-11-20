@@ -49,6 +49,19 @@ namespace Game.Combat.UI
         [Header("Optional Status Presentation")]
         [SerializeField] private FinalCombatStatusListPresenter statusListPresenter;
 
+        [Header("Optional Reference Layout")]
+        [SerializeField] private Button actMenuButton;
+        [SerializeField] private Button skillMenuButton;
+        [SerializeField] private Button itemsMenuButton;
+        [SerializeField] private GameObject itemPanelRoot;
+        [SerializeField] private GameObject itemListRoot;
+        [SerializeField] private Sprite cardFrameSprite;
+
+        private enum MenuSection { Act, Skill, Items }
+        private MenuSection _menuSection;
+        private bool UsesReferenceLayout => actMenuButton != null && skillMenuButton != null &&
+            itemsMenuButton != null && itemPanelRoot != null && itemListRoot != null;
+
         private readonly List<Button> _spawnedButtons = new List<Button>();
         private FinalCombatPlayerCommandController _controller;
         private CombatSession _session;
@@ -216,8 +229,10 @@ namespace Game.Combat.UI
             _lastFeedbackComparison = 0;
             _showExchangeFeedback = false;
             _viewState = PlayerCombatDecisionViewState.Empty;
+            _menuSection = MenuSection.Act;
             ClearDynamicButtons();
             statusListPresenter?.Clear();
+            SetVisible(itemPanelRoot, false);
             SetVisible(panelRoot, false);
         }
 
@@ -296,11 +311,26 @@ namespace Game.Combat.UI
             bool response = _viewState.DecisionKind == CombatExchangeDecisionKind.Response;
             bool chain = _viewState.DecisionKind == CombatExchangeDecisionKind.Chain;
 
+            // Menu navigation only changes presentation; the existing command controller owns selection.
+            bool canShowItems = hasRequest && attack && _viewState.CanUseItem &&
+                _viewState.SelectableItems.Count > 0;
+            if (hasRequest && attack && _viewState.SelectedActor == null)
+                _menuSection = MenuSection.Act;
+            else if (hasRequest && !attack || _menuSection == MenuSection.Items && !canShowItems)
+                _menuSection = MenuSection.Skill;
+            bool itemsOpen = UsesReferenceLayout && canShowItems && _menuSection == MenuSection.Items;
+            SetVisible(itemPanelRoot, itemsOpen);
+            SetVisible(itemListRoot, itemsOpen);
+            SetMenuButton(actMenuButton, hasRequest, attack, _menuSection == MenuSection.Act);
+            SetMenuButton(skillMenuButton, hasRequest, true, _menuSection == MenuSection.Skill);
+            SetMenuButton(itemsMenuButton, hasRequest, canShowItems, itemsOpen);
+
             ClearDynamicButtons();
             bool showUltimate = hasRequest && (attack || chain) &&
                 _session?.UltimateRuntime != null;
             SetVisible(actorListRoot, hasRequest && attack &&
-                (_viewState.SelectableActors.Count > 0 || showUltimate));
+                (_viewState.SelectableActors.Count > 0 || showUltimate) &&
+                (!UsesReferenceLayout || _menuSection == MenuSection.Act));
             SetVisible(skillListRoot, hasRequest && (attack || response || chain || series) &&
                 (_viewState.HandCards.Count > 0 || _viewState.SkillAvailability.Count > 0 ||
                  _viewState.SelectableSkills.Count > 0));
@@ -312,7 +342,7 @@ namespace Game.Combat.UI
                             _viewState.SelectedSkill != null && _session?.BpRuntime != null) ||
                  response && _viewState.SelectedSkill != null && _session?.BpRuntime != null ||
                  series && _viewState.SelectedSkill != null && _session?.BpRuntime != null ||
-                 showUltimate && chain));
+                 showUltimate && chain) && !itemsOpen);
 
             if (hasRequest && attack)
                 BuildCombatantOptions(actorListRoot, _viewState.SelectableActors, _viewState.SelectedActor, HandleActorSelected);
@@ -330,7 +360,8 @@ namespace Game.Combat.UI
             if (hasRequest && (attack || response || series))
                 BuildBpInvestmentOptions(handoffListRoot);
             if (hasRequest && attack)
-                BuildCombatItemOptions(handoffListRoot, _viewState.SelectableItems, _viewState.SelectedItem);
+                BuildCombatItemOptions(UsesReferenceLayout ? itemListRoot : handoffListRoot,
+                    _viewState.SelectableItems, _viewState.SelectedItem);
             if (hasRequest && attack && _viewState.CanOvercome)
                 BuildOvercomeOption(handoffListRoot);
             if (hasRequest && (attack || response))
@@ -424,6 +455,8 @@ namespace Game.Combat.UI
                 if (button == null)
                     continue;
 
+                StyleCard(button, ReferenceEquals(skill, selected));
+
                 button.interactable = !ReferenceEquals(skill, selected);
                 button.onClick.AddListener(() => selectedAction.Invoke(skill));
             }
@@ -451,8 +484,11 @@ namespace Game.Combat.UI
                 if (button == null)
                     continue;
 
+                StyleCard(button, ReferenceEquals(skill, selected));
+
                 ColorBlock colors = button.colors;
-                colors.disabledColor = new Color(0.35f, 0.35f, 0.35f, 0.7f);
+                if (!UsesReferenceLayout)
+                    colors.disabledColor = new Color(0.35f, 0.35f, 0.35f, 0.7f);
                 button.colors = colors;
                 button.interactable = option.IsAvailable && !ReferenceEquals(skill, selected);
                 if (option.IsAvailable)
@@ -477,6 +513,7 @@ namespace Game.Combat.UI
                     (!availability.IsAvailable ? $"사용 불가: {GetUnavailableReason(availability.Reason)}" : selected ? "확정 전" : "사용 가능");
                 Button button = CreateOption(host.transform, label);
                 if (button == null) continue;
+                StyleCard(button, selected);
                 if (selected)
                 {
                     ColorBlock colors = button.colors;
@@ -567,9 +604,56 @@ namespace Game.Combat.UI
                 if (button == null)
                     continue;
 
-                button.interactable = !string.Equals(item.ItemId, selected?.ItemId, StringComparison.Ordinal);
+                bool isSelected = string.Equals(item.ItemId, selected?.ItemId, StringComparison.Ordinal);
+                if (UsesReferenceLayout && isSelected)
+                {
+                    Text label = button.GetComponentInChildren<Text>(true);
+                    if (label != null) label.text = $"▶ ITEM {item.DisplayName} x{item.Count}";
+                    ColorBlock colors = button.colors;
+                    colors.disabledColor = new Color(0.25f, 0.85f, 1f, 1f);
+                    button.colors = colors;
+                }
+                button.interactable = !isSelected;
                 button.onClick.AddListener(() => HandleCombatItemSelected(item));
             }
+        }
+
+        private void StyleCard(Button button, bool selected)
+        {
+            if (!UsesReferenceLayout || cardFrameSprite == null) return;
+            Image image = button.GetComponent<Image>();
+            if (image != null)
+            {
+                image.sprite = cardFrameSprite;
+                image.type = Image.Type.Simple;
+                image.color = Color.white;
+            }
+            LayoutElement layout = button.GetComponent<LayoutElement>();
+            layout.minWidth = layout.preferredWidth = 190f;
+            layout.minHeight = layout.preferredHeight = 230f;
+            Text label = button.GetComponentInChildren<Text>(true);
+            if (label != null)
+            {
+                label.color = Color.white;
+                label.alignment = TextAnchor.MiddleCenter;
+                label.rectTransform.anchorMin = Vector2.zero;
+                label.rectTransform.anchorMax = Vector2.one;
+                label.rectTransform.offsetMin = new Vector2(22f, 18f);
+                label.rectTransform.offsetMax = new Vector2(-22f, -36f);
+            }
+            ColorBlock colors = button.colors;
+            colors.normalColor = selected ? new Color(0.25f, 0.85f, 1f) : Color.white;
+            colors.disabledColor = selected ? new Color(0.25f, 0.85f, 1f) : new Color(0.45f, 0.45f, 0.45f);
+            button.colors = colors;
+        }
+
+        private static void SetMenuButton(Button button, bool visible, bool available, bool selected)
+        {
+            if (button == null) return;
+            SetVisible(button.gameObject, visible);
+            button.interactable = available;
+            if (button.targetGraphic != null)
+                button.targetGraphic.color = selected ? new Color(0.2f, 1f, 1f) : Color.white;
         }
 
         private Button CreateOption(Transform parent, string label)
@@ -582,6 +666,7 @@ namespace Game.Combat.UI
             Text text = button.GetComponentInChildren<Text>(true);
             if (text != null)
             {
+                if (displayFont != null) text.font = displayFont;
                 text.text = label;
                 text.fontSize = 20;
                 text.resizeTextForBestFit = true;
@@ -592,6 +677,13 @@ namespace Game.Combat.UI
             if (layout == null) layout = button.gameObject.AddComponent<LayoutElement>();
             layout.preferredWidth = 250f;
             layout.preferredHeight = 64f;
+            if (UsesReferenceLayout && parent == itemListRoot.transform)
+            {
+                layout.minHeight = layout.preferredHeight = 72f;
+                Image image = button.GetComponent<Image>();
+                if (image != null) image.color = new Color(0.03f, 0.16f, 1f, 1f);
+                if (text != null) text.color = Color.white;
+            }
             return button;
         }
 
@@ -654,6 +746,7 @@ namespace Game.Combat.UI
 
         private void HandleActorSelected(ICombatant actor)
         {
+            _menuSection = MenuSection.Skill;
             _controller?.SelectActor(actor);
         }
 
@@ -691,6 +784,9 @@ namespace Game.Combat.UI
             continueButton?.onClick.AddListener(HandleContinue);
             handoffButton?.onClick.AddListener(HandleHandoff);
             endButton?.onClick.AddListener(HandleEnd);
+            actMenuButton?.onClick.AddListener(HandleActMenu);
+            skillMenuButton?.onClick.AddListener(HandleSkillMenu);
+            itemsMenuButton?.onClick.AddListener(HandleItemsMenu);
             _staticButtonsBound = true;
         }
 
@@ -705,11 +801,21 @@ namespace Game.Combat.UI
             continueButton?.onClick.RemoveListener(HandleContinue);
             handoffButton?.onClick.RemoveListener(HandleHandoff);
             endButton?.onClick.RemoveListener(HandleEnd);
+            actMenuButton?.onClick.RemoveListener(HandleActMenu);
+            skillMenuButton?.onClick.RemoveListener(HandleSkillMenu);
+            itemsMenuButton?.onClick.RemoveListener(HandleItemsMenu);
             _staticButtonsBound = false;
         }
 
         private void HandleConfirm() => _controller?.Confirm();
-        private void HandleCancel() => _controller?.CancelSelection();
+        private void HandleCancel()
+        {
+            _menuSection = MenuSection.Skill;
+            _controller?.CancelSelection();
+        }
+        private void HandleActMenu() { _menuSection = MenuSection.Act; Render(); }
+        private void HandleSkillMenu() { _menuSection = MenuSection.Skill; Render(); }
+        private void HandleItemsMenu() { _menuSection = MenuSection.Items; Render(); }
         private void HandleNoResponse() => _controller?.ConfirmNoResponse();
         private void HandleContinue() => _controller?.ConfirmContinue();
         private void HandleHandoff() => _controller?.ConfirmHandoff();
