@@ -25,12 +25,18 @@ namespace Game.EditorTools
             {
                 FinalCombatUIBinder binder = root.GetComponentInChildren<FinalCombatUIBinder>(true);
                 if (binder == null) throw new InvalidOperationException("Canonical FinalCombatUIBinder is missing.");
+                SerializedObject fields = new SerializedObject(binder);
                 if (binder.transform.Find("ReferenceMenu") != null)
                 {
-                    Validate(root);
+                    if (fields.FindProperty("combatDetailsText").objectReferenceValue == null)
+                    {
+                        ApplyLayout2A(binder);
+                        Save(root);
+                    }
+                    else
+                        Validate(root);
                     return;
                 }
-                SerializedObject fields = new SerializedObject(binder);
                 string[] retained = { "panelRoot", "actorListRoot", "skillListRoot", "targetListRoot", "handoffListRoot",
                     "optionButtonPrefab", "confirmButton", "cancelButton", "noResponseButton", "continueButton",
                     "handoffButton", "endButton", "phaseText", "contextText", "playerHpText", "enemyHpText",
@@ -127,16 +133,15 @@ namespace Game.EditorTools
                 fields.FindProperty("itemListRoot").objectReferenceValue = itemContent.gameObject;
                 fields.FindProperty("cardFrameSprite").objectReferenceValue = frame;
                 fields.ApplyModifiedPropertiesWithoutUndo();
+                ApplyLayout2A(binder);
+                fields.Update();
                 foreach (string name in retained)
                     if (fields.FindProperty(name).objectReferenceValue != before[name])
                         throw new InvalidOperationException($"Existing binding changed: {name}");
                 foreach (KeyValuePair<Button, string> pair in events)
                     if (JsonUtility.ToJson(pair.Key.onClick) != pair.Value)
                         throw new InvalidOperationException($"Existing UnityEvent changed: {pair.Key.name}");
-                Validate(root);
-                if (PrefabUtility.SaveAsPrefabAsset(root, PrefabPath) == null)
-                    throw new InvalidOperationException("Could not save combat UI prefab.");
-                Debug.Log("[CombatUILayout] Saved existing prefab; retained all original Binder references and Button UnityEvents.");
+                Save(root);
             }
             finally { PrefabUtility.UnloadPrefabContents(root); }
         }
@@ -146,11 +151,159 @@ namespace Game.EditorTools
             FinalCombatUIBinder[] binders = root.GetComponentsInChildren<FinalCombatUIBinder>(true);
             if (binders.Length != 1) throw new InvalidOperationException("Expected exactly one FinalCombatUIBinder.");
             SerializedObject fields = new SerializedObject(binders[0]);
-            foreach (string name in new[] { "actMenuButton", "skillMenuButton", "itemsMenuButton", "itemPanelRoot", "itemListRoot", "cardFrameSprite" })
+            foreach (string name in new[] { "actMenuButton", "skillMenuButton", "itemsMenuButton", "itemPanelRoot",
+                         "itemListRoot", "cardFrameSprite", "combatDetailsText" })
                 if (fields.FindProperty(name).objectReferenceValue == null)
                     throw new InvalidOperationException($"Reference layout binding missing: {name}");
             if (root.GetComponentsInChildren<CombatUIRootController>(true).Length != 1)
                 throw new InvalidOperationException("Expected existing single CombatUIRootController.");
+        }
+
+        private static void Save(GameObject root)
+        {
+            Validate(root);
+            if (PrefabUtility.SaveAsPrefabAsset(root, PrefabPath) == null)
+                throw new InvalidOperationException("Could not save combat UI prefab.");
+            Debug.Log("[CombatUILayout] Saved the combat reference layout.");
+        }
+
+        private static void ApplyLayout2A(FinalCombatUIBinder binder)
+        {
+            SerializedObject fields = new SerializedObject(binder);
+            RectTransform panel = binder.GetComponent<RectTransform>();
+            panel.GetComponent<Image>().raycastTarget = false;
+            RectTransform status = (RectTransform)panel.Find("Status");
+            Stretch(status);
+            RectTransform player = Plate("PlayerStatus", status, new Color32(12, 22, 43, 241));
+            RectTransform enemy = Plate("EnemyStatus", status, new Color32(34, 23, 37, 241));
+            Place(player, Vector2.up, new Vector2(28, -22), new Vector2(472, 118), Vector2.up);
+            Place(enemy, Vector2.one, new Vector2(-28, -22), new Vector2(472, 118), Vector2.one);
+            foreach (var (plate, prefix) in new[] { (player, "player"), (enemy, "enemy") })
+            {
+                PlaceText(plate, (Text)fields.FindProperty(prefix + "HpText").objectReferenceValue,
+                    Vector2.up, new Vector2(16, -24), new Vector2(440, 34), TextAnchor.MiddleLeft, 26);
+                PlaceText(plate, (Text)fields.FindProperty(prefix + "MpText").objectReferenceValue,
+                    Vector2.up, new Vector2(16, -59), new Vector2(440, 30), TextAnchor.MiddleLeft, 22);
+                PlaceText(plate, (Text)fields.FindProperty(prefix + "PostureText").objectReferenceValue,
+                    Vector2.up, new Vector2(16, -92), new Vector2(440, 30), TextAnchor.MiddleLeft, 20);
+            }
+
+            Vector2 top = new Vector2(0.5f, 1);
+            RectTransform turn = Plate("TurnStatus", status, new Color32(12, 22, 43, 241));
+            Place(turn, top, new Vector2(0, -22), new Vector2(596, 48), top);
+            Text phase = (Text)fields.FindProperty("phaseText").objectReferenceValue;
+            Text pressure = (Text)fields.FindProperty("pressureText").objectReferenceValue;
+            PlaceText(turn, phase, Vector2.up, new Vector2(16, -24), new Vector2(410, 40), TextAnchor.MiddleLeft, 27);
+            PlaceText(turn, pressure, Vector2.one, new Vector2(-16, -24), new Vector2(138, 40), TextAnchor.MiddleRight, 21);
+
+            RectTransform guidance = Plate("CombatGuidance", status, new Color32(12, 19, 34, 226));
+            Place(guidance, top, new Vector2(0, -78), new Vector2(860, 232), top);
+            TMP_Text context = (TMP_Text)fields.FindProperty("contextText").objectReferenceValue;
+            context.transform.SetParent(guidance, false);
+            Place(context.rectTransform, top, new Vector2(0, -8), new Vector2(828, 56), top);
+            FormatGuidanceText(context, 23, 17, TextAlignmentOptions.Left, Color.white);
+            TMP_Text details = guidance.Find("CombatDetailsText")?.GetComponent<TMP_Text>()
+                ?? Object.Instantiate(context, guidance);
+            details.name = "CombatDetailsText";
+            details.text = string.Empty;
+            Place(details.rectTransform, top, new Vector2(0, -70), new Vector2(828, 150), top);
+            FormatGuidanceText(details, 19, 16, TextAlignmentOptions.TopLeft, new Color32(203, 215, 238, 255));
+            fields.FindProperty("combatDetailsText").objectReferenceValue = details;
+            fields.ApplyModifiedPropertiesWithoutUndo();
+
+            Vector2 bottom = Vector2.zero;
+            Vector2 right = Vector2.right;
+            RectTransform actor = (RectTransform)panel.Find("ActorViewport");
+            RectTransform film = (RectTransform)panel.Find("FilmCardViewport");
+            RectTransform targets = (RectTransform)panel.Find("TargetViewport");
+            RectTransform auxiliary = (RectTransform)panel.Find("AuxiliaryViewport");
+            Place(actor, bottom, new Vector2(264, 202), new Vector2(424, 76), bottom);
+            Place(targets, bottom, new Vector2(704, 202), new Vector2(800, 76), bottom);
+            Place(auxiliary, bottom, new Vector2(264, 284), new Vector2(1240, 76), bottom);
+            Place(film, bottom, new Vector2(264, 24), new Vector2(1240, 174), bottom);
+            film.GetComponent<Image>().color = new Color32(8, 11, 19, 227);
+            film.GetComponent<ScrollRect>().content.GetComponent<HorizontalLayoutGroup>().spacing = 12;
+            foreach (RectTransform viewport in new[] { actor, targets, auxiliary })
+            {
+                HorizontalLayoutGroup row = viewport.GetComponent<ScrollRect>().content.GetComponent<HorizontalLayoutGroup>();
+                row.padding = new RectOffset(6, 6, 5, 5);
+            }
+
+            RectTransform menu = (RectTransform)panel.Find("ReferenceMenu");
+            Place(menu, bottom, new Vector2(28, 24), new Vector2(220, 174), bottom);
+            RectTransform reel = (RectTransform)menu.Find("MenuReel");
+            Place(reel, bottom, new Vector2(166, 56), new Vector2(54, 54), bottom);
+            Sprite wedge = SpriteAt("selecy.aseprite");
+            StyleMenuButton(menu, "ACT", wedge, 114);
+            StyleMenuButton(menu, "SKILL", wedge, 57);
+            StyleMenuButton(menu, "ITEMS", wedge, 0);
+
+            RectTransform commands = (RectTransform)panel.Find("CommandButtons");
+            commands.GetComponent<GridLayoutGroup>().enabled = false;
+            Place(commands, right, new Vector2(-28, 24), new Vector2(368, 174), right);
+            foreach (var (field, x, y) in new[] { ("confirmButton", 0, 62), ("cancelButton", 188, 8),
+                         ("noResponseButton", 0, 8), ("continueButton", 0, 62), ("handoffButton", 188, 62), ("endButton", 0, 8) })
+            {
+                Button button = (Button)fields.FindProperty(field).objectReferenceValue;
+                Place((RectTransform)button.transform, bottom, new Vector2(x, y), new Vector2(180, 50), bottom);
+                StyleActionButton(button, new Color32(25, 48, 95, 255), 20, 12);
+            }
+
+            RectTransform items = (RectTransform)panel.Find("ItemSelectionOverlay");
+            Place((RectTransform)items.Find("ItemReel"), bottom, new Vector2(52, 226), new Vector2(108, 108), bottom);
+            Transform[] drawingOrder = { status, actor, film, auxiliary, items, menu, targets, commands };
+            for (int i = 0; i < drawingOrder.Length; i++)
+                drawingOrder[i].SetSiblingIndex(i);
+        }
+
+        private static void FormatGuidanceText(TMP_Text text, int size, int minimum, TextAlignmentOptions alignment, Color color)
+        {
+            text.fontSize = text.fontSizeMax = size;
+            text.fontSizeMin = minimum;
+            text.alignment = alignment;
+            text.color = color;
+            text.richText = false;
+            text.overflowMode = TextOverflowModes.Ellipsis;
+        }
+
+        private static RectTransform Plate(string name, Transform parent, Color color)
+        {
+            RectTransform rect = (RectTransform)parent.Find(name) ?? Rect(name, parent);
+            Image plate = rect.GetComponent<Image>() ?? rect.gameObject.AddComponent<Image>();
+            plate.color = color;
+            plate.raycastTarget = false;
+            return rect;
+        }
+
+        private static void StyleMenuButton(RectTransform menu, string name, Sprite wedge, int y)
+        {
+            Button button = menu.Find(name).GetComponent<Button>();
+            Place((RectTransform)button.transform, Vector2.zero, new Vector2(0, y), new Vector2(160, 50), Vector2.zero);
+            StyleActionButton(button, new Color32(25, 48, 95, 255), 26, 26);
+            Image marker = button.transform.Find("MenuWedge")?.GetComponent<Image>()
+                ?? Rect("MenuWedge", button.transform).gameObject.AddComponent<Image>();
+            marker.sprite = wedge;
+            marker.preserveAspect = true;
+            marker.raycastTarget = false;
+            Place(marker.rectTransform, new Vector2(0, 0.5f), new Vector2(10, 0), new Vector2(36, 36), new Vector2(0, 0.5f));
+        }
+
+        private static void StyleActionButton(Button button, Color color, int fontSize, int leftInset)
+        {
+            button.image.sprite = null;
+            button.image.type = Image.Type.Simple;
+            button.image.color = color;
+            button.image.raycastTarget = true;
+            Text label = button.GetComponentInChildren<Text>(true);
+            label.color = Color.white;
+            label.raycastTarget = false;
+            label.fontSize = label.resizeTextMaxSize = fontSize;
+            label.resizeTextMinSize = 15;
+            label.resizeTextForBestFit = true;
+            label.alignment = TextAnchor.MiddleCenter;
+            Stretch(label.rectTransform);
+            label.rectTransform.offsetMin = new Vector2(leftInset, 2);
+            label.rectTransform.offsetMax = new Vector2(-10, -2);
         }
 
         private static Sprite SpriteAt(string file)

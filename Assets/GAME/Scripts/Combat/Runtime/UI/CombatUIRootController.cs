@@ -35,6 +35,7 @@ namespace Game.Combat.UI
         private bool _canonicalGlobalRouting;
         private bool _missingEntryWarned;
         private Phase? _lastAppliedPhase;
+        private CombatUITransientPresentation _completionPresentation;
 
         internal CombatSession ActiveSession => _activeSession;
         internal CombatStateMachine ActiveStateMachine => _activeStateMachine;
@@ -64,6 +65,11 @@ namespace Game.Combat.UI
             SceneManager.sceneLoaded -= HandleSceneLoaded;
             UnsubscribeFromEntryPoint();
             UnsubscribeFromStateMachine();
+        }
+
+        private void OnDestroy()
+        {
+            if (_completionPresentation != null) _completionPresentation.Dismiss();
         }
 
         private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -183,6 +189,8 @@ namespace Game.Combat.UI
 
         private void BindActiveCombat(CombatSession session, CombatStateMachine stateMachine)
         {
+            if (_completionPresentation != null) _completionPresentation.Dismiss();
+            _completionPresentation = null;
             _activeSession = session;
             SubscribeToStateMachine(stateMachine);
             if (session != null && session.FlowMode == CombatFlowMode.StandoffClashChain)
@@ -252,6 +260,8 @@ namespace Game.Combat.UI
 
         private void HandleCombatEnded(CombatResult result)
         {
+            if (_activeSession?.FlowMode == CombatFlowMode.StandoffClashChain)
+                _completionPresentation = finalCombatUI?.PresentCompletion(result);
             HideInternalCombatUI();
             UnsubscribeFromStateMachine();
             _activeSession = null;

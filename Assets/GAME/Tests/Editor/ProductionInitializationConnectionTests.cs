@@ -164,6 +164,7 @@ namespace Game.Tests.Integration
         public IEnumerator DirectDungeon_EditorPlay_GrantsSkillsAndSupportsRepeatedCombat()
         {
             EditorSceneManager.OpenScene(DungeonPath, OpenSceneMode.Single);
+            Game.Tests.UI.CombatReferenceGameViewEvidence.Configure();
             yield return new EnterPlayMode();
             yield return null;
             PrepareStorage(); FreezePlayer();
@@ -497,8 +498,18 @@ namespace Game.Tests.Integration
         {
             var entry = Object.FindFirstObjectByType<CombatEntryPoint>();
             int completed = 0; CombatResult result = null;
+            int actionCues = 0, reactionCues = 0;
+            CombatDirector director = entry.GetComponent<CombatDirector>();
+            Action<CombatFinalPresentationCue> observeCue = cue =>
+            {
+                if (cue.Kind == CombatFinalPresentationCueKind.AttackAction ||
+                    cue.Kind == CombatFinalPresentationCueKind.WinningSkill) actionCues++;
+                if (cue.Kind == CombatFinalPresentationCueKind.HitReaction ||
+                    cue.Kind == CombatFinalPresentationCueKind.Defeat) reactionCues++;
+            };
             Action<CombatResult> observe = value => { completed++; result = value; };
             entry.OnCombatEnded += observe;
+            director.FinalPresentationCueRaised += observeCue;
             try
             {
                 var group = Group();
@@ -519,6 +530,11 @@ namespace Game.Tests.Integration
                 Assert.That(session.Enemies.SelectMany(enemy => enemy.Skills).All(skill => skill.Id.Value == 11 || skill.Id.Value == 12), Is.True);
                 Assert.That(new InputRouter().AllowsExplorationInput(), Is.False);
                 Assert.That(Object.FindFirstObjectByType<CombatFieldLock>().IsLocked, Is.True);
+                if (useCardButtons)
+                {
+                    yield return new WaitForSecondsRealtime(.6f);
+                    yield return Game.Tests.UI.CombatReferenceGameViewEvidence.Capture("ProductionCombat");
+                }
                 if (endReason == CombatEndReason.Abort)
                     Assert.That(entry.FlowOrchestrator.TerminateExplicit(endReason, session.ExchangeState.Version), Is.True);
                 else
@@ -552,6 +568,20 @@ namespace Game.Tests.Integration
                 }
                 yield return Wait(() => entry.ActiveSession == null && GameStateMachine.Instance.Current == GameState.Reward, "Director completion and Reward");
                 Assert.That(completed, Is.EqualTo(1)); Assert.That(result.EndReason, Is.EqualTo(endReason));
+                if (useCardButtons)
+                {
+                    Assert.That(actionCues, Is.GreaterThan(0));
+                    Assert.That(reactionCues, Is.GreaterThan(0));
+                    var completion = Object.FindObjectsByType<Game.Combat.UI.CombatUITransientPresentation>(FindObjectsSortMode.None)
+                        .Single(view => view.name == "CombatCompletionPresentation");
+                    Assert.That(completion.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
+                    Assert.That(completion.GetComponentInParent<RewardUIPanel>(true), Is.Null,
+                        "Completion is a sibling of reward content, not part of the reward panel's layout.");
+                    Assert.That(completion.GetComponentInParent<Canvas>(true),
+                        Is.SameAs(Object.FindFirstObjectByType<RewardUIPanel>().GetComponentInParent<Canvas>(true)));
+                    Assert.That(Object.FindObjectsByType<Game.Combat.UI.FinalCombatUIBinder>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                        .All(ui => !ui.IsBound && !ui.gameObject.activeInHierarchy), Is.True);
+                }
                 var panel = Object.FindFirstObjectByType<RewardUIPanel>(); Assert.That(panel.IsOpen, Is.True);
                 ButtonOf(panel, "closeButton").onClick.Invoke();
                 if (endReason == CombatEndReason.Defeat)
@@ -576,7 +606,11 @@ namespace Game.Tests.Integration
                 Assert.That(Object.FindFirstObjectByType<CombatCameraController>().IsInCombatMode, Is.False);
                 Assert.That(Time.timeScale, Is.EqualTo(1));
             }
-            finally { entry.OnCombatEnded -= observe; }
+            finally
+            {
+                entry.OnCombatEnded -= observe;
+                director.FinalPresentationCueRaised -= observeCue;
+            }
         }
 
         private static bool ConfirmAuthoredCardThroughUi(CombatExchangeDecisionKind kind, ICombatant ally)
@@ -587,13 +621,14 @@ namespace Game.Tests.Integration
             GameObject Root(string name) => (GameObject)fields.FindProperty(name).objectReferenceValue;
             if (kind == CombatExchangeDecisionKind.Attack && binder.ViewState.SelectedActor == null)
             {
+                int actorIndex = binder.ViewState.SelectableActors.ToList().FindIndex(actor => ReferenceEquals(actor, ally));
                 var actor = Root("actorListRoot").GetComponentsInChildren<Button>()
-                    .FirstOrDefault(button => button.interactable && button.GetComponentInChildren<Text>()?.text == ally.Id.Value.ToString());
-                if (actor == null) return false;
+                    .ElementAtOrDefault(actorIndex);
+                if (actor == null || !actor.interactable) return false;
                 actor.onClick.Invoke();
             }
             var card = Root("skillListRoot").GetComponentsInChildren<Button>()
-                .FirstOrDefault(button => button.interactable && button.GetComponentInChildren<Text>()?.text.Contains("· ID ") == true);
+                .FirstOrDefault(button => button.interactable);
             if (card == null) return false;
             card.onClick.Invoke();
             Assert.That(binder.ViewState.SelectedCardRuntimeId.HasValue, Is.True);
